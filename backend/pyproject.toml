@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = [
+    # In-memory Qdrant (used as the test double) ignores payload indexes.
+    "ignore:Payload indexes have no effect in the local Qdrant",
+]
