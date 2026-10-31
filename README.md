@@ -34,6 +34,7 @@ flowchart LR
 - [常見問題](#常見問題)
 - [開發與測試](#開發與測試)
 - [專案結構](#專案結構)
+- [文件導覽](#文件導覽)
 
 ## 硬體需求
 
@@ -408,3 +409,31 @@ cd frontend && npm install && npm run dev
 └── examples/
     └── sample-game-frontend/   # 測試用的範例專案
 ```
+
+## 文件導覽
+
+開發過程中的決策、問題與數據都記錄在 `docs/`，之後可用來寫技術文章與更新履歷。所有文件都是英文在前、繁體中文在後。
+The `docs/` folder records decisions, problems and measurements made during development. Every document is in English first, with Traditional Chinese below.
+
+| 文件 / Document | 內容 / Contents |
+| --- | --- |
+| [CLAUDE.md](CLAUDE.md) | 專案簡介、架構，以及記錄決策與隱私的規則 / Project overview, architecture, rules for recording decisions, privacy rules |
+| **開發日誌 / Devlog** | |
+| [docs/devlog/TEMPLATE.md](docs/devlog/TEMPLATE.md) | 每日開發日誌範本 / Daily devlog template |
+| [docs/devlog/2026-10-30.md](docs/devlog/2026-10-30.md) | 架構設計與雲端建置 / Architecture design and cloud build |
+| [docs/devlog/2026-11-01.md](docs/devlog/2026-11-01.md) | Codespaces 流程驗證 / Validating the flow on Codespaces |
+| **架構決策紀錄 / ADRs** | |
+| [docs/decisions/TEMPLATE.md](docs/decisions/TEMPLATE.md) | ADR 範本 / ADR template |
+| [0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md) | 採用地端 RAG 而非雲端 API / On-prem RAG instead of a cloud API |
+| [0002](docs/decisions/0002-ollama-outside-docker-on-mac.md) | Mac 上 Ollama 不放進 Docker / Ollama outside Docker on Mac |
+| [0003](docs/decisions/0003-qdrant-vector-database.md) | 向量資料庫選用 Qdrant / Qdrant as the vector database |
+| [0004](docs/decisions/0004-chunking-by-file-type.md) | 依檔案類型切塊 / Chunking by file type |
+| [0005](docs/decisions/0005-model-selection-and-hardware.md) | 模型選擇與硬體對應 / Model selection and hardware |
+| [0006](docs/decisions/0006-multi-environment-deployment.md) | 多環境部署差異 / Multi-environment deployment |
+| **學習與評估 / Learning & evaluation** | |
+| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 10 個主題的解釋、程式碼位置、面試題、自我檢核 / 10 topics: explanation, code pointers, interview questions, self-check |
+| [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |
+| [docs/metrics.md](docs/metrics.md) | 成本、索引、查詢時間、評估結果、模型比較 / Cost, indexing, latency, evaluation results, model comparison |
+| **作品集 / Portfolio** | |
+| [docs/portfolio/article-series.md](docs/portfolio/article-series.md) | 5 篇技術文章大綱 / Outlines for 5 technical articles |
+| [docs/portfolio/resume.md](docs/portfolio/resume.md) | 履歷條目草稿（中英文）/ Resume bullet drafts (EN and ZH) |
