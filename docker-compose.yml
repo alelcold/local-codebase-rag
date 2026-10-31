@@ -1,0 +1,69 @@
+# Ollama is NOT part of this stack: it runs natively on macOS (Metal GPU) and
+# the backend reaches it at http://host.docker.internal:11434. See README.
+
+name: local-codebase-rag
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5-coder:14b}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-16384}
+      LLM_REQUEST_TIMEOUT: ${LLM_REQUEST_TIMEOUT:-600}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+      EMBED_MODEL: ${EMBED_MODEL:-nomic-embed-text}
+      EMBED_BATCH_SIZE: ${EMBED_BATCH_SIZE:-16}
+      # Only passed through when set; otherwise the backend picks defaults per model.
+      EMBED_QUERY_PREFIX: ${EMBED_QUERY_PREFIX-}
+      EMBED_DOC_PREFIX: ${EMBED_DOC_PREFIX-}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-}
+      CODEBASE_PATH: /codebase
+      INDEX_EXTENSIONS: ${INDEX_EXTENSIONS:-.ts,.tsx,.js,.jsx,.mjs,.cjs,.md}
+      EXCLUDE_DIRS: ${EXCLUDE_DIRS:-node_modules,.git,dist,build,out,coverage,.next,.nuxt,.turbo,.cache,.vite,vendor}
+      EXCLUDE_PATTERNS: ${EXCLUDE_PATTERNS:-*.min.js,*.bundle.js,*.map,*.d.ts,package-lock.json}
+      MAX_FILE_BYTES: ${MAX_FILE_BYTES:-500000}
+      CHUNK_MAX_CHARS: ${CHUNK_MAX_CHARS:-3000}
+      TOP_K: ${TOP_K:-8}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    volumes:
+      # The project being indexed, mounted read-only.
+      - ${PROJECT_PATH:-./examples/sample-game-frontend}:/codebase:ro
+    extra_hosts:
+      # Docker Desktop defines this already; needed for Colima/OrbStack/Linux.
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  qdrant_data:
