@@ -56,6 +56,10 @@ class Settings(BaseSettings):
 
     # --- Query ---
     top_k: int = 8
+    # /query/stream sends a heartbeat event when nothing else has been sent for
+    # this many seconds (embedding and prompt processing can take a minute on
+    # CPU), so proxies that drop idle connections keep seeing data. ADR 0010.
+    stream_heartbeat_seconds: float = 10.0
 
     # --- API ---
     cors_origins: str = "*"

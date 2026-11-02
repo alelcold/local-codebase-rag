@@ -1,0 +1,56 @@
+// Dev container for GitHub Codespaces (Linux, CPU only). Open the repo in a
+// codespace and the stack starts by itself: see README「在 GitHub Codespaces 測試」
+// and docs/decisions/0006-multi-environment-deployment.md.
+//
+// Mac and EC2 do not use this file; their flow (scripts/setup.sh) is unchanged.
+{
+  "name": "local-codebase-rag (Codespaces, CPU)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  // 4 cores / 16 GB: the 3B model answers in about a minute on CPU; 2 cores is
+  // much slower and 8 GB is tight with Qdrant, the backend and the model loaded.
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  },
+
+  "features": {
+    // Qdrant, backend and frontend run as containers inside the codespace.
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    // For running the backend tests and the frontend build without Docker.
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+
+  "containerEnv": {
+    // Every `docker compose` in the codespace also applies the Codespaces
+    // override (backend → host-gateway). Absolute paths, so it works from any
+    // directory. Mac / EC2 never set this, so they keep using docker-compose.yml alone.
+    "COMPOSE_FILE": "${containerWorkspaceFolder}/docker-compose.yml:${containerWorkspaceFolder}/docker-compose.codespaces.yml",
+    // Models live in the workspace folder (git-ignored) so a container rebuild
+    // does not download them again.
+    "OLLAMA_MODELS": "${containerWorkspaceFolder}/.ollama/models"
+  },
+
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": { "label": "Frontend（查詢介面）", "onAutoForward": "notify" },
+    "8000": { "label": "Backend API", "onAutoForward": "silent" },
+    // Ollama has no authentication: never forward it, and never make it public.
+    "11434": { "label": "Ollama (do not forward)", "onAutoForward": "ignore" },
+    "6333": { "label": "Qdrant", "onAutoForward": "ignore" }
+  },
+
+  // Once, when the codespace is created: install Ollama and tools, create .env.
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  // Every time the codespace starts (also after it was stopped): start Ollama on
+  // 0.0.0.0, pull models, start the stack, index if empty, run the doctor.
+  "postStartCommand": "bash .devcontainer/post-start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "ms-azuretools.vscode-docker"]
+    }
+  }
+}

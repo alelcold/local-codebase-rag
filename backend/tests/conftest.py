@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import re
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 
@@ -58,10 +59,16 @@ class FailingEmbedding(FakeEmbedding):
 
 
 class FakeLLM(CustomLLM):
-    """Records prompts; answers with a canned string."""
+    """Records prompts; answers with a canned string.
+
+    ``stream_complete`` yields the answer word by word (with ``delta`` set, like
+    the Ollama integration), optionally waiting ``delay`` seconds before the
+    first word to simulate slow prompt processing on CPU.
+    """
 
     answer: str = "The player jumps in [1]."
     prompts: list[str] = []
+    delay: float = 0.0
 
     @property
     def metadata(self) -> LLMMetadata:
@@ -74,7 +81,13 @@ class FakeLLM(CustomLLM):
 
     @llm_completion_callback()
     def stream_complete(self, prompt: str, formatted: bool = False, **kwargs: Any):
-        yield self.complete(prompt)
+        self.prompts.append(prompt)
+        if self.delay:
+            time.sleep(self.delay)
+        text = ""
+        for piece in re.findall(r"\s*\S+", self.answer):
+            text += piece
+            yield CompletionResponse(text=text, delta=piece)
 
 
 def ollama_transport(models: list[str] | None = None, down: bool = False) -> httpx.MockTransport:

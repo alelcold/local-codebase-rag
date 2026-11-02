@@ -48,6 +48,7 @@ services:
       MAX_FILE_BYTES: ${MAX_FILE_BYTES:-500000}
       CHUNK_MAX_CHARS: ${CHUNK_MAX_CHARS:-3000}
       TOP_K: ${TOP_K:-8}
+      STREAM_HEARTBEAT_SECONDS: ${STREAM_HEARTBEAT_SECONDS:-10}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     volumes:
       # The project being indexed, mounted read-only.

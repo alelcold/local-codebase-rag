@@ -1,19 +1,23 @@
-"""FastAPI app: /health, /index, /index/status, /query."""
+"""FastAPI app: /health, /index, /index/status, /query, /query/stream."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import threading
-from collections.abc import Callable
+import time
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from .config import get_settings
-from .rag import OllamaTimeoutError
+from .rag import OllamaTimeoutError, RagService
 from .services import Services, build_services, check_ollama, check_qdrant
 
 log = logging.getLogger(__name__)
@@ -27,6 +31,79 @@ class IndexRequest(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=4000)
     top_k: int | None = Field(None, ge=1, le=30)
+
+
+def timeout_detail(exc: OllamaTimeoutError) -> str:
+    stage = "產生向量（embedding）" if exc.stage == "embedding" else "生成回答"
+    return f"Ollama {stage}逾時：超過 {exc.timeout:g} 秒仍未回應（{exc.setting}）"
+
+
+def sse(event: str, data: object) -> str:
+    """One Server-Sent Events frame. JSON never contains a raw newline, so one data line is enough."""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+_END = object()
+
+
+async def stream_answer(
+    rag: RagService, question: str, top_k: int | None, heartbeat_seconds: float
+) -> AsyncIterator[str]:
+    """Run the blocking RAG pipeline in a worker thread and relay its events as SSE.
+
+    Events, in order: ``sources`` → ``token``* → ``done``, or ``error`` at any
+    point. ``heartbeat`` is sent whenever nothing else was sent for
+    ``heartbeat_seconds`` (retrieval and prompt processing can be silent for a
+    long time on CPU), so idle-timeout proxies keep the connection open.
+    """
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[object] = asyncio.Queue()
+    cancelled = threading.Event()
+    started = time.monotonic()
+
+    def put(item: object) -> None:
+        try:
+            loop.call_soon_threadsafe(queue.put_nowait, item)
+        except RuntimeError:  # event loop already closed: the client is gone
+            cancelled.set()
+
+    def produce() -> None:
+        events = rag.stream(question, top_k)
+        try:
+            for event in events:
+                if cancelled.is_set():
+                    break
+                put(event)
+        except Exception as exc:  # reported to the client as an error event
+            put(exc)
+        finally:
+            events.close()  # closes the Ollama HTTP stream if we stopped early
+            put(_END)
+
+    threading.Thread(target=produce, name="query-stream", daemon=True).start()
+    # Sent right away: response headers and the first bytes reach the browser
+    # before any slow work starts.
+    yield sse("heartbeat", {"elapsed_seconds": 0.0})
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=heartbeat_seconds)
+            except asyncio.TimeoutError:
+                yield sse("heartbeat", {"elapsed_seconds": round(time.monotonic() - started, 1)})
+                continue
+            if item is _END:
+                return
+            if isinstance(item, OllamaTimeoutError):
+                log.warning("Streaming query timed out: %s", item)
+                yield sse("error", {"kind": "timeout", "stage": item.stage, "detail": timeout_detail(item)})
+            elif isinstance(item, Exception):
+                log.error("Streaming query failed", exc_info=item)
+                yield sse("error", {"kind": "error", "detail": f"{type(item).__name__}: {item}"})
+            else:
+                yield sse(item.kind, item.data)  # type: ignore[attr-defined]
+    finally:
+        # Normal end, or the client disconnected (generator closed / cancelled).
+        cancelled.set()
 
 
 def _now() -> str:
@@ -106,6 +183,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             "ollama": ollama,
             "qdrant": qdrant,
             "codebase_path": s.codebase_path,
+            "top_k": s.top_k,
             "index_job": app.state.index_job.state,
         }
 
@@ -137,14 +215,31 @@ def create_app(services: Services | None = None) -> FastAPI:
         except OllamaTimeoutError as exc:
             # 504 (not 502) so the UI can explain timeouts separately from crashes.
             log.warning("Query timed out: %s", exc)
-            stage = "產生向量（embedding）" if exc.stage == "embedding" else "生成回答"
-            raise HTTPException(
-                status_code=504,
-                detail=f"Ollama {stage}逾時：超過 {exc.timeout:g} 秒仍未回應（{exc.setting}）",
-            ) from exc
+            raise HTTPException(status_code=504, detail=timeout_detail(exc)) from exc
         except Exception as exc:
             log.exception("Query failed")
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+
+    @app.post("/query/stream")
+    async def query_stream(req: QueryRequest) -> StreamingResponse:
+        """Like /query, but streamed as Server-Sent Events (see ``stream_answer``).
+
+        Errors after the stream has started arrive as an ``error`` event, since
+        the 200 status line has already been sent.
+        """
+        question = req.question.strip()
+        if not question:
+            raise HTTPException(status_code=422, detail="question must not be blank")
+        s = svc()
+        return StreamingResponse(
+            stream_answer(s.rag, question, req.top_k, s.settings.stream_heartbeat_seconds),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                # Tells nginx (and compatible proxies) not to buffer this response.
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app
 

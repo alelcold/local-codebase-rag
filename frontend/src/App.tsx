@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, type Health, type IndexStatus, type QueryResponse, type Source } from "./api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, ApiError, type Health, type IndexStatus, type Source, type StreamStats } from "./api";
 
 const EXAMPLES = [
   "玩家受傷後的無敵時間在哪裡設定？",
@@ -7,23 +7,48 @@ const EXAMPLES = [
   "遊戲主迴圈的流程是什麼？",
 ];
 
+/**
+ * idle → retrieving (waiting for sources) → generating (sources shown, waiting
+ * for the first token) → streaming (tokens arriving) → done | stopped | failed
+ */
+type Phase = "idle" | "retrieving" | "generating" | "streaming" | "done" | "stopped" | "failed";
+
+interface Timing {
+  /** Milliseconds from "送出" until the first answer token arrived. */
+  firstTokenMs: number | null;
+  /** Milliseconds from "送出" until the stream ended (done, error or stop). */
+  totalMs: number | null;
+  server: StreamStats | null;
+}
+
+const EMPTY_TIMING: Timing = { firstTokenMs: null, totalMs: null, server: null };
+
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null);
   const [question, setQuestion] = useState("");
   const [topK, setTopK] = useState(8);
-  const [loading, setLoading] = useState(false);
+  const topKTouched = useRef(false);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<QueryError | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [result, setResult] = useState<QueryResponse | null>(null);
+  const [sources, setSources] = useState<Source[] | null>(null);
+  const [answer, setAnswer] = useState("");
+  const [timing, setTiming] = useState<Timing>(EMPTY_TIMING);
   const [asked, setAsked] = useState("");
   const [openRefs, setOpenRefs] = useState<Set<number>>(new Set());
+  const abortRef = useRef<AbortController | null>(null);
+
+  const loading = phase === "retrieving" || phase === "generating" || phase === "streaming";
 
   const refreshHealth = useCallback(async () => {
     try {
-      setHealth(await api.health());
+      const h = await api.health();
+      setHealth(h);
       setHealthError(null);
+      // Start from the server's TOP_K (e.g. 4 on Codespaces) until the user picks a value.
+      if (h.top_k && !topKTouched.current) setTopK(h.top_k);
     } catch (e) {
       setHealthError((e as Error).message);
     }
@@ -70,20 +95,56 @@ export default function App() {
   const ask = async (q: string) => {
     const text = q.trim();
     if (!text || loading) return;
-    setLoading(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setPhase("retrieving");
     setError(null);
-    setResult(null);
+    setSources(null);
+    setAnswer("");
+    setTiming(EMPTY_TIMING);
     setAsked(text);
     setOpenRefs(new Set());
-    const started = Date.now();
+    const started = performance.now();
+    const since = () => Math.round(performance.now() - started);
+    let gotToken = false;
     try {
-      setResult(await api.query(text, topK));
+      await api.queryStream(
+        text,
+        topK,
+        {
+          onSources: (s) => {
+            setSources(s);
+            setPhase("generating");
+          },
+          onToken: (t) => {
+            if (!gotToken) {
+              gotToken = true;
+              const ms = since();
+              setTiming((prev) => ({ ...prev, firstTokenMs: ms }));
+              setPhase("streaming");
+            }
+            setAnswer((prev) => prev + t);
+          },
+          onDone: (stats) => setTiming((prev) => ({ ...prev, server: stats })),
+        },
+        controller.signal,
+      );
+      setPhase("done");
     } catch (e) {
-      setError({ error: e as Error, seconds: Math.round((Date.now() - started) / 1000) });
+      if ((e as Error).name === "AbortError") {
+        setPhase("stopped");
+      } else {
+        // Whatever arrived before the failure (sources, partial answer) stays on screen.
+        setError({ error: e as Error, seconds: Math.round(since() / 1000), partial: gotToken });
+        setPhase("failed");
+      }
     } finally {
-      setLoading(false);
+      setTiming((prev) => ({ ...prev, totalMs: since() }));
+      abortRef.current = null;
     }
   };
+
+  const stop = () => abortRef.current?.abort();
 
   const showSource = (ref: number) => {
     setOpenRefs((prev) => new Set(prev).add(ref));
@@ -101,6 +162,7 @@ export default function App() {
     });
 
   const indexing = indexStatus?.state === "running";
+  const hasResult = sources !== null || answer !== "";
 
   return (
     <div className="page">
@@ -167,7 +229,13 @@ export default function App() {
           </div>
           <label className="topk">
             參考片段
-            <select value={topK} onChange={(e) => setTopK(Number(e.target.value))}>
+            <select
+              value={topK}
+              onChange={(e) => {
+                topKTouched.current = true;
+                setTopK(Number(e.target.value));
+              }}
+            >
               {[4, 6, 8, 12, 16].map((k) => (
                 <option key={k} value={k}>
                   {k}
@@ -175,31 +243,37 @@ export default function App() {
               ))}
             </select>
           </label>
+          {loading && (
+            <button type="button" className="secondary" onClick={stop}>
+              停止
+            </button>
+          )}
           <button type="submit" disabled={loading || !question.trim()}>
             {loading ? `生成中… ${elapsed}s` : "送出"}
           </button>
         </div>
       </form>
 
-      {loading && <Generating seconds={elapsed} />}
+      {(phase === "retrieving" || phase === "generating") && <Generating phase={phase} seconds={elapsed} />}
+
+      {hasResult && (
+        <section className="card">
+          <div className="question">Q：{asked}</div>
+          {sources && sources.length > 0 && <CitedFiles sources={sources} onRef={showSource} />}
+          {answer && <Answer text={answer} onRef={showSource} streaming={phase === "streaming"} />}
+          <TimingLine phase={phase} timing={timing} elapsed={elapsed} />
+        </section>
+      )}
+
       {error && <QueryErrorCard error={error} />}
 
-      {result && (
-        <>
-          <section className="card">
-            <div className="question">Q：{asked}</div>
-            <Answer text={result.answer} onRef={showSource} />
-          </section>
-
-          {result.sources.length > 0 && (
-            <section className="sources">
-              <h2>引用的程式碼</h2>
-              {result.sources.map((s) => (
-                <SourceCard key={s.ref} source={s} open={openRefs.has(s.ref)} onToggle={() => toggleSource(s.ref)} />
-              ))}
-            </section>
-          )}
-        </>
+      {sources && sources.length > 0 && (
+        <section className="sources">
+          <h2>引用的程式碼</h2>
+          {sources.map((s) => (
+            <SourceCard key={s.ref} source={s} open={openRefs.has(s.ref)} onToggle={() => toggleSource(s.ref)} />
+          ))}
+        </section>
       )}
     </div>
   );
@@ -209,6 +283,8 @@ interface QueryError {
   error: Error;
   /** How long the request ran before it failed. */
   seconds: number;
+  /** Part of the answer had already arrived (and is still shown). */
+  partial: boolean;
 }
 
 function formatDuration(seconds: number): string {
@@ -218,40 +294,89 @@ function formatDuration(seconds: number): string {
   return s ? `${m} 分 ${s} 秒` : `${m} 分`;
 }
 
-function Generating({ seconds }: { seconds: number }) {
+function formatMs(ms: number): string {
+  return ms < 60_000 ? `${(ms / 1000).toFixed(1)} 秒` : formatDuration(Math.round(ms / 1000));
+}
+
+function Generating({ phase, seconds }: { phase: "retrieving" | "generating"; seconds: number }) {
   return (
     <div className="card generating" role="status" aria-live="polite">
       <div className="generating-head">
         <span className="spinner" aria-hidden="true" />
-        <strong>生成中</strong>
+        <strong>{phase === "retrieving" ? "檢索相關程式碼" : "模型閱讀程式碼中"}</strong>
         <span className="muted">已等待 {formatDuration(seconds)}</span>
       </div>
       <p className="muted small">
-        本機模型正在閱讀相關程式碼並產生回答。第一次查詢需要載入模型；只有 CPU 的環境（例如 Codespaces）一次查詢可能要
-        1～2 分鐘，請耐心等候。
+        {phase === "retrieving"
+          ? "正在把問題轉成向量並搜尋索引。"
+          : "已找到相關的檔案（見下方），模型正在閱讀並準備回答，第一個字出現後會逐字顯示。"}
+        第一次查詢需要載入模型；只有 CPU 的環境（例如 Codespaces）可能要等 1 分鐘以上才出現第一個字。
       </p>
     </div>
   );
 }
 
-function QueryErrorCard({ error: { error, seconds } }: { error: QueryError }) {
+/** The cited files, shown as soon as retrieval finishes (before the answer). */
+function CitedFiles({ sources, onRef }: { sources: Source[]; onRef: (ref: number) => void }) {
+  return (
+    <div className="cited">
+      <span className="muted small">引用的檔案：</span>
+      {sources.map((s) => (
+        <button key={s.ref} type="button" className="chip cited-chip" onClick={() => onRef(s.ref)}>
+          [{s.ref}] {s.file_path}:{s.start_line}-{s.end_line}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TimingLine({ phase, timing, elapsed }: { phase: Phase; timing: Timing; elapsed: number }) {
+  const parts: string[] = [];
+  if (timing.firstTokenMs !== null) parts.push(`首字延遲 ${formatMs(timing.firstTokenMs)}`);
+  if (timing.totalMs !== null) parts.push(`總耗時 ${formatMs(timing.totalMs)}`);
+  else if (phase === "streaming" || phase === "generating") parts.push(`已經過 ${formatDuration(elapsed)}`);
+  if (timing.server?.tokens) parts.push(`${timing.server.tokens} 個 token`);
+  if (phase === "stopped") parts.push("已停止");
+  if (!parts.length) return null;
+  return (
+    <p className="muted small timing" title="從按下送出開始計算（瀏覽器端量測）">
+      {parts.join(" · ")}
+    </p>
+  );
+}
+
+function QueryErrorCard({ error: { error, seconds, partial } }: { error: QueryError }) {
+  const kept = partial ? "上方保留了中斷前已收到的內容，但回答可能不完整。" : "";
   if (!(error instanceof ApiError) || !error.isTimeout) {
-    return <div className="card error">查詢失敗：{error.message}</div>;
+    return (
+      <div className="card error">
+        查詢失敗：{error.message}
+        {kept && <p className="small">{kept}</p>}
+      </div>
+    );
   }
   const title =
     error.kind === "backend-timeout"
       ? "查詢逾時：後端等不到模型回應"
       : error.kind === "gateway-timeout"
         ? "查詢逾時：前端代理先中斷了連線"
-        : "查詢中斷：連線在收到回應前被關閉";
+        : error.kind === "interrupted"
+          ? "回答中斷：回答還沒傳完，連線就被關閉了"
+          : "查詢中斷：連線在收到回應前被關閉";
   return (
     <div className="card error timeout">
       <strong>{title}</strong>
       <p className="small">
         等待 {formatDuration(seconds)} 後失敗。{error.kind === "backend-timeout" ? error.message : `（${error.message}）`}
       </p>
+      {kept && <p className="small">{kept}</p>}
       <p className="small">可能原因與處理方式：</p>
       <ul className="small">
+        {error.kind === "interrupted" && (
+          <li>
+            <strong>網路或轉發的連線斷了</strong>（例如電腦休眠、切換網路、Codespace 閒置停止）：重新送出一次即可。
+          </li>
+        )}
         <li>
           <strong>沒有 GPU，模型推論很慢</strong>（例如 Codespaces）：改用較小的模型（如 <code>qwen2.5-coder:3b</code>
           ），或把「參考片段」調少。
@@ -265,8 +390,9 @@ function QueryErrorCard({ error: { error, seconds } }: { error: QueryError }) {
         </li>
         {error.kind !== "backend-timeout" && (
           <li>
-            <strong>透過 Codespaces 或其他轉發／反向代理連線</strong>：中間的代理可能有自己的逾時上限，調高上面的設定也無效。可改用{" "}
-            <code>curl</code> 直接呼叫後端 <code>http://localhost:8000/query</code> 確認是否為代理造成。
+            <strong>透過 Codespaces 或其他轉發／反向代理連線</strong>：中間的代理可能有自己的逾時上限。串流回應會定期送出
+            heartbeat 讓連線保持有資料；若仍被中斷，可在終端機執行 <code>./scripts/doctor.sh</code> 檢查各服務，或用{" "}
+            <code>curl -N</code> 直接呼叫後端 <code>http://localhost:8000/query/stream</code> 確認是否為代理造成。
           </li>
         )}
       </ul>
@@ -334,9 +460,14 @@ function IndexSummary({ status }: { status: IndexStatus | null }) {
   );
 }
 
-/** Minimal Markdown: fenced code blocks, inline code, bold, and clickable [n] citations. */
-function Answer({ text, onRef }: { text: string; onRef: (ref: number) => void }) {
-  const parts = text.split(/```(\w*)\n?([\s\S]*?)```/g);
+/**
+ * Minimal Markdown: fenced code blocks, inline code, bold, and clickable [n] citations.
+ * While streaming, an unclosed ``` fence is rendered as code so far, and a cursor is shown.
+ */
+function Answer({ text, onRef, streaming = false }: { text: string; onRef: (ref: number) => void; streaming?: boolean }) {
+  const fences = (text.match(/```/g) ?? []).length;
+  const source = fences % 2 === 1 ? `${text}\n\`\`\`` : text;
+  const parts = source.split(/```(\w*)\n?([\s\S]*?)```/g);
   const nodes = [];
   for (let i = 0; i < parts.length; i += 3) {
     if (parts[i]) nodes.push(<Prose key={`p${i}`} text={parts[i]} onRef={onRef} />);
@@ -348,7 +479,12 @@ function Answer({ text, onRef }: { text: string; onRef: (ref: number) => void })
       );
     }
   }
-  return <div className="answer">{nodes}</div>;
+  return (
+    <div className={`answer${streaming ? " streaming" : ""}`} aria-live="polite" aria-busy={streaming}>
+      {nodes}
+      {streaming && <span className="cursor" aria-hidden="true" />}
+    </div>
+  );
 }
 
 function Prose({ text, onRef }: { text: string; onRef: (ref: number) => void }) {

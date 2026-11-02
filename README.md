@@ -187,9 +187,11 @@ docker compose up -d
 
 在 <http://localhost:8080> 輸入問題，按「送出」或 ⌘/Ctrl + Enter。
 
+- 回答以串流方式顯示：檢索完成後先列出**引用的檔案**，模型開始產生後再**逐字顯示**回答，結束後顯示**首字延遲**與**總耗時**。生成中可以按「停止」
+- 連線在回答傳完前中斷時，已收到的內容會保留在畫面上，並說明可能原因
 - 回答中的 `[1]`、`[2]` 可以點擊，會捲到對應的引用片段並展開
 - 每個引用片段顯示 `檔案路徑:起始行-結束行`、符號名稱（函式或 class）與相似度分數，展開後可看到帶行號的程式碼
-- 「參考片段」可以調整要給模型看幾段程式碼（預設 8）。問題範圍較大時調高，模型回答會比較完整，但會稍慢
+- 「參考片段」可以調整要給模型看幾段程式碼（預設為 `.env` 的 `TOP_K`，一般是 8）。問題範圍較大時調高，模型回答會比較完整，但會稍慢
 
 第一次查詢需要把模型載入記憶體，可能要 20–60 秒；之後模型會常駐 `OLLAMA_KEEP_ALIVE`（預設 30 分鐘），查詢通常在十幾秒內完成，實際速度視機型（M2 / Pro / Max）與回答長度而定。
 
@@ -236,6 +238,42 @@ curl -s localhost:8000/query -H 'Content-Type: application/json' \
 | `POST /index` | 開始索引。body：`{"full": false, "wait": false}`；已有索引在執行時回傳 409 |
 | `GET /index/status` | 最近一次索引的狀態、進度與結果（新增／更新／刪除的檔案、錯誤） |
 | `POST /query` | body：`{"question": "...", "top_k": 8}`；回傳回答與引用來源 |
+| `POST /query/stream` | body 同上；以 Server-Sent Events 串流回傳（見下方） |
+
+#### 串流查詢（`/query/stream`）
+
+介面使用這個端點。回應是 `text/event-stream`，事件依序為：
+
+| 事件 | 內容 |
+| --- | --- |
+| `heartbeat` | 一開始先送一次，之後每 `STREAM_HEARTBEAT_SECONDS` 秒（預設 10）沒有其他資料時再送，讓代理知道連線還在使用：`{"elapsed_seconds": 12.0}` |
+| `sources` | 檢索完成後馬上送出，格式與 `/query` 的 `sources` 相同 |
+| `token` | 回答的一小段文字：`{"text": "..."}` |
+| `done` | 結束與耗時統計：`retrieval_seconds`、`first_token_seconds`、`total_seconds`、`tokens`、`answer_chars` |
+| `error` | 串流開始後才失敗時送出（HTTP 狀態已是 200）：`{"kind": "timeout" 或 "error", "detail": "..."}` |
+
+```bash
+curl -sS -N localhost:8080/api/query/stream -H 'Content-Type: application/json' \
+  -d '{"question": "玩家受傷後的無敵時間在哪裡設定？"}'
+```
+
+```text
+event: heartbeat
+data: {"elapsed_seconds": 0.0}
+
+event: sources
+data: [{"ref": 1, "file_path": "src/config/gameConfig.ts", "start_line": 1, "end_line": 26, ...}]
+
+event: token
+data: {"text": "無敵"}
+
+...
+
+event: done
+data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9.8, "tokens": 87, "answer_chars": 152}
+```
+
+（上面的數字只是格式示意，不是量測結果。）設計考量見 [ADR 0010](docs/decisions/0010-streaming-responses.md)。
 
 ## 設定
 
@@ -251,6 +289,7 @@ curl -s localhost:8000/query -H 'Content-Type: application/json' \
 | `LLM_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 生成回答的秒數 |
 | `EMBED_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 產生向量（embedding）的秒數 |
 | `PROXY_READ_TIMEOUT` / `PROXY_SEND_TIMEOUT` | `300` / `300` | 前端 nginx 代理 `/api` 時等待後端的秒數；改了只要 `docker compose up -d`，不用重新 build |
+| `STREAM_HEARTBEAT_SECONDS` | `10` | 串流查詢沒有其他資料時，每隔幾秒送一次 heartbeat |
 | `FRONTEND_PORT` / `FRONTEND_BIND` | `8080` / `127.0.0.1` | 前端連接埠；改成 `0.0.0.0` 開放區網存取 |
 
 修改 `.env` 後執行 `docker compose up -d` 讓設定生效（會重新建立有變更的容器）。改了模型名稱記得先 `ollama pull`，或重新執行 `./scripts/setup.sh`。
@@ -298,10 +337,11 @@ curl -s localhost:8000/query -H 'Content-Type: application/json' \
 - **錯誤訊息寫著「Ollama 生成回答逾時…（LLM_REQUEST_TIMEOUT）」**：後端等不到模型。調高 `.env` 的 `LLM_REQUEST_TIMEOUT`（embedding 階段則是 `EMBED_REQUEST_TIMEOUT`）。
 - **只顯示 `504 Gateway Timeout`**：是 nginx 或更前面的代理先放棄。調高 `PROXY_READ_TIMEOUT`，並讓它比 `LLM_REQUEST_TIMEOUT` 稍大（例如 330 / 300），後端才會先逾時並回傳具體原因。
 - 調整後執行 `docker compose up -d` 即可生效。
+- **透過 Codespaces 等轉發／反向代理連線**：它們有自己的上限，調高上面的值也沒用。介面使用的串流查詢（`/query/stream`）會持續送出資料來避開閒置上限；若仍被中斷，執行 `./scripts/doctor.sh` 檢查各服務，並用 `curl -N` 直接呼叫後端比較。
 - 根本的解法是讓查詢變快：改用 `qwen2.5-coder:7b`（或只有 CPU 時改用 `3b`）、降低 `LLM_NUM_CTX`、或降低參考片段數。
 - 可在另一個終端機執行 `ollama ps`，確認模型是否已載入，以及是否 100% 在 GPU 上執行。
 
-設計考量見 [ADR 0009](docs/decisions/0009-timeout-settings.md)。
+設計考量見 [ADR 0009](docs/decisions/0009-timeout-settings.md) 與 [ADR 0010](docs/decisions/0010-streaming-responses.md)。
 
 ### Mac 變得很卡、記憶體壓力很高
 
@@ -364,9 +404,49 @@ git pull && docker compose up -d --build
 
 ## 在 GitHub Codespaces 測試
 
-部署到 Mac 之前，可以先在 GitHub Codespaces（Linux、沒有 GPU）跑一次完整流程，確認索引、檢索、引用與介面都正常。只有 CPU，所以這裡的速度與回答品質**不代表**正式環境（見 [ADR 0007](docs/decisions/0007-multi-environment-testing-strategy.md)）。完整紀錄見 [devlog 2026-11-01](docs/devlog/2026-11-01.md) 與 [Codespaces 環境建置](docs/devlog/2026-11-01-codespace-setup.md)。
+部署到 Mac 之前，可以先在 GitHub Codespaces（Linux、沒有 GPU）跑一次完整流程，確認索引、檢索、引用與介面都正常。只有 CPU，所以這裡的速度與回答品質**不代表**正式環境（見 [ADR 0007](docs/decisions/0007-multi-environment-testing-strategy.md)）。
 
-### 步驟
+### 開啟即可使用
+
+1. 在 GitHub 的 repo 頁面按 **Code → Codespaces → Create codespace on main**。建議使用 **4-core** 機型（[`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) 的 `hostRequirements` 會預先選好）。
+2. 等待自動設定完成，不用輸入任何指令。第一次約需數分鐘（{待填：實測時間}），可以在終端機的 Creation log 看到進度：
+   - **建立時**（`postCreateCommand`，只執行一次）：安裝 Ollama 與 `jq`；沒有 `.env` 時，從 [`.env.codespaces`](.env.codespaces) 建立（`qwen2.5-coder:3b`、`TOP_K=4`、範例專案）。
+   - **每次啟動時**（`postStartCommand`，停止後重開也會執行）：以 `OLLAMA_HOST=0.0.0.0` 在背景啟動 Ollama、等待就緒、拉取缺少的模型、`docker compose up -d --build`、沒有索引時自動建立索引，最後執行 [`scripts/doctor.sh`](scripts/doctor.sh) 並印出網址。
+3. 右下角跳出 8080（**Frontend（查詢介面）**）的通知時，按 **Open in Browser**；或從 **Ports** 面板開啟 8080。
+
+設定完成後，提問時會先顯示引用的檔案，再逐字顯示回答，回答下方有首字延遲與總耗時。回答以串流傳送（[ADR 0010](docs/decisions/0010-streaming-responses.md)），連線上至少每 10 秒就有資料，用來避開 Codespaces 轉發在約 100 秒時切斷沒有回應的請求（{待填：在 Codespaces 實測確認}）。
+
+說明：
+
+- `docker compose` 指令在 codespace 裡會自動套用 [`docker-compose.codespaces.yml`](docker-compose.codespaces.yml)（`devcontainer.json` 設定了 `COMPOSE_FILE`），不需要手寫 override。Mac 與 EC2 不受影響。
+- 模型存放在 repo 內的 `.ollama/`（已加入 `.gitignore`），重建容器時不用重新下載。
+- **11434（Ollama）不會被轉發**，請不要手動轉發或設為 public（Ollama 沒有驗證機制）。
+- 設定流程的輸出會附加到 `.logs/post-start.log`；Ollama 的 log 在 `.logs/ollama.log`。
+- 想重新執行整個啟動流程：`bash .devcontainer/post-start.sh`
+
+### 出問題時：`scripts/doctor.sh`
+
+```bash
+./scripts/doctor.sh
+```
+
+依序檢查下列項目，失敗時會直接印出修正指令；依賴失敗項目的檢查會略過，從第一個 ✗ 開始修正即可：
+
+| # | 檢查 | 對應的踩坑 |
+| --- | --- | --- |
+| 1–3 | Ollama 已安裝、程序在執行、API 有回應（用 `curl -sS`，錯誤不會被藏起來） | 前景執行卡住終端機、重開 codespace 後程序消失、`curl -s` 看不到錯誤 |
+| 4 | 監聽位址是 `0.0.0.0`（Linux）；只聽 `127.0.0.1` 時容器連不到 | Ollama 只監聽 `127.0.0.1` |
+| 5 | `.env` 指定的模型都已下載 | 缺少模型 |
+| 6–7 | Docker 在執行、`qdrant`／`backend`／`frontend` 都在執行 | |
+| 8 | **從 backend 容器**呼叫 `host.docker.internal:11434` | 在主機上測試成功，不代表容器連得到 |
+| 9–10 | 後端 `/health`、前端與 nginx 的 `/api` 代理 | |
+| 11 | Qdrant 已有索引 | |
+
+在 Mac 上也能執行（使用 bash 3.2、`lsof`；macOS 上 Ollama 聽 `127.0.0.1` 是正常的）。
+
+### 附錄：手動步驟
+
+不使用 dev container（例如在其他 Linux 機器上）時，可以手動完成同樣的流程：
 
 1. 安裝 Ollama 並在背景啟動，**監聽 `0.0.0.0`**（Linux 上容器是從 Docker bridge 連過來的，連不到 `127.0.0.1`）：
 
@@ -375,26 +455,38 @@ git pull && docker compose up -d --build
    ```
 
    ```bash
-   OLLAMA_HOST=0.0.0.0 nohup ollama serve >> ollama.log 2>&1 &
+   mkdir -p .logs && OLLAMA_HOST=0.0.0.0 nohup ollama serve >> .logs/ollama.log 2>&1 &
    ```
 
-2. 在 `.env` 改用小模型，並視需要調高逾時：
+2. 建立 `.env`（小模型、`TOP_K=4`、逾時設定）：
 
-   ```dotenv
-   LLM_MODEL=qwen2.5-coder:3b
-   LLM_REQUEST_TIMEOUT=300
-   PROXY_READ_TIMEOUT=330
+   ```bash
+   cp .env.codespaces .env
    ```
 
-3. 拉模型、啟動並建立索引：
+3. 讓 `docker compose` 套用 Linux 用的 override：
+
+   ```bash
+   export COMPOSE_FILE=docker-compose.yml:docker-compose.codespaces.yml
+   ```
+
+4. 拉模型、啟動並建立索引：
 
    ```bash
    ./scripts/setup.sh --index
    ```
 
-4. 從 Ports 面板開啟 8080。**11434 埠請維持 private**，不要設為 public（Ollama 沒有驗證機制）。
+5. 從 Ports 面板開啟 8080。**11434 埠請維持 private**。
 
-### 常見的坑
+6. 確認一切正常：
+
+   ```bash
+   ./scripts/doctor.sh
+   ```
+
+停止後再開啟 codespace 時，背景程序都會消失，需要重做第 1 步（dev container 會自動處理）。
+
+常見的坑（`scripts/doctor.sh` 會自動檢查大部分項目）：
 
 | 症狀 | 原因 | 解法 |
 | --- | --- | --- |
@@ -403,13 +495,16 @@ git pull && docker compose up -d --build
 | 重新啟動後，log 裡找不到 `Listening` | `>` 會清空檔案，第二次啟動把第一次的紀錄蓋掉了 | 改用 `>>`；重新啟動前先用 `ss -ltnp \| grep 11434` 確認是否已經在跑 |
 | `curl -s` 什麼都沒印，看不出哪裡出錯 | `-s` 會連錯誤訊息一起隱藏 | 改用 `curl -sS`，需要時加上 `-w '%{http_code}\n'` |
 | 不確定容器到底連不連得到 Ollama | 主機上測試成功，不代表容器也連得到 | 從容器裡測試（見下方指令） |
-| 查詢回傳 504，或等很久之後失敗 | 只有 CPU 時，3B 一次查詢約 1.5～2 分鐘；中間的代理可能先放棄 | 見[第一次查詢很慢，或查詢逾時（504）](#第一次查詢很慢或查詢逾時504)。如果直接 `curl -sS localhost:8000/query` 會成功、透過轉發的網址卻失敗，就是 Codespaces 轉發的限制 |
+| 重開 codespace 後介面顯示 Ollama 無法連線 | 停止 codespace 時背景程序會消失 | dev container 每次啟動都會重新啟動 Ollama；手動流程請重做第 1 步 |
+| 透過轉發網址查詢，約 100 秒後回傳 504，但在 codespace 內 `curl` 會成功 | Codespaces 轉發有自己的上限，nginx 與後端的逾時設定管不到 | 介面已改用串流（[ADR 0010](docs/decisions/0010-streaming-responses.md)）；見[第一次查詢很慢，或查詢逾時（504）](#第一次查詢很慢或查詢逾時504) |
 
 從容器的角度驗證網路，這是最直接的方法：
 
 ```bash
 docker run --rm --add-host=host.docker.internal:host-gateway curlimages/curl -sS http://host.docker.internal:11434/api/version
 ```
+
+完整紀錄見 [devlog 2026-11-01](docs/devlog/2026-11-01.md)、[Codespaces 環境建置](docs/devlog/2026-11-01-codespace-setup.md) 與 [devlog 2026-11-02](docs/devlog/2026-11-02.md)；dev container 的設計見 [ADR 0011](docs/decisions/0011-devcontainer-for-codespaces.md)。
 
 ## 開發與測試
 
@@ -433,7 +528,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-涵蓋範圍：切塊（TS/TSX/JS/Markdown、行號正確性、大型 class 依 method 切分）、增量索引（新增/修改/刪除/未變更、設定變更、embedding 失敗時保留舊資料）、檢索與提示詞組成、API（`/health`、`/index`、`/index/status`、`/query` 的正常與錯誤情況，包含 Ollama 逾時時回傳 504）、設定。
+涵蓋範圍：切塊（TS/TSX/JS/Markdown、行號正確性、大型 class 依 method 切分）、增量索引（新增/修改/刪除/未變更、設定變更、embedding 失敗時保留舊資料）、檢索與提示詞組成、API（`/health`、`/index`、`/index/status`、`/query` 的正常與錯誤情況，包含 Ollama 逾時時回傳 504）、串流查詢（`/query/stream` 的事件順序、heartbeat、串流中的逾時與錯誤事件）、設定。
 
 ### 持續整合（GitHub Actions）
 
@@ -444,7 +539,7 @@ pytest
 | Backend unit tests | 每次 push／PR | `pytest`（Ollama、Qdrant 皆以假物件取代） |
 | Compose config | 每次 push／PR | `docker compose config -q`：主檔，以及主檔搭配每個 `docker-compose.*.yml` override |
 | Build image | 每次 push／PR | build `backend`、`frontend` 映像檔 |
-| End-to-end smoke test | 對 `main` 的 PR | 在 runner 上安裝 Ollama（`OLLAMA_HOST=0.0.0.0`），使用 `qwen2.5-coder:0.5b` + `nomic-embed-text`（有快取），搭配 [`docker-compose.ci.yml`](docker-compose.ci.yml) 啟動服務，索引範例專案、送出查詢，確認回應附有檔案引用；失敗時輸出各服務的 `docker compose logs` |
+| End-to-end smoke test | 對 `main` 的 PR | 在 runner 上安裝 Ollama（`OLLAMA_HOST=0.0.0.0`），使用 `qwen2.5-coder:0.5b` + `nomic-embed-text`（有快取），搭配 [`docker-compose.ci.yml`](docker-compose.ci.yml) 啟動服務，索引範例專案、送出一般查詢與串流查詢，確認回應附有檔案引用、串流事件順序正確且沒有被 nginx 緩衝；失敗時輸出各服務的 `docker compose logs` |
 
 冒煙測試只證明「流程能跑通」，不評估回答品質；為什麼用最小模型、為什麼拆成多個 job，見 [ADR 0008](docs/decisions/0008-ci-design.md)。
 
@@ -475,17 +570,21 @@ cd frontend && npm install && npm run dev
 ```text
 .
 ├── .github/workflows/ci.yml    # CI：單元測試、compose 檢查、映像檔 build、端到端冒煙測試
+├── .devcontainer/              # Codespaces：開啟即自動安裝並啟動（devcontainer.json、post-create.sh、post-start.sh）
 ├── docker-compose.yml          # qdrant / backend / frontend（Ollama 在主機上）
 ├── docker-compose.ci.yml       # CI 冒煙測試專用的 override
+├── docker-compose.codespaces.yml # Codespaces 用的 override（由 COMPOSE_FILE 自動套用）
 ├── .env.example                # 所有可設定項目與說明
+├── .env.codespaces             # Codespaces 用的 .env 範本（3b 模型、TOP_K=4）
 ├── scripts/
 │   ├── setup.sh                # 檢查 Ollama、拉模型、啟動 compose
 │   ├── index.sh                # 在容器內執行索引器
-│   └── smoke-test.sh           # 端到端冒煙測試：健康檢查 → 索引 → 查詢 → 檢查引用
+│   ├── doctor.sh               # 依序診斷 Ollama、Docker、各服務與索引，列出修正指令
+│   └── smoke-test.sh           # 端到端冒煙測試：健康檢查 → 索引 → 查詢 → 串流查詢 → 檢查引用
 ├── backend/                    # FastAPI + LlamaIndex
 │   ├── Dockerfile
 │   ├── app/
-│   │   ├── main.py             # API：/health /index /index/status /query
+│   │   ├── main.py             # API：/health /index /index/status /query /query/stream
 │   │   ├── config.py           # 環境變數設定
 │   │   ├── chunker.py          # 依語法結構 / Markdown 標題切塊
 │   │   ├── indexer.py          # 增量索引（也可用 python -m app.indexer 執行）
@@ -495,7 +594,7 @@ cd frontend && npm install && npm run dev
 │   └── tests/
 ├── frontend/                   # React + Vite，build 後由 nginx 提供並代理 /api
 │   ├── Dockerfile
-│   ├── nginx.conf.template     # nginx 設定（逾時由環境變數帶入）
+│   ├── nginx.conf.template     # nginx 設定（逾時由環境變數帶入；串流路徑關閉緩衝）
 │   └── src/
 └── examples/
     └── sample-game-frontend/   # 測試用的範例專案
@@ -514,6 +613,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [docs/devlog/2026-10-30.md](docs/devlog/2026-10-30.md) | 架構設計與雲端建置 / Architecture design and cloud build |
 | [docs/devlog/2026-11-01.md](docs/devlog/2026-11-01.md) | Codespaces 流程驗證 / Validating the flow on Codespaces |
 | [docs/devlog/2026-11-01-codespace-setup.md](docs/devlog/2026-11-01-codespace-setup.md) | Codespaces 環境建置：踩坑與逾時 / Codespaces setup: pitfalls and timeouts |
+| [docs/devlog/2026-11-02.md](docs/devlog/2026-11-02.md) | 串流回答與 Codespaces 的 dev container / Streaming answers and a dev container for Codespaces |
 | **架構決策紀錄 / ADRs** | |
 | [docs/decisions/TEMPLATE.md](docs/decisions/TEMPLATE.md) | ADR 範本 / ADR template |
 | [0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md) | 採用地端 RAG 而非雲端 API / On-prem RAG instead of a cloud API |
@@ -525,8 +625,10 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0007](docs/decisions/0007-multi-environment-testing-strategy.md) | 多環境測試策略 / Multi-environment testing strategy |
 | [0008](docs/decisions/0008-ci-design.md) | CI 設計：拆分 job、冒煙測試用最小模型 / CI design: split jobs, smallest model for the smoke test |
 | [0009](docs/decisions/0009-timeout-settings.md) | 逾時設定的取捨 / Timeout settings for slow inference |
+| [0010](docs/decisions/0010-streaming-responses.md) | 以 SSE 串流回答 / Streaming answers with Server-Sent Events |
+| [0011](docs/decisions/0011-devcontainer-for-codespaces.md) | Codespaces 的 dev container / Dev container for Codespaces |
 | **學習與評估 / Learning & evaluation** | |
-| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 13 個主題的解釋、程式碼位置、面試題、自我檢核 / 13 topics: explanation, code pointers, interview questions, self-check |
+| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 16 個主題的解釋、程式碼位置、面試題、自我檢核 / 16 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |
 | [docs/metrics.md](docs/metrics.md) | 成本、索引、查詢時間、評估結果、模型比較 / Cost, indexing, latency, evaluation results, model comparison |
 | **作品集 / Portfolio** | |

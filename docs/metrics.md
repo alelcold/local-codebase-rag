@@ -31,11 +31,15 @@
 
 Measure from the "送出" click until the answer appears (or with `time curl …/query`). Record the first query after model load separately.
 
-| Date | Environment | Model | top_k | First query (s) | Avg of 10 queries (s) | p90 (s) | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-01 | Codespaces (CPU) | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | **Estimated ≈ 1.5–2 min per query** (not measured over 10 queries). The UI returned 504 before the timeout fix; see ADR 0009 |
-| 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 8 | — | — | CI smoke test, one query, `LLM_NUM_CTX=4096`. Pipeline check only: the answer text had no `[n]` citation (sources were correct) |
-| {待填} | Mac M2 32 GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | |
+**Time to first token** (since the streaming UI, ADR 0010): from the "送出" click until the first answer token appears. The UI shows it as 「首字延遲」 under the answer; the backend reports `first_token_seconds` in the stream's `done` event. Use the average of the same 10 queries.
+
+| Date | Environment | Model | top_k | First query (s) | Avg of 10 queries (s) | p90 (s) | Time to first token, avg (s) | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-01 | Codespaces (CPU) | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | — | **Estimated ≈ 1.5–2 min per query** (not measured over 10 queries). The UI returned 504 before the timeout fix; see ADR 0009 |
+| 2026-11-02 | Codespaces (CPU), `curl` through nginx inside the codespace | qwen2.5-coder:3b | {待填} | 54.7 | — | — | — | One query, non-streaming `/query`. The same query from the browser through the port forwarder failed with 504 after about 100 s (test log #9; ADR 0010) |
+| {待填} | Codespaces (CPU), browser, streaming | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | `.env.codespaces`; check that nothing is cut off at about 100 s |
+| 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 8 | — | — | {待填} | CI smoke test, one query, `LLM_NUM_CTX=4096`. Pipeline check only: the answer text had no `[n]` citation (sources were correct) |
+| {待填} | Mac M2 32 GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | |
 
 ## 4. Evaluation results
 
@@ -65,6 +69,7 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 | 2026-10-30 | Bugs found by end-to-end run that unit tests missed | 1 (`text-dense` vector name; see devlog) |
 | 2026-11-02 | Backend unit tests | 56 passed (≈ 1.4 s, no network), including 504 timeout handling |
 | 2026-11-01 | Problems found on Codespaces that unit tests missed | {待填} (see [devlog](devlog/2026-11-01-codespace-setup.md)) |
+| 2026-11-02 | Backend unit tests after streaming (`/query/stream`) | 70 passed (≈ 2 s, no network) |
 | 2026-11-02 | CI duration, first run (no caches): unit tests / compose config / image builds (backend, frontend) / smoke test | 40 s / 5 s / 76 s, 45 s / 2 min 41 s (PR #3) |
 
 ## How to measure
@@ -77,6 +82,11 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 ```bash
 # Query latency
 time curl -sS localhost:8000/query -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' > /dev/null
+```
+
+```bash
+# Streaming: time to first token and total (the done event has the backend's own numbers)
+curl -sS -N localhost:8080/api/query/stream -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' | grep -A1 '^event: done'
 ```
 
 ```bash
@@ -123,11 +133,15 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 從按下「送出」到回答出現為止（或用 `time curl …/query`）。模型載入後的第一次查詢另外記錄。
 
-| 日期 | 環境 | 模型 | top_k | 第一次查詢（秒） | 10 次平均（秒） | p90（秒） | 備註 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-01 | Codespaces（CPU） | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | **推算每次約 1.5～2 分鐘**（不是 10 次查詢的實測平均）。修正逾時前介面回傳 504，見 ADR 0009 |
-| 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 8 | — | — | CI 冒煙測試，單次查詢，`LLM_NUM_CTX=4096`。只用來驗證流程：回答文字沒有 `[n]` 引用（來源正確） |
-| {待填} | Mac M2 32GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | |
+**首字延遲**（介面改為串流後，ADR 0010）：從按下「送出」到回答的第一個字出現為止。介面會在回答下方顯示「首字延遲」；後端則在串流的 `done` 事件中回報 `first_token_seconds`。取同樣 10 次查詢的平均。
+
+| 日期 | 環境 | 模型 | top_k | 第一次查詢（秒） | 10 次平均（秒） | p90（秒） | 首字延遲平均（秒） | 備註 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-01 | Codespaces（CPU） | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | — | **推算每次約 1.5～2 分鐘**（不是 10 次查詢的實測平均）。修正逾時前介面回傳 504，見 ADR 0009 |
+| 2026-11-02 | Codespaces（CPU），在 codespace 內用 `curl` 經 nginx | qwen2.5-coder:3b | {待填} | 54.7 | — | — | — | 單次查詢，非串流的 `/query`。同樣的查詢從瀏覽器經連接埠轉發，約 100 秒後回傳 504（測試紀錄 #9；ADR 0010） |
+| {待填} | Codespaces（CPU），瀏覽器，串流 | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | `.env.codespaces`；確認不會在約 100 秒時被中斷 |
+| 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 8 | — | — | {待填} | CI 冒煙測試，單次查詢，`LLM_NUM_CTX=4096`。只用來驗證流程：回答文字沒有 `[n]` 引用（來源正確） |
+| {待填} | Mac M2 32GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | |
 
 ## 4. 評估結果
 
@@ -157,6 +171,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-10-30 | 端到端測試抓到、單元測試沒抓到的問題 | 1 個（`text-dense` 向量名稱，見 devlog） |
 | 2026-11-02 | 後端單元測試 | 56 個通過（約 1.4 秒，不需網路），包含 504 逾時處理 |
 | 2026-11-01 | Codespaces 上發現、單元測試沒抓到的問題 | {待填}（見 [devlog](devlog/2026-11-01-codespace-setup.md)） |
+| 2026-11-02 | 加入串流（`/query/stream`）後的後端單元測試 | 70 個通過（約 2 秒，不需網路） |
 | 2026-11-02 | CI 耗時，第一次執行（沒有快取）：單元測試／compose 檢查／映像檔 build（backend、frontend）／冒煙測試 | 40 秒／5 秒／76 秒、45 秒／2 分 41 秒（PR #3） |
 
 ## 量測方式
@@ -169,6 +184,11 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 ```bash
 # 查詢時間
 time curl -sS localhost:8000/query -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' > /dev/null
+```
+
+```bash
+# 串流：首字延遲與總時間（done 事件裡是後端自己量的數字）
+curl -sS -N localhost:8080/api/query/stream -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' | grep -A1 '^event: done'
 ```
 
 ```bash

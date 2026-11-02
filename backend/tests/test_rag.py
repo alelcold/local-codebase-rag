@@ -57,3 +57,34 @@ def test_build_prompt_formats_markdown_and_symbols(services):
     md = next(s for s in sources if s.language == "markdown")
     assert f"({md.kind} {md.symbol})" in prompt
     assert "```md\n" in prompt
+
+
+def test_stream_strips_leading_whitespace_and_handles_missing_delta(settings):
+    from llama_index.core.llms import CompletionResponse
+    from unittest.mock import MagicMock
+
+    services = make_services(settings)
+    services.indexer.run()
+
+    def gen(prompt):
+        # Like an LLM that fills in only the accumulated text, starting with a newline.
+        for text in ["\n", "\nIt ", "\nIt jumps [1]."]:
+            yield CompletionResponse(text=text)
+
+    object.__setattr__(services.rag, "llm", MagicMock(stream_complete=MagicMock(side_effect=gen)))
+    events = list(services.rag.stream("jump", top_k=2))
+    assert [e.kind for e in events] == ["sources", "token", "token", "done"]
+    assert "".join(e.data["text"] for e in events if e.kind == "token") == "It jumps [1]."
+    assert events[-1].data["tokens"] == 2
+    assert events[-1].data["answer_chars"] == len("It jumps [1].")
+
+
+def test_stream_with_no_matches_returns_hint(settings):
+    from app.rag import NO_MATCH_ANSWER
+
+    services = make_services(settings)
+    services.indexer.run()
+    object.__setattr__(services.store, "query", lambda embedding, k: [])
+    events = list(services.rag.stream("anything"))
+    assert [e.kind for e in events] == ["sources", "token", "done"]
+    assert events[1].data == {"text": NO_MATCH_ANSWER}
