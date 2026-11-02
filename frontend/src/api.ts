@@ -7,6 +7,8 @@ export interface Source {
   kind: string;
   language: string;
   score: number;
+  /** Retrievers that found this excerpt ("vector", "keyword", "identifier"); ADR 0013. */
+  matched_by?: string[];
   text: string;
 }
 

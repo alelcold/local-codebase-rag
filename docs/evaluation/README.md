@@ -7,6 +7,8 @@
 | --- | --- |
 | [`questions.md`](questions.md) | The 10 questions for people: expected answers, citations, manual score sheet |
 | [`questions.yaml`](questions.yaml) | The same questions for the script: type, keywords, expected files, defining files |
+| [`questions-identifiers.yaml`](questions-identifiers.yaml) | 5 supplementary questions (ids 11–15) that name a code identifier, for hybrid retrieval (ADR 0013) |
+| [`experiment-plan-retrieval.md`](experiment-plan-retrieval.md) | Runs, commands and expected metrics for the retrieval switches of ADR 0013 |
 | `results/` | Output of `scripts/evaluate.py`: `<date>-<label>.json` and `.md` |
 
 Design and limits of the metrics: [ADR 0012](../decisions/0012-automated-evaluation-metrics.md). **A keyword hit is not a correct answer**; every report has a 「人工判定正確性」 column for a person to fill in.
@@ -71,6 +73,8 @@ On CPU with 3B, 10 questions take about 5–10 minutes (estimate from the single
 | --- | --- |
 | [`questions.md`](questions.md) | 給人看的 10 題：預期答案、引用、人工計分表 |
 | [`questions.yaml`](questions.yaml) | 給腳本用的同一組題目：題型、關鍵字、預期檔案、定義檔 |
+| [`questions-identifiers.yaml`](questions-identifiers.yaml) | 5 題補充題組（11–15 題），題目直接寫出程式碼識別字，用來評估混合檢索（ADR 0013） |
+| [`experiment-plan-retrieval.md`](experiment-plan-retrieval.md) | ADR 0013 檢索開關的實驗組合、指令與預期指標 |
 | `results/` | `scripts/evaluate.py` 的輸出：`<日期>-<label>.json` 與 `.md` |
 
 指標的設計與限制見 [ADR 0012](../decisions/0012-automated-evaluation-metrics.md)。**關鍵字命中不等於回答正確**；每份報告都有「人工判定正確性」欄位，要由人填寫。

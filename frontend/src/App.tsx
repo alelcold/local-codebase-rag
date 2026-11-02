@@ -521,7 +521,7 @@ function SourceCard({ source, open, onToggle }: { source: Source; open: boolean;
           </span>
         </span>
         {source.symbol && <span className="symbol">{source.symbol}</span>}
-        <span className="score" title="相似度分數">
+        <span className="score" title={source.matched_by?.length ? `分數（RRF 融合）· 命中：${source.matched_by.join("、")}` : "相似度分數"}>
           {source.score.toFixed(3)}
         </span>
         <span className="chevron">{open ? "▾" : "▸"}</span>

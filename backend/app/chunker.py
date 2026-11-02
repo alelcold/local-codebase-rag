@@ -413,3 +413,68 @@ def _chunk_markdown(path: str, text: str, max_chars: int) -> list[Chunk]:
     for start, end, symbol in sections:
         chunks.extend(_window_chunks(path, lines, start, end, "section", symbol, "markdown", max_chars))
     return chunks
+
+
+# ---------------------------------------------------------------------------
+# Declared / exported names (chunk metadata, ADR 0013)
+# ---------------------------------------------------------------------------
+
+# A top-level declaration: no indentation, optional export/default/declare/abstract/async.
+_DECL_RE = re.compile(
+    r"^(?P<export>export\s+(?:default\s+)?)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?"
+    r"(?:const|let|var|function\*?|class|interface|type|enum|namespace)\s+(?P<name>[A-Za-z_$][\w$]*)",
+    re.MULTILINE,
+)
+# export { a, b as c } / export { x } from "./y"
+_EXPORT_LIST_RE = re.compile(r"^export\s+(?:type\s+)?\{([^}]*)\}", re.MULTILINE)
+# export default Name;
+_EXPORT_DEFAULT_RE = re.compile(r"^export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$", re.MULTILINE)
+_NAME_RE = re.compile(r"^[A-Za-z_$][\w$]*$")
+# Indented class members that open a body: "  takeDamage(now: number): void {",
+# "  private async load() {", "  onKey = (e: KeyboardEvent) => {". Requiring the
+# trailing "{" keeps plain calls ("  update(dt);") out.
+_MEMBER_RE = re.compile(
+    r"^[ \t]+(?:(?:public|private|protected|static|readonly|override|async|get|set)\s+)*"
+    r"(?P<name>[A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*"
+    r"(?:\([^)]*\)\s*(?::\s*[^={;]+)?|=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^={;]+)?=>\s*)\{\s*$",
+    re.MULTILINE,
+)
+_NOT_MEMBERS = {"if", "for", "while", "switch", "catch", "with", "function", "return", "else", "do", "try"}
+
+
+def declared_names(text: str, language: str) -> tuple[list[str], list[str]]:
+    """Return (defined names, exported names) of the declarations in a chunk:
+    top-level declarations first, then class members (methods) found in it.
+
+    Only JS/TS is analysed; other languages return empty lists. Regex based on
+    purpose: a chunk can be a window that cuts through a declaration, which a
+    parser would reject, and only names at the start of a line matter here.
+    """
+    if language not in {"typescript", "tsx", "javascript"}:
+        return [], []
+    defines: list[str] = []
+    exports: list[str] = []
+
+    def add(target: list[str], name: str) -> None:
+        if _NAME_RE.match(name) and name not in target:
+            target.append(name)
+
+    for m in _DECL_RE.finditer(text):
+        add(defines, m.group("name"))
+        if m.group("export"):
+            add(exports, m.group("name"))
+    for m in _EXPORT_LIST_RE.finditer(text):
+        for item in m.group(1).split(","):
+            parts = item.split()
+            if parts and parts[0] != "type":
+                add(exports, parts[-1])  # "b as c" exports c
+            elif len(parts) > 1:
+                add(exports, parts[-1])
+    for m in _EXPORT_DEFAULT_RE.finditer(text):
+        add(exports, m.group(1))
+    if re.search(r"^(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s", text, re.MULTILINE) or not defines:
+        # Class body (or a method chunk split out of a class).
+        for m in _MEMBER_RE.finditer(text):
+            if m.group("name") not in _NOT_MEMBERS and m.group("name") != "constructor":
+                add(defines, m.group("name"))
+    return defines, exports

@@ -322,6 +322,81 @@
 - [ ] I can explain each lifecycle command in this repo's `devcontainer.json` and when it runs.
 - [ ] I can read `scripts/doctor.sh` output and fix the first failing check.
 
+## 17. BM25 (keyword ranking)
+
+**Plain explanation**: **BM25** scores a document for a query by the query words it contains. Three ideas: a word counts more when it is **rare** in the whole collection (inverse document frequency, IDF: `INVINCIBLE_MS` appears in two chunks, `return` in all of them); repeating a word helps, but with **diminishing returns** (term-frequency saturation, parameter `k1`, usually 1.2); and long documents are **normalised** so they do not win just by containing more words (parameter `b`, usually 0.75). It needs no model and no GPU, and it is exact: it cannot match a synonym, but it never misses an exact name. Everything depends on the **tokenizer**: for code, `INVINCIBLE_MS` should be one token *and* `invincible` + `ms`, otherwise either exact or partial matches are lost.
+
+**In this repo**:
+- `backend/app/retrieval.py`: `tokenize` / `split_identifier` (code-aware, ASCII only), `KeywordIndex.search` (Okapi BM25 with a never-negative IDF).
+- `RagService.keyword_index()` in `backend/app/rag.py`: built from the chunks in Qdrant, rebuilt when the point-id signature changes. ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md).
+
+**Interview questions**:
+- Write the BM25 formula and explain what `k1` and `b` do. What happens with `b = 0`?
+- Why does `INVINCIBLE_MS` score far higher than `player` for the same query?
+- How would you tokenize `useSyncExternalStore` for search? What breaks if you lower-case and split on non-letters only?
+- Why are Chinese characters not indexed here, although the questions are Chinese?
+- When would you move BM25 from process memory into the vector database (sparse vectors)?
+
+**Self-check**:
+- [ ] I can compute a BM25 score for a two-word query on a three-document toy corpus by hand.
+- [ ] I can explain why the tokenizer matters more than the BM25 parameters.
+
+## 18. Hybrid retrieval (dense + sparse)
+
+**Plain explanation**: **Dense** retrieval (embeddings) matches meaning: 「無敵時間」 can find `invincibility`. It is weak on exact strings: identifiers, error codes, numbers. **Sparse** retrieval (BM25 and similar) is the opposite. **Hybrid retrieval** runs both and merges the results, so a question gets the semantically close chunks *and* the ones containing its exact terms. For code search a third, even more exact signal is useful: does a chunk **define** the identifier the question names? Merging is the hard part, because the scores live on different scales (cosine 0–1, BM25 unbounded); rank-based fusion (RRF) avoids that.
+
+**In this repo**:
+- `RagService.retrieve` in `backend/app/rag.py`: vector list + BM25 list + identifier-definition list, fused with RRF when `HYBRID_SEARCH=true`; each source records `matched_by`.
+- `extract_identifiers` and `KeywordIndex.identifier_matches` in `backend/app/retrieval.py`.
+- Split retrieval (`SPLIT_RETRIEVAL`, `DOC_TOP_K`): a related fix for a different cause — docs crowding out code — by capping documentation slots. ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md).
+
+**Interview questions**:
+- Give a query where dense retrieval fails and BM25 succeeds, and one the other way round.
+- Why not just add the cosine score and the BM25 score?
+- How would you check whether hybrid search actually helped? Which metric, which questions?
+- Your evaluation questions are in Chinese and the code is in English. Which channel does what?
+- Hybrid search vs. a re-ranker (cross-encoder): what does each cost and fix?
+
+**Self-check**:
+- [ ] I can explain why "where is X configured" failed with vector search alone in this project.
+- [ ] I can read `matched_by` in an evaluation report and say which channel found the defining file.
+
+## 19. Reciprocal Rank Fusion (RRF)
+
+**Plain explanation**: **RRF** merges several ranked lists using only the **rank** of each item: `score(d) = Σ 1 / (k + rank_i(d))` over the lists that contain `d`, with ranks starting at 1. An item near the top of several lists beats an item at the top of one. `k` (commonly 60) damps the difference between rank 1 and rank 2: a small `k` trusts each list's first place more; a large `k` rewards agreement between lists. No score normalisation, no training, and it is robust when one retriever is noisy — which is why it is the default fusion in many search engines.
+
+**In this repo**:
+- `rrf()` in `backend/app/retrieval.py`; `RRF_K` (default 60) and `RETRIEVAL_CANDIDATES` (default 30) in `.env.example`.
+- With hybrid search on, `source.score` is the RRF score (about 0.016–0.05), shown as such in the UI tooltip.
+
+**Interview questions**:
+- Compute the RRF scores for lists `[a, b, c]` and `[c, d]` with `k = 60`. Which item is first?
+- What does changing `k` from 60 to 1 do?
+- Why is rank-based fusion safer than score-based fusion when one retriever returns garbage?
+- RRF ignores how *confident* each retriever was. When is that a problem?
+
+**Self-check**:
+- [ ] I can explain the unit test `test_rrf_small_k_favours_top_ranks_more`.
+- [ ] I can explain why an RRF score cannot be read as a similarity.
+
+## 20. Metadata enrichment of chunks
+
+**Plain explanation**: A chunk's text alone often lacks the words a question uses. **Metadata enrichment** adds structured context to what gets embedded (and stored): file path, language, code vs. documentation, function / class name, the class a method belongs to, and the names the chunk **defines** and **exports**. A chunk of bare `export const X = …` lines then carries `Defines: …, INVINCIBLE_MS, …` in its embedding text. Stored metadata also enables exact filters and keyword matching. The cost: the embedded text changes, so **every chunk must be re-embedded**, and vectors built with and without the header must never be mixed in one index.
+
+**In this repo**:
+- `declared_names()` in `backend/app/chunker.py` (top-level declarations, exports, class methods); `embed_text()` in `backend/app/indexer.py` adds the header when `CHUNK_METADATA=true`; `defines` / `exports` are always stored in the payload.
+- `index_config()` in `backend/app/indexer.py`: a fingerprint on every point; a mismatch makes the next index run a full rebuild. `/health` reports `qdrant.reindex_needed`. ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md).
+
+**Interview questions**:
+- Which metadata would you put into the embedding text, and which only into filterable fields? Why?
+- What goes wrong if half the index was embedded with the header and half without?
+- How do you detect that settings changed since the index was built, across processes and restarts?
+- Contextual retrieval (prepending an LLM-written summary to each chunk) vs. rule-based metadata: trade-offs?
+
+**Self-check**:
+- [ ] I can show the embedding text of the `gameConfig.ts` chunk with and without `CHUNK_METADATA`.
+- [ ] I can explain which settings trigger a full rebuild and which do not, and why.
+
 ---
 
 # 知識檢核清單
@@ -646,3 +721,78 @@
 **自我檢核**：
 - [ ] 能解釋本 repo `devcontainer.json` 裡每個生命週期指令的作用與執行時機。
 - [ ] 能讀懂 `scripts/doctor.sh` 的輸出，並修正第一個失敗的項目。
+
+## 17. BM25（關鍵字排序）
+
+**淺白解釋**：**BM25** 依文件包含多少查詢字詞來打分數。三個概念：一個字在整個語料中越**稀有**，分數越高（逆文件頻率 IDF：`INVINCIBLE_MS` 只出現在兩個片段，`return` 到處都有）；同一個字重複出現有幫助，但**效益遞減**（詞頻飽和，參數 `k1`，通常 1.2）；長文件會被**正規化**，不會因為字比較多就贏（參數 `b`，通常 0.75）。不需要模型、不需要 GPU，而且很精確：找不到同義詞，但絕不會漏掉完全相同的名稱。一切取決於**斷詞器**：對程式碼來說，`INVINCIBLE_MS` 應該是一個 token，*同時*也拆成 `invincible` + `ms`，否則不是失去精確比對，就是失去部分比對。
+
+**本 repo 對應位置**：
+- `backend/app/retrieval.py`：`tokenize`／`split_identifier`（理解程式碼、只處理 ASCII）、`KeywordIndex.search`（Okapi BM25，IDF 不會是負數）。
+- `backend/app/rag.py` 的 `RagService.keyword_index()`：從 Qdrant 中的片段建立，point id 簽章改變時重建。ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)。
+
+**面試可能問**：
+- 寫出 BM25 公式並解釋 `k1` 與 `b` 的作用。`b = 0` 時會怎樣？
+- 同一個查詢中，為什麼 `INVINCIBLE_MS` 的分數比 `player` 高很多？
+- 搜尋時你會怎麼切 `useSyncExternalStore`？如果只轉小寫、遇到非字母就切開，會壞在哪裡？
+- 問題是中文，為什麼這裡不索引中文字？
+- 什麼時候該把 BM25 從行程記憶體搬到向量資料庫（sparse vector）？
+
+**自我檢核**：
+- [ ] 能用三份文件的小語料，手算兩個字的查詢的 BM25 分數。
+- [ ] 能解釋為什麼斷詞器比 BM25 參數更重要。
+
+## 18. 混合檢索（dense + sparse）
+
+**淺白解釋**：**Dense** 檢索（embedding）比對語意：「無敵時間」可以找到 `invincibility`，但對精確字串很弱：識別字、錯誤代碼、數字。**Sparse** 檢索（BM25 等）剛好相反。**混合檢索**兩種都跑再合併，讓問題同時拿到語意接近的片段*和*包含完全相同字詞的片段。在程式碼搜尋中，還有第三種更精確的訊號很有用：這個片段是否**定義**了問題提到的識別字？難處在合併，因為分數尺度不同（cosine 0–1、BM25 沒有上限）；依名次融合（RRF）可以避開這個問題。
+
+**本 repo 對應位置**：
+- `backend/app/rag.py` 的 `RagService.retrieve`：`HYBRID_SEARCH=true` 時，以 RRF 融合向量清單、BM25 清單、識別字定義清單；每個引用片段記錄 `matched_by`。
+- `backend/app/retrieval.py` 的 `extract_identifiers` 與 `KeywordIndex.identifier_matches`。
+- 分類取回（`SPLIT_RETRIEVAL`、`DOC_TOP_K`）：針對另一個原因（文件擠掉程式碼）的相關修正，限制文件的名額。ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)。
+
+**面試可能問**：
+- 舉一個 dense 檢索失敗、BM25 成功的查詢，再舉一個相反的例子。
+- 為什麼不直接把 cosine 分數和 BM25 分數相加？
+- 怎麼確認混合檢索真的有幫助？看哪個指標、哪些題目？
+- 評估題目是中文、程式碼是英文，哪個通道負責什麼？
+- 混合檢索與 re-ranker（cross-encoder）：各自的成本與解決的問題？
+
+**自我檢核**：
+- [ ] 能解釋本專案中「X 在哪裡設定」為什麼只靠向量檢索會失敗。
+- [ ] 能讀懂評估報告中的 `matched_by`，說出是哪個通道找到定義檔。
+
+## 19. Reciprocal Rank Fusion（RRF）
+
+**淺白解釋**：**RRF** 只用每個項目的**名次**合併多份排名：`分數(d) = Σ 1 / (k + 名次_i(d))`，加總所有包含 `d` 的清單，名次從 1 開始。在多份清單都排前面的項目，會贏過只在一份清單排第一的項目。`k`（常用 60）縮小第 1 名與第 2 名的差距：`k` 小時更相信各清單的第一名；`k` 大時更獎勵清單之間的一致。不需要正規化分數、不需要訓練，而且某個檢索器有雜訊時仍然穩定，所以是許多搜尋引擎的預設融合方式。
+
+**本 repo 對應位置**：
+- `backend/app/retrieval.py` 的 `rrf()`；`.env.example` 的 `RRF_K`（預設 60）與 `RETRIEVAL_CANDIDATES`（預設 30）。
+- 開啟混合檢索時，`source.score` 是 RRF 分數（約 0.016–0.05），介面的提示文字也這樣標示。
+
+**面試可能問**：
+- `k = 60` 時，計算清單 `[a, b, c]` 與 `[c, d]` 的 RRF 分數。哪個排第一？
+- `k` 從 60 改成 1 會怎樣？
+- 某個檢索器回傳垃圾結果時，為什麼依名次融合比依分數融合安全？
+- RRF 忽略了每個檢索器有多*確定*。什麼時候這會是問題？
+
+**自我檢核**：
+- [ ] 能解釋單元測試 `test_rrf_small_k_favours_top_ranks_more`。
+- [ ] 能解釋為什麼 RRF 分數不能當成相似度來解讀。
+
+## 20. 切塊的 metadata 增強
+
+**淺白解釋**：片段本身的文字常常沒有問題用到的字。**Metadata 增強**把結構化的脈絡加進 embedding 的內容（並一併儲存）：檔案路徑、語言、程式碼或文件、函式／class 名稱、method 所屬的 class，以及片段**定義**與 **export** 的名稱。一個只有 `export const X = …` 的片段，embedding 內容就會帶有 `Defines: …, INVINCIBLE_MS, …`。儲存的 metadata 也能用於精確過濾與關鍵字比對。代價是 embedding 的內容改變，**所有片段都要重新 embedding**，而且有標頭與沒有標頭的向量絕不能混在同一個索引中。
+
+**本 repo 對應位置**：
+- `backend/app/chunker.py` 的 `declared_names()`（頂層宣告、export、class 的 method）；`backend/app/indexer.py` 的 `embed_text()` 在 `CHUNK_METADATA=true` 時加上標頭；`defines`／`exports` 一律存在 payload。
+- `backend/app/indexer.py` 的 `index_config()`：每個 point 都有的設定指紋，不一致時下次索引會全量重建。`/health` 回報 `qdrant.reindex_needed`。ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)。
+
+**面試可能問**：
+- 哪些 metadata 要放進 embedding 內容，哪些只放在可過濾的欄位？為什麼？
+- 如果一半索引有標頭、一半沒有，會出什麼問題？
+- 怎麼跨行程、跨重啟偵測「建立索引後設定改變了」？
+- Contextual retrieval（在每個片段前加上 LLM 寫的摘要）與規則式 metadata 的取捨？
+
+**自我檢核**：
+- [ ] 能展示 `gameConfig.ts` 片段在開啟與關閉 `CHUNK_METADATA` 時的 embedding 內容。
+- [ ] 能解釋哪些設定會觸發全量重建、哪些不會，以及原因。

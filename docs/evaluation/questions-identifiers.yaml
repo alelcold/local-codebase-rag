@@ -1,0 +1,102 @@
+# Supplementary evaluation set for ADR 0013: questions that NAME a code
+# identifier. The main set (questions.yaml) is phrased the way the team asks,
+# mostly without identifiers, so it cannot show whether hybrid retrieval hits
+# an identifier exactly. Run it with:
+#
+#   python3 scripts/evaluate.py --questions docs/evaluation/questions-identifiers.yaml --label <run>-ident
+#
+# 補充評估題組（ADR 0013）：問題中直接寫出程式碼識別字。主要題組（questions.yaml）
+# 是團隊平常的問法，大多沒有識別字，無法看出混合檢索能否精準命中識別字。
+#
+# Same format as questions.yaml (see the field list there). Ids start at 11 so
+# results never get mixed up with the main set. A unit test checks that every
+# expected file exists and every identifier keyword appears in it.
+# Paths and facts come from the sample project only (CLAUDE.md, privacy).
+
+version: 1
+project: examples/sample-game-frontend
+
+questions:
+  - id: 11
+    type: 定位設定
+    question: INVINCIBLE_MS 在哪裡定義？值是多少？在哪裡用到？
+    question_en: Where is INVINCIBLE_MS defined, what is its value, and where is it used?
+    key_facts: >-
+      src/config/gameConfig.ts 的 export const INVINCIBLE_MS = 1500（毫秒）；
+      Player.takeDamage() 把 invincibleMs 設為 INVINCIBLE_MS
+    keywords:
+      - INVINCIBLE_MS
+      - ["1500", "1.5 秒", "1.5秒"]
+      - gameConfig
+      - takeDamage
+    expected_files:
+      - src/config/gameConfig.ts
+      - src/entities/Player.ts
+    definition_files:
+      - src/config/gameConfig.ts
+
+  - id: 12
+    type: 解釋邏輯
+    question: ScoreSystem 的 multiplier 怎麼計算？
+    question_en: How does ScoreSystem compute its multiplier?
+    key_facts: >-
+      min(MAX_COMBO_MULTIPLIER, 1 + combo × COMBO_STEP)，即 1 + 連擊數 × 0.25、最高 4 倍；
+      超過 COMBO_WINDOW_MS 沒收集包裹或 onPlayerHit() 時 combo 歸零
+    keywords:
+      - COMBO_STEP
+      - MAX_COMBO_MULTIPLIER
+      - ["0.25", "COMBO_STEP"]
+      - ["onPlayerHit", "COMBO_WINDOW_MS"]
+    expected_files:
+      - src/systems/ScoreSystem.ts
+      - src/config/gameConfig.ts
+
+  - id: 13
+    type: 定位設定
+    question: DASH_COOLDOWN_MS 和 DASH_DURATION_MS 在哪裡設定？各是多少？
+    question_en: Where are DASH_COOLDOWN_MS and DASH_DURATION_MS set, and what are their values?
+    key_facts: >-
+      src/config/gameConfig.ts：DASH_DURATION_MS = 180、DASH_COOLDOWN_MS = 900（毫秒）；
+      Player.startDash() 使用
+    keywords:
+      - DASH_COOLDOWN_MS
+      - DASH_DURATION_MS
+      - "900"
+      - "180"
+    expected_files:
+      - src/config/gameConfig.ts
+      - src/entities/Player.ts
+    definition_files:
+      - src/config/gameConfig.ts
+
+  - id: 14
+    type: 定位設定
+    question: HIGH_SCORE_KEY 定義在哪裡？最高分怎麼存？
+    question_en: Where is HIGH_SCORE_KEY defined, and how is the high score saved?
+    key_facts: >-
+      src/game/GameState.ts 的 HIGH_SCORE_KEY = "starlight-courier.highScore"；
+      Game.gameOver() 以 localStorage.setItem 寫入
+    keywords:
+      - HIGH_SCORE_KEY
+      - localStorage
+      - gameOver
+    expected_files:
+      - src/game/GameState.ts
+      - src/game/Game.ts
+    definition_files:
+      - src/game/GameState.ts
+
+  - id: 15
+    type: 跨檔案流程
+    question: getLevel 在哪裡定義？Spawner 怎麼用它？
+    question_en: Where is getLevel defined, and how does Spawner use it?
+    key_facts: >-
+      src/config/levels.js 的 getLevel(index)；超過最後一關時間隔每關乘 0.9、最低 0.15 秒；
+      Spawner.update 依目前關卡取得設定
+    keywords:
+      - getLevel
+      - Spawner
+      - asteroidInterval
+    expected_files:
+      - src/config/levels.js
+      - src/systems/Spawner.ts

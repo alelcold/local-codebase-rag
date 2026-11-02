@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.config import Settings
-from app.indexer import scan_files
+from app.indexer import index_config, scan_files
 
 from .conftest import FailingEmbedding, make_services
 
@@ -82,11 +82,16 @@ def test_full_reindex_rebuilds_everything(services):
     assert services.store.count() == count
 
 
-def test_chunk_setting_change_triggers_reindex(services, settings):
+def test_chunk_setting_change_triggers_full_rebuild(services, settings):
     services.indexer.run()
     settings.chunk_max_chars = 800
     report = services.indexer.run()
-    assert len(report.updated) == 4
+    # The stored index_config no longer matches: the collection is dropped and rebuilt.
+    assert report.full is True
+    assert "chunk_max_chars=3000" not in report.rebuild_reason
+    assert "chunk_max_chars=1500" in report.rebuild_reason and "chunk_max_chars=800" in report.rebuild_reason
+    assert len(report.added) == 4
+    assert services.store.index_configs() == {index_config(settings)}
 
 
 def test_embedding_failure_keeps_old_version_and_reports_error(settings, codebase):
@@ -140,3 +145,83 @@ def test_store_created_before_collection_sees_collection_made_elsewhere(settings
     # ...and again after the other process drops and recreates it.
     services.indexer.run(full=True)
     assert len(api_store.query(embedding, 3)) == 3
+
+
+# ── Chunk metadata and settings fingerprint (ADR 0013) ─────────────────────
+
+
+def test_payload_stores_defined_and_exported_names_and_index_config(services, settings):
+    services.indexer.run()
+    payloads = _payloads(services)
+    player = next(p for p in payloads if p["file_path"] == "src/player.ts" and "GRAVITY" in p["defines"].split(","))
+    assert "GRAVITY" in player["exports"].split(",")
+    assert all(p["index_config"] == index_config(settings) for p in payloads)
+
+
+def test_embed_text_includes_metadata_only_when_enabled(settings):
+    from app.chunker import chunk_file
+    from app.indexer import embed_text
+
+    root = Path(settings.codebase_path)
+    chunks = chunk_file("src/player.ts", (root / "src/player.ts").read_text(), 3000)
+    module = next(c for c in chunks if "GRAVITY = 1800" in c.text)
+
+    plain = embed_text(module, settings)
+    assert plain.startswith("search_document: File: src/player.ts\n")
+    assert "Defines:" not in plain and "Type:" not in plain
+
+    settings.chunk_metadata = True
+    rich = embed_text(module, settings)
+    assert "Type: code (typescript)\n" in rich
+    assert "Defines: GRAVITY\n" in rich
+    assert "Exports: GRAVITY\n" in rich
+    assert rich.endswith(module.text)
+
+    md = chunk_file("docs/guide.md", (root / "docs/guide.md").read_text(), 3000)[0]
+    assert "Type: documentation (markdown)\nSection: Game Guide (section)\n" in embed_text(md, settings)
+
+
+def test_embed_text_names_the_class_of_a_method(settings):
+    from app.chunker import Chunk
+    from app.indexer import embed_text
+
+    settings.chunk_metadata = True
+    chunk = Chunk("src/entities/Player.ts", 40, 52, "  takeDamage(now: number): boolean {\n  }", "method",
+                  "Player.takeDamage", "typescript")
+    text = embed_text(chunk, settings)
+    assert "Symbol: Player.takeDamage (method)\nClass: Player\nDefines: takeDamage\n" in text
+
+
+def test_toggling_chunk_metadata_rebuilds_the_index(services, settings):
+    services.indexer.run()
+    calls = services.embed_model.calls
+    assert services.indexer.run().unchanged == 4  # same settings: nothing to do
+
+    settings.chunk_metadata = True
+    report = services.indexer.run()
+    assert report.full is True
+    assert "chunk_metadata=off" in report.rebuild_reason and "chunk_metadata=on" in report.rebuild_reason
+    assert len(report.added) == 4
+    assert services.embed_model.calls > calls
+    assert services.store.index_configs() == {index_config(settings)}
+    assert services.indexer.run().unchanged == 4  # and stable afterwards
+
+
+def test_index_from_an_older_version_is_rebuilt(services):
+    services.indexer.run()
+    store = services.store
+    # Simulate points written before index_config existed.
+    ids = [p.id for p in store.client.scroll(store.collection, limit=1000)[0]]
+    store.client.delete_payload(store.collection, keys=["index_config"], points=ids)
+    assert store.index_configs() == {""}
+    report = services.indexer.run()
+    assert report.full is True
+    assert "older version" in report.rebuild_reason
+
+
+def test_query_time_settings_do_not_trigger_reindex(services, settings):
+    services.indexer.run()
+    settings.hybrid_search = settings.split_retrieval = True
+    settings.prompt_variant = "v2"
+    report = services.indexer.run()
+    assert report.full is False and report.unchanged == 4

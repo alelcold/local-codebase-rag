@@ -88,3 +88,111 @@ def test_stream_with_no_matches_returns_hint(settings):
     events = list(services.rag.stream("anything"))
     assert [e.kind for e in events] == ["sources", "token", "done"]
     assert events[1].data == {"text": NO_MATCH_ANSWER}
+
+
+# ── Hybrid retrieval, split retrieval, prompt v2 (ADR 0013) ────────────────
+
+DOC_NOISE = "\n\n".join(
+    f"## Section {i}\n\nThe player jumps with gravity. Player jump gravity ground, player jump vy." for i in range(6)
+)
+
+
+def _with_noisy_docs(codebase):
+    # Docs that repeat the question's words and outrank the code in vector search.
+    (codebase / "docs/notes.md").write_text(f"# Notes\n\n{DOC_NOISE}\n")
+
+
+def test_defaults_are_the_vector_only_baseline(services):
+    services.indexer.run()
+    sources = services.rag.retrieve("player jump", top_k=3)
+    assert all(s.matched_by == ["vector"] for s in sources)
+    assert services.settings.retrieval_summary()["hybrid_search"] is False
+
+
+def test_hybrid_search_finds_the_chunk_defining_a_named_identifier(settings):
+    services = make_services(settings)
+    services.indexer.run()
+    question = "Where is GRAVITY defined?"
+    # The fake embedding cannot see "GRAVITY" (it lower-cases words), so check the
+    # identifier channel alone gets the defining chunk to the top.
+    settings.hybrid_search = True
+    sources = services.rag.retrieve(question, top_k=2)
+    top = sources[0]
+    assert top.file_path == "src/player.ts"
+    assert "export const GRAVITY = 1800;" in top.text
+    assert "identifier" in top.matched_by and "keyword" in top.matched_by
+    assert 0 < top.score < 0.1  # an RRF score, not a cosine similarity
+
+
+def test_hybrid_search_without_identifiers_still_returns_results(settings):
+    settings.hybrid_search = True
+    services = make_services(settings)
+    services.indexer.run()
+    sources = services.rag.retrieve("how does the player jump", top_k=3)
+    assert len(sources) == 3
+    assert sources[0].file_path == "src/player.ts"
+
+
+def test_keyword_index_is_rebuilt_after_reindexing(settings, codebase):
+    settings.hybrid_search = True
+    services = make_services(settings)
+    services.indexer.run()
+    first = services.rag.keyword_index()
+    assert services.rag.keyword_index() is first  # cached while nothing changed
+
+    (codebase / "src/enemy.ts").write_text("export const ENEMY_SPEED = 42;\n")
+    services.indexer.run()
+    second = services.rag.keyword_index()
+    assert second is not first
+    assert services.rag.retrieve("ENEMY_SPEED", top_k=1)[0].file_path == "src/enemy.ts"
+
+
+def test_split_retrieval_caps_documentation_and_lists_code_first(settings, codebase):
+    _with_noisy_docs(codebase)
+    services = make_services(settings)
+    services.indexer.run()
+    question = "player jump gravity ground"
+
+    baseline = services.rag.retrieve(question, top_k=4)
+    assert sum(s.file_path.endswith(".md") for s in baseline) >= 3  # docs crowd out code
+
+    settings.split_retrieval = True
+    settings.doc_top_k = 1
+    split = services.rag.retrieve(question, top_k=4)
+    kinds = ["doc" if s.file_path.endswith(".md") else "code" for s in split]
+    assert kinds == ["code", "code", "code", "doc"]
+    assert [s.ref for s in split] == [1, 2, 3, 4]
+    assert split[0].file_path == "src/player.ts"
+
+
+def test_all_toggles_together(settings, codebase):
+    _with_noisy_docs(codebase)
+    settings.hybrid_search = settings.split_retrieval = settings.chunk_metadata = True
+    settings.prompt_variant = "v2"
+    llm = FakeLLM(prompts=[], answer="位置在 [1] src/player.ts:4。")
+    services = make_services(settings, llm=llm)
+    services.indexer.run()
+    result = services.rag.answer("GRAVITY 在哪裡設定？", top_k=3)
+    assert result.sources[0].file_path == "src/player.ts"
+    assert "GRAVITY = 1800" in result.sources[0].text
+    assert sum(s.file_path.endswith(".md") for s in result.sources) <= 1
+    assert "一律使用繁體中文" in llm.prompts[0]
+
+
+def test_prompt_v2_asks_for_traditional_chinese_and_code_locations_first():
+    from app.rag import Source
+
+    sources = [
+        Source(1, "src/config/gameConfig.ts", 1, 10, "", "module", "typescript", 0.5, "export const A = 1;"),
+        Source(2, "docs/gameplay.md", 3, 8, "Rules", "section", "markdown", 0.4, "text"),
+    ]
+    v2 = build_prompt("無敵時間在哪裡設定？", sources, "v2")
+    assert "繁體中文" in v2 and "不要使用簡體字" in v2
+    assert "先說明程式碼位置" in v2
+    assert "[1] src/config/gameConfig.ts:1-10 — 程式碼" in v2
+    assert "[2] docs/gameplay.md:3-8 (section Rules) — 文件" in v2
+    assert v2.rstrip().endswith("## 回答")
+
+    v1 = build_prompt("q", sources)
+    assert "Reply in the same language as the question" in v1
+    assert "— 程式碼" not in v1

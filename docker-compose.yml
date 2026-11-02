@@ -47,7 +47,15 @@ services:
       EXCLUDE_PATTERNS: ${EXCLUDE_PATTERNS:-*.min.js,*.bundle.js,*.map,*.d.ts,package-lock.json}
       MAX_FILE_BYTES: ${MAX_FILE_BYTES:-500000}
       CHUNK_MAX_CHARS: ${CHUNK_MAX_CHARS:-3000}
+      CHUNK_METADATA: ${CHUNK_METADATA:-false}
       TOP_K: ${TOP_K:-8}
+      # Retrieval experiments (ADR 0013); all off = the original vector-only baseline.
+      HYBRID_SEARCH: ${HYBRID_SEARCH:-false}
+      RRF_K: ${RRF_K:-60}
+      RETRIEVAL_CANDIDATES: ${RETRIEVAL_CANDIDATES:-30}
+      SPLIT_RETRIEVAL: ${SPLIT_RETRIEVAL:-false}
+      DOC_TOP_K: ${DOC_TOP_K:-1}
+      PROMPT_VARIANT: ${PROMPT_VARIANT:-v1}
       STREAM_HEARTBEAT_SECONDS: ${STREAM_HEARTBEAT_SECONDS:-10}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     volumes:

@@ -184,6 +184,8 @@ def create_app(services: Services | None = None) -> FastAPI:
             "qdrant": qdrant,
             "codebase_path": s.codebase_path,
             "top_k": s.top_k,
+            # Query-time retrieval settings (ADR 0013); scripts/evaluate.py records them.
+            "retrieval": s.retrieval_summary(),
             "index_job": app.state.index_job.state,
         }
 

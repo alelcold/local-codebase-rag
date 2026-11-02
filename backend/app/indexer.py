@@ -7,6 +7,12 @@ Run inside the backend container:
 Change detection compares each file's hash with the ``file_hash`` stored in
 Qdrant, so the vector store itself is the source of truth: wiping the Qdrant
 volume simply causes a full re-index on the next run.
+
+Every point also stores ``index_config`` (see :func:`index_config`): the
+settings that decide what gets chunked and embedded. When the stored value
+differs from the current settings (or is missing, i.e. the index was built by an
+older version), the run turns into a full rebuild automatically, so vectors
+built with different settings are never mixed in one collection (ADR 0013).
 """
 
 from __future__ import annotations
@@ -25,15 +31,29 @@ from pathlib import Path
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.schema import NodeRelationship, RelatedNodeInfo, TextNode
 
-from .chunker import CHUNKER_VERSION, Chunk, chunk_file
-from .config import Settings
+from .chunker import CHUNKER_VERSION, Chunk, chunk_file, declared_names
+from .config import Settings, is_doc_path
 from .store import CodeVectorStore
 
 log = logging.getLogger(__name__)
 
 # Payload keys kept out of the text LlamaIndex would otherwise build for
 # embeddings / prompts; we compose those texts ourselves.
-_METADATA_KEYS = ["file_path", "file_hash", "start_line", "end_line", "symbol", "kind", "language"]
+_METADATA_KEYS = [
+    "file_path",
+    "file_hash",
+    "start_line",
+    "end_line",
+    "symbol",
+    "kind",
+    "language",
+    "defines",
+    "exports",
+    "index_config",
+]
+
+# Bump when the embedding text format changes.
+EMBED_FORMAT_VERSION = "2"
 
 
 @dataclass
@@ -47,6 +67,8 @@ class IndexReport:
     errors: dict[str, str] = field(default_factory=dict)
     chunks_written: int = 0
     full: bool = False
+    # Why a full rebuild happened although --full was not given (settings changed).
+    rebuild_reason: str | None = None
     duration_seconds: float = 0.0
 
     def to_dict(self) -> dict:
@@ -89,18 +111,54 @@ def content_hash(data: bytes, settings: Settings) -> str:
     return h.hexdigest()
 
 
+def index_config(settings: Settings) -> str:
+    """Everything that changes what is chunked or embedded, as one readable string.
+
+    Stored on every point; a mismatch makes the next indexing run a full rebuild.
+    Query-time settings (hybrid search, split retrieval, prompt) are not part of
+    it: toggling those needs no re-index.
+    """
+    return (
+        f"chunker={CHUNKER_VERSION};embed_format={EMBED_FORMAT_VERSION};"
+        f"chunk_max_chars={settings.chunk_max_chars};embed_model={settings.embed_model};"
+        f"doc_prefix={settings.doc_prefix!r};chunk_metadata={'on' if settings.chunk_metadata else 'off'}"
+    )
+
+
+def chunk_names(chunk: Chunk) -> tuple[list[str], list[str]]:
+    return declared_names(chunk.text, chunk.language)
+
+
 def embed_text(chunk: Chunk, settings: Settings) -> str:
-    """Text sent to the embedding model: location header + code."""
+    """Text sent to the embedding model: location header + code.
+
+    With CHUNK_METADATA on, the header also says whether this is code or
+    documentation, the enclosing class of a method, and every name the chunk
+    defines / exports, so a question naming a constant lands on the chunk that
+    declares it even when the code itself is a bare list of assignments.
+    """
     header = f"File: {chunk.file_path}\n"
-    if chunk.symbol:
+    if settings.chunk_metadata:
+        header += f"Type: {'documentation' if is_doc_path(chunk.file_path) else 'code'} ({chunk.language})\n"
+        if chunk.symbol:
+            header += f"{'Section' if chunk.kind == 'section' else 'Symbol'}: {chunk.symbol} ({chunk.kind})\n"
+            if chunk.kind == "method" and "." in chunk.symbol:
+                header += f"Class: {chunk.symbol.split('.', 1)[0]}\n"
+        defines, exports = chunk_names(chunk)
+        if defines:
+            header += f"Defines: {', '.join(defines)}\n"
+        if exports:
+            header += f"Exports: {', '.join(exports)}\n"
+    elif chunk.symbol:
         header += f"Symbol: {chunk.symbol} ({chunk.kind})\n"
     return f"{settings.doc_prefix}{header}\n{chunk.text}"
 
 
-def chunk_to_node(chunk: Chunk, file_hash: str, embedding: list[float]) -> TextNode:
+def chunk_to_node(chunk: Chunk, file_hash: str, embedding: list[float], config: str = "") -> TextNode:
     node_id = str(
         uuid.uuid5(uuid.NAMESPACE_URL, f"{chunk.file_path}:{chunk.start_line}:{chunk.end_line}:{file_hash}")
     )
+    defines, exports = chunk_names(chunk)
     node = TextNode(
         id_=node_id,
         text=chunk.text,
@@ -113,6 +171,10 @@ def chunk_to_node(chunk: Chunk, file_hash: str, embedding: list[float]) -> TextN
             "symbol": chunk.symbol or "",
             "kind": chunk.kind,
             "language": chunk.language,
+            # Comma-separated (Qdrant payloads stay flat); used by keyword search.
+            "defines": ",".join(defines),
+            "exports": ",".join(exports),
+            "index_config": config,
         },
         excluded_embed_metadata_keys=_METADATA_KEYS,
         excluded_llm_metadata_keys=_METADATA_KEYS,
@@ -135,6 +197,14 @@ class CodebaseIndexer:
         if not root.is_dir():
             raise FileNotFoundError(f"Codebase path not found or not a directory: {root}")
 
+        current = index_config(self.settings)
+        if not full:
+            stored = self.store.index_configs()
+            if stored and stored != {current}:
+                full = report.full = True
+                old = ", ".join(sorted(c or "(none: built by an older version)" for c in stored))
+                report.rebuild_reason = f"index settings changed: {old} -> {current}"
+                notify(f"Index settings changed, rebuilding everything.\n  was: {old}\n  now: {current}")
         if full:
             notify("Full re-index: dropping existing collection")
             self.store.reset()
@@ -180,7 +250,8 @@ class CodebaseIndexer:
         texts = [embed_text(c, self.settings) for c in chunks]
         for start in range(0, len(texts), batch):
             embeddings.extend(self.embed_model.get_text_embedding_batch(texts[start : start + batch]))
-        nodes = [chunk_to_node(c, digest, e) for c, e in zip(chunks, embeddings)]
+        config = index_config(self.settings)
+        nodes = [chunk_to_node(c, digest, e, config) for c, e in zip(chunks, embeddings)]
         self.store.delete_file(rel)
         self.store.add(nodes)
         return len(nodes)
@@ -198,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
     s = services.settings
     print(f"Codebase:   {s.codebase_path}")
     print(f"Collection: {s.collection_name}  (embed model: {s.embed_model})")
+    print(f"Settings:   {index_config(s)}")
     report = services.indexer.run(full=args.full, progress=print)
     print(
         f"\nDone in {report.duration_seconds}s — scanned {report.scanned}, "
@@ -205,6 +277,8 @@ def main(argv: list[str] | None = None) -> int:
         f"unchanged {report.unchanged}, skipped {len(report.skipped)}, errors {len(report.errors)}, "
         f"chunks written {report.chunks_written}"
     )
+    if report.rebuild_reason:
+        print(f"Full rebuild because {report.rebuild_reason}")
     for path, err in report.errors.items():
         print(f"  ERROR {path}: {err}")
     return 1 if report.errors else 0
