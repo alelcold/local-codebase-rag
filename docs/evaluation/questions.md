@@ -2,8 +2,9 @@
 
 > English first; 繁體中文版本在下方.
 > Target: `examples/sample-game-frontend/` (index it with the default `PROJECT_PATH`). Never put company code in this file.
+> **Automated run**: the same questions are in [`questions.yaml`](questions.yaml) for `scripts/evaluate.py`, which measures latency, file hits, keyword hits and Simplified characters and leaves correctness to you. See [README](README.md) and [ADR 0012](../decisions/0012-automated-evaluation-metrics.md). Keep both files in sync.
 
-## How to run
+## How to run (manual)
 
 1. Index the sample project (`./scripts/index.sh --full`) and record the model and settings in the run header below.
 2. Ask each question **exactly as written**, in the language you are testing. Use the Chinese wording for the main run, because the team asks in Chinese. Keep `top_k` at its default (8) unless the run is testing `top_k`.
@@ -24,7 +25,7 @@ Expected line ranges are the chunk ranges at the time of writing (`CHUNK_MAX_CHA
 | 3 | Describe the main game loop. How does it stay frame-rate independent? | 遊戲主迴圈的流程是什麼？怎麼做到不受畫面更新率影響？ | `requestAnimationFrame` → `Game.frame`; elapsed time accumulated and `update()` run in fixed steps of `FIXED_DT` (1/60 s); frame time capped by `MAX_FRAME_TIME` (0.25 s); then `render()` once | `src/game/Game.ts:66-84` (`Game.frame`); `docs/architecture.md:1-9` | Explaining a flow |
 | 4 | How does asteroid spawn frequency change between levels? What happens after the last level? | 小行星的生成頻率怎麼隨關卡變化？超過最後一關之後呢？ | Per-level `asteroidInterval` in `LEVELS` (1.2 → 0.9 → 0.6 → 0.4 s); beyond the last level `getLevel()` multiplies the interval by 0.9 per extra level, min 0.15 s; `Spawner.update` uses it | `src/config/levels.js:12-27` (`getLevel`); `src/config/levels.js:1-10`; `src/systems/Spawner.ts:7-44` | JS file + data table |
 | 5 | What happens when the player presses Esc during play, and when they resume? | 遊戲中按 Esc 暫停之後發生什麼事？恢復時又做了什麼？ | Phase becomes `paused` via `setPhase`; loop keeps running but `update()` is not called; resume sets `accumulator = 0` so the game does not jump forward; `Overlay` shows "Paused" | `src/game/Game.ts:86-100` (`Game.handleGlobalInput`); `src/ui/Overlay.tsx:4-37` | State machine |
-| 6 | How does the React HUD get game data without re-rendering every frame? | React 的 HUD 怎麼取得遊戲資料，又不會每一幀都重新 render？ | `createUiStore` external store; `set()` only notifies listeners when a value changed; `Hud` uses `useSyncExternalStore`; `Game.syncUi` writes to it | `src/game/store.ts:5-28` (`createUiStore`); `src/ui/Hud.tsx:8-28`; `docs/architecture.md:31-35` | Cross-layer design |
+| 6 | How does the React HUD get game data without re-rendering every frame? | React 的 HUD 怎麼取得遊戲資料，又不會每一幀都重新 render？ | `createUiStore` external store; `set()` only notifies listeners when a value changed; `Hud` uses `useSyncExternalStore`; `Game.syncUi` writes to it | `src/game/store.ts:5-28` (`createUiStore`); `src/ui/Hud.tsx:8-28`; `src/game/Game.ts` (`Game.syncUi`); `docs/architecture.md:31-35` | Cross-layer design |
 | 7 | How is collision detection implemented? | 碰撞偵測是怎麼實作的？ | Circle vs. circle; compares squared distance with squared radius sum (no `sqrt`); `findOverlaps` filters a list; used in `Game.handleCollisions` | `src/systems/collision.ts:7-13`; `src/systems/collision.ts:15-18`; `src/game/Game.ts:120-138` | Small utility lookup |
 | 8 | How does the dash work: which key, how fast, how long, and the cooldown? | 衝刺（dash）怎麼運作？按哪個鍵、速度、持續時間、冷卻時間？ | Shift (`ShiftLeft`/`ShiftRight` → `dash`); requires a movement direction; `DASH_SPEED` 720 px/s, `DASH_DURATION_MS` 180, `DASH_COOLDOWN_MS` 900; player is invincible while dashing | `src/entities/Player.ts:16-113`; `src/config/gameConfig.ts:1-26`; `src/systems/InputManager.ts:3-16` | Combining 3 files |
 | 9 | Where is the high score saved? | 最高分存在哪裡？ | `localStorage` under `HIGH_SCORE_KEY` = `"starlight-courier.highScore"`; written in `Game.gameOver()`; read in the `Game` constructor | `src/game/GameState.ts:14-14`; `src/game/Game.ts:145-151` (`Game.gameOver`); `src/game/Game.ts:37-49` | Persistence lookup |
@@ -57,8 +58,9 @@ Run: {YYYY-MM-DD} · Env: {Codespaces / Mac M2 / GPU} · LLM: {model} · Embed: 
 # 評估問題（範例專案）
 
 > 對象：`examples/sample-game-frontend/`（使用預設的 `PROJECT_PATH` 建立索引）。不得在此檔案放入公司程式碼。
+> **自動執行**：同一組題目也寫在 [`questions.yaml`](questions.yaml)，供 `scripts/evaluate.py` 使用。腳本會量測延遲、檔案命中、關鍵字命中與簡體字，正確性仍由你判定。見 [README](README.md) 與 [ADR 0012](../decisions/0012-automated-evaluation-metrics.md)。兩個檔案要保持同步。
 
-## 執行方式
+## 執行方式（手動）
 
 1. 為範例專案建立索引（`./scripts/index.sh --full`），並在下方的執行紀錄標頭寫下模型與設定。
 2. 每題**完全照原文**提問，使用要測試的語言。主要評估用中文問，因為團隊是用中文提問。除非這次是在測試 `top_k`，否則維持預設值（8）。
@@ -79,7 +81,7 @@ Run: {YYYY-MM-DD} · Env: {Codespaces / Mac M2 / GPU} · LLM: {model} · Embed: 
 | 3 | 遊戲主迴圈的流程是什麼？怎麼做到不受畫面更新率影響？ | `requestAnimationFrame` → `Game.frame`；累加經過時間，以 `FIXED_DT`（1/60 秒）為單位執行 `update()`；單幀時間上限 `MAX_FRAME_TIME`（0.25 秒）；最後呼叫一次 `render()` | `src/game/Game.ts:66-84`（`Game.frame`）；`docs/architecture.md:1-9` | 說明流程 |
 | 4 | 小行星的生成頻率怎麼隨關卡變化？超過最後一關之後呢？ | `LEVELS` 裡每關的 `asteroidInterval`（1.2 → 0.9 → 0.6 → 0.4 秒）；超過最後一關後，`getLevel()` 每多一關把間隔乘以 0.9，最低 0.15 秒；`Spawner.update` 使用這個值 | `src/config/levels.js:12-27`（`getLevel`）；`src/config/levels.js:1-10`；`src/systems/Spawner.ts:7-44` | JS 檔案＋資料表 |
 | 5 | 遊戲中按 Esc 暫停之後發生什麼事？恢復時又做了什麼？ | 透過 `setPhase` 進入 `paused`；迴圈繼續跑，但不呼叫 `update()`；恢復時把 `accumulator` 設為 0，避免遊戲一下子往前跳；`Overlay` 顯示「Paused」 | `src/game/Game.ts:86-100`（`Game.handleGlobalInput`）；`src/ui/Overlay.tsx:4-37` | 狀態機 |
-| 6 | React 的 HUD 怎麼取得遊戲資料，又不會每一幀都重新 render？ | `createUiStore` 外部 store；`set()` 只在數值改變時通知；`Hud` 使用 `useSyncExternalStore`；`Game.syncUi` 負責寫入 | `src/game/store.ts:5-28`（`createUiStore`）；`src/ui/Hud.tsx:8-28`；`docs/architecture.md:31-35` | 跨層設計 |
+| 6 | React 的 HUD 怎麼取得遊戲資料，又不會每一幀都重新 render？ | `createUiStore` 外部 store；`set()` 只在數值改變時通知；`Hud` 使用 `useSyncExternalStore`；`Game.syncUi` 負責寫入 | `src/game/store.ts:5-28`（`createUiStore`）；`src/ui/Hud.tsx:8-28`；`src/game/Game.ts`（`Game.syncUi`）；`docs/architecture.md:31-35` | 跨層設計 |
 | 7 | 碰撞偵測是怎麼實作的？ | 圓形對圓形；比較距離平方與半徑和的平方（不開根號）；`findOverlaps` 過濾清單；在 `Game.handleCollisions` 中使用 | `src/systems/collision.ts:7-13`；`src/systems/collision.ts:15-18`；`src/game/Game.ts:120-138` | 小工具函式查找 |
 | 8 | 衝刺（dash）怎麼運作？按哪個鍵、速度、持續時間、冷卻時間？ | Shift 鍵（`ShiftLeft`／`ShiftRight` → `dash`）；必須有移動方向；`DASH_SPEED` 720 px/s、`DASH_DURATION_MS` 180、`DASH_COOLDOWN_MS` 900；衝刺期間無敵 | `src/entities/Player.ts:16-113`；`src/config/gameConfig.ts:1-26`；`src/systems/InputManager.ts:3-16` | 整合 3 個檔案 |
 | 9 | 最高分存在哪裡？ | `localStorage`，key 為 `HIGH_SCORE_KEY` = `"starlight-courier.highScore"`；在 `Game.gameOver()` 寫入；在 `Game` 建構子讀取 | `src/game/GameState.ts:14-14`；`src/game/Game.ts:145-151`（`Game.gameOver`）；`src/game/Game.ts:37-49` | 持久化查找 |

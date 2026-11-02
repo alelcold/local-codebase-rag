@@ -180,16 +180,25 @@
 - [`docs/evaluation/questions.md`](../evaluation/questions.md): 10 questions on the sample project, with expected answers, expected citations and scoring columns.
 - `docs/metrics.md`: accuracy, citation accuracy and latency per model.
 - `backend/tests/test_rag.py`: unit-level checks that citations and line numbers make it into the prompt.
+- [`docs/evaluation/questions.yaml`](../evaluation/questions.yaml) + `scripts/evaluate.py`: the automated run. Per question: time to first token and total time, **file recall** of the retrieved sources (split into code and docs, plus the file that **defines** a setting for "where is X configured" questions), keyword hit rate, Simplified-character drift, refusal on the trick question. `scripts/compare.py` diffs two runs. ADR [0012](../decisions/0012-automated-evaluation-metrics.md).
+
+**Proxy metrics and their limits**: automatic metrics are **proxies**. A keyword hit is not a correct answer: the answer can contain `INVINCIBLE_MS` and `1500` and still name the wrong file. File recall says what was retrieved, not what the model used. So the report keeps a manual 0–2 correctness column, and numbers are compared between runs of the same set rather than read as absolute quality. A real case from Codespaces with `TOP_K=4`: all retrieved chunks were docs, the defining code file was missed, and the answer was confidently wrong. Splitting code hits from doc hits made that visible.
+
+**Measurement traps**: the first query includes model load (use a warm-up query); asking the same question twice hits Ollama's prompt cache (0.8 s instead of 30.4 s time to first token on Codespaces); 10 questions are a small sample, so a one-question difference is noise.
 
 **Interview questions**:
 - How do you know your RAG system is good?
 - What is the difference between retrieval metrics (recall@k, hit rate) and answer metrics (correctness, faithfulness)?
 - How do you test that the system says "not found" instead of hallucinating?
-- What would you automate next (e.g. an LLM-as-judge, CI regression)?
+- Why is "keyword hit rate" not accuracy? What do you do about it?
+- Your answers are wrong. How do you tell a retrieval problem from a generation problem?
+- When would you introduce an LLM-as-judge, and how would you validate it?
 
 **Self-check**:
 - [ ] I ran the 10-question set on at least two models and recorded the results.
 - [ ] I can explain recall@k and faithfulness with an example from the sample project.
+- [ ] I ran `scripts/evaluate.py`, filled in the manual column and compared two runs with `scripts/compare.py`.
+- [ ] I can explain each metric in the report and one way it can mislead.
 
 ## 11. Timeouts across a proxy chain
 
@@ -496,16 +505,25 @@
 - [`docs/evaluation/questions.md`](../evaluation/questions.md)：10 題範例專案的評估問題，附預期答案、應引用的檔案與評分欄。
 - `docs/metrics.md`：各模型的答對率、引用正確率與回應時間。
 - `backend/tests/test_rag.py`：在單元測試層級確認引用與行號有放進提示詞。
+- [`docs/evaluation/questions.yaml`](../evaluation/questions.yaml) + `scripts/evaluate.py`：自動化評估。每題記錄首字延遲與總耗時、取回來源的**檔案命中率**（程式碼與文件分開，「X 在哪裡設定」類的題目另外看有沒有取回**定義**該設定的檔案）、關鍵字命中率、是否混入簡體字、陷阱題是否拒答。`scripts/compare.py` 比較兩次結果。ADR [0012](../decisions/0012-automated-evaluation-metrics.md)。
+
+**代理指標與它的限制**：自動計算的指標都是**代理指標**。關鍵字命中不等於回答正確：回答可能同時包含 `INVINCIBLE_MS` 和 `1500`，卻說錯檔案。檔案命中率只說明取回了什麼，不代表模型用了什麼。所以報告保留 0–2 分的人工正確性欄位，而且數字是拿來比較同一組題目的不同次執行，不是當作絕對的品質分數。Codespaces 上 `TOP_K=4` 的真實例子：取回的片段全是文件，定義常數的程式碼檔沒被取回，回答信心十足地答錯。把程式碼命中和文件命中分開，才讓這個問題現形。
+
+**量測陷阱**：第一次查詢包含載入模型的時間（用暖機問題排除）；同一題連問兩次會命中 Ollama 的提示詞快取（Codespaces 上首字延遲從 30.4 秒變成 0.8 秒）；10 題是很小的樣本，差一題屬於雜訊。
 
 **面試可能問**：
 - 你怎麼知道你的 RAG 系統好不好？
 - 檢索指標（recall@k、命中率）和回答指標（正確性、忠實度）有什麼不同？
 - 怎麼測試系統會回答「找不到」，而不是編造答案？
-- 接下來會自動化哪些部分（例如 LLM-as-judge、CI 回歸測試）？
+- 為什麼「關鍵字命中率」不是正確率？你怎麼處理？
+- 回答錯了，你怎麼分辨是檢索的問題還是生成的問題？
+- 什麼時候會引入 LLM-as-judge？要怎麼驗證它？
 
 **自我檢核**：
 - [ ] 至少用兩個模型跑過 10 題評估，並記錄結果。
 - [ ] 能用範例專案的例子解釋 recall@k 和忠實度。
+- [ ] 跑過 `scripts/evaluate.py`，填好人工欄位，並用 `scripts/compare.py` 比較兩次結果。
+- [ ] 能解釋報告中的每個指標，以及它可能誤導人的一種情況。
 
 ## 11. 代理鏈上的逾時
 

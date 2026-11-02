@@ -29,7 +29,9 @@
 
 ## 3. Query latency
 
-Measure from the "送出" click until the answer appears (or with `time curl …/query`). Record the first query after model load separately.
+**Source**: from now on, latency comes from `scripts/evaluate.py` (10 different questions through `/query/stream`, after a warm-up query; see [evaluation/README.md](evaluation/README.md) and ADR 0012). Link the report in Notes. Single queries measured by hand in the UI are marked as such.
+
+Measure from the "送出" click until the answer appears (or with `time curl …/query`). Record the first query after model load separately. Do not repeat the same question to get an average: Ollama's prompt cache makes repeats much faster (see the 0.8 s row below).
 
 **Time to first token** (since the streaming UI, ADR 0010): from the "送出" click until the first answer token appears. The UI shows it as 「首字延遲」 under the answer; the backend reports `first_token_seconds` in the stream's `done` event. Use the average of the same 10 queries.
 
@@ -37,19 +39,23 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-01 | Codespaces (CPU) | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | — | **Estimated ≈ 1.5–2 min per query** (not measured over 10 queries). The UI returned 504 before the timeout fix; see ADR 0009 |
 | 2026-11-02 | Codespaces (CPU), `curl` through nginx inside the codespace | qwen2.5-coder:3b | {待填} | 54.7 | — | — | — | One query, non-streaming `/query`. The same query from the browser through the port forwarder failed with 504 after about 100 s (test log #9; ADR 0010) |
-| {待填} | Codespaces (CPU), browser, streaming | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | `.env.codespaces`; check that nothing is cut off at about 100 s |
-| 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 8 | — | — | {待填} | CI smoke test, one query, `LLM_NUM_CTX=4096`. Pipeline check only: the answer text had no `[n]` citation (sources were correct) |
+| 2026-11-02 | Codespaces (CPU), browser through the forwarding URL, streaming | qwen2.5-coder:3b | 4 | 43.8 | — | — | 30.4 (first query) | Single query by hand: 「玩家受傷後的無敵時間在哪裡設定？」, first after model load, 129 tokens. All 4 retrieved chunks were docs; the answer named the wrong file and mixed in Simplified characters (devlog 2026-11-02) |
+| 2026-11-02 | Same | qwen2.5-coder:3b | 4 | — | — | — | 0.8 (prompt cache) | Same question asked again: 14.3 s total, 134 tokens. Ollama reused the cached prompt, so this is **not** normal latency. Generation speed both times ≈ 10 tokens/s |
+| {待填} | Codespaces (CPU), `scripts/evaluate.py` | qwen2.5-coder:3b | 4 | — | {待填} | {待填} | {待填} | 10 questions; check that nothing is cut off at about 100 s |
+| 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 8 | — | — | — | CI smoke test (PR #3), one query, `LLM_NUM_CTX=4096`. Pipeline check only: the answer text had no `[n]` citation (sources were correct) |
+| 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 5 | — | — | 0.09 (backend) | CI smoke test (PR #4): non-streaming query 5 s; streaming query (model already loaded) 1.0 s total, 44 tokens, `first_token_seconds` 0.086 from the `done` event |
 | {待填} | Mac M2 32 GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | |
 
 ## 4. Evaluation results
 
-Uses the 10 questions in [`evaluation/questions.md`](evaluation/questions.md).
+**Source**: `scripts/evaluate.py` on the 10 questions in [`evaluation/questions.yaml`](evaluation/questions.yaml) (same as [`questions.md`](evaluation/questions.md)), then `--apply-manual` after a person fills in the correctness column. Copy the numbers from the report's summary and link the report. Automatic columns are proxies; only "Manual correctness" measures correct answers (ADR 0012). Compare runs with `scripts/compare.py`.
 
-| Date | Environment | Model | Correct (0–2 each, max 20) | Citations correct (/10) | Says "not found" for Q10 | Avg latency (s) |
-| --- | --- | --- | --- | --- | --- | --- |
-| {待填} | Codespaces | qwen2.5-coder:3b | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Mac M2 | qwen2.5-coder:14b | {待填} | {待填} | {待填} | {待填} |
-| {待填} | GPU instance | qwen2.5-coder:32b | {待填} | {待填} | {待填} | {待填} |
+| Date | Environment | Model | top_k | Manual correctness (/20) | Code file retrieved | Defining file retrieved | Keyword hit rate | Answers with Simplified | Q10 refused | First token, mean (s) | Total, mean (s) | Report |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | GPU instance | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
 ## 5. Model comparison (3B / 14B / 32B)
 
@@ -70,6 +76,7 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 | 2026-11-02 | Backend unit tests | 56 passed (≈ 1.4 s, no network), including 504 timeout handling |
 | 2026-11-01 | Problems found on Codespaces that unit tests missed | {待填} (see [devlog](devlog/2026-11-01-codespace-setup.md)) |
 | 2026-11-02 | Backend unit tests after streaming (`/query/stream`) | 70 passed (≈ 2 s, no network) |
+| 2026-11-02 | Backend unit tests including the evaluation scripts | 93 passed (≈ 5 s, no network; the backend is mocked by a local SSE server) |
 | 2026-11-02 | CI duration, first run (no caches): unit tests / compose config / image builds (backend, frontend) / smoke test | 40 s / 5 s / 76 s, 45 s / 2 min 41 s (PR #3) |
 
 ## How to measure
@@ -131,7 +138,9 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 ## 3. 查詢時間
 
-從按下「送出」到回答出現為止（或用 `time curl …/query`）。模型載入後的第一次查詢另外記錄。
+**數據來源**：之後的查詢時間改由 `scripts/evaluate.py` 產生（10 個不同的問題，經 `/query/stream`，先送一題暖機問題；見 [evaluation/README.md](evaluation/README.md) 與 ADR 0012），並在備註附上報告連結。在介面上手動量的單次查詢會另外註明。
+
+從按下「送出」到回答出現為止（或用 `time curl …/query`）。模型載入後的第一次查詢另外記錄。不要用重複問同一題的方式取平均：Ollama 的提示詞快取會讓重複的問題快很多（見下方 0.8 秒那一列）。
 
 **首字延遲**（介面改為串流後，ADR 0010）：從按下「送出」到回答的第一個字出現為止。介面會在回答下方顯示「首字延遲」；後端則在串流的 `done` 事件中回報 `first_token_seconds`。取同樣 10 次查詢的平均。
 
@@ -139,19 +148,23 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-01 | Codespaces（CPU） | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | — | **推算每次約 1.5～2 分鐘**（不是 10 次查詢的實測平均）。修正逾時前介面回傳 504，見 ADR 0009 |
 | 2026-11-02 | Codespaces（CPU），在 codespace 內用 `curl` 經 nginx | qwen2.5-coder:3b | {待填} | 54.7 | — | — | — | 單次查詢，非串流的 `/query`。同樣的查詢從瀏覽器經連接埠轉發，約 100 秒後回傳 504（測試紀錄 #9；ADR 0010） |
-| {待填} | Codespaces（CPU），瀏覽器，串流 | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | `.env.codespaces`；確認不會在約 100 秒時被中斷 |
-| 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 8 | — | — | {待填} | CI 冒煙測試，單次查詢，`LLM_NUM_CTX=4096`。只用來驗證流程：回答文字沒有 `[n]` 引用（來源正確） |
+| 2026-11-02 | Codespaces（CPU），瀏覽器經轉發網址，串流 | qwen2.5-coder:3b | 4 | 43.8 | — | — | 30.4（第一次查詢） | 手動單次查詢：「玩家受傷後的無敵時間在哪裡設定？」，模型載入後的第一次，129 個 token。取回的 4 段全是文件；回答說錯檔案，並混入簡體字（devlog 2026-11-02） |
+| 2026-11-02 | 同上 | qwen2.5-coder:3b | 4 | — | — | — | 0.8（提示詞快取） | 同一題再問一次：總耗時 14.3 秒，134 個 token。Ollama 重用了快取的提示詞，所以**不是**一般的延遲。兩次的生成速度都約每秒 10 個 token |
+| {待填} | Codespaces（CPU），`scripts/evaluate.py` | qwen2.5-coder:3b | 4 | — | {待填} | {待填} | {待填} | 10 題；確認不會在約 100 秒時被中斷 |
+| 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 8 | — | — | — | CI 冒煙測試（PR #3），單次查詢，`LLM_NUM_CTX=4096`。只用來驗證流程：回答文字沒有 `[n]` 引用（來源正確） |
+| 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 5 | — | — | 0.09（後端） | CI 冒煙測試（PR #4）：非串流查詢 5 秒；串流查詢（模型已載入）總共 1.0 秒、44 個 token，`done` 事件的 `first_token_seconds` 為 0.086 |
 | {待填} | Mac M2 32GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | |
 
 ## 4. 評估結果
 
-使用 [`evaluation/questions.md`](evaluation/questions.md) 的 10 題。
+**數據來源**：用 `scripts/evaluate.py` 跑 [`evaluation/questions.yaml`](evaluation/questions.yaml) 的 10 題（與 [`questions.md`](evaluation/questions.md) 相同），由人填好正確性欄位後執行 `--apply-manual`。從報告的摘要抄數字，並附上報告連結。自動計算的欄位只是代理指標，只有「人工判定正確性」代表回答正確（ADR 0012）。不同次執行用 `scripts/compare.py` 比較。
 
-| 日期 | 環境 | 模型 | 正確性（每題 0–2，滿分 20） | 引用正確（/10） | 第 10 題是否回答找不到 | 平均回應時間（秒） |
-| --- | --- | --- | --- | --- | --- | --- |
-| {待填} | Codespaces | qwen2.5-coder:3b | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Mac M2 | qwen2.5-coder:14b | {待填} | {待填} | {待填} | {待填} |
-| {待填} | GPU 機器 | qwen2.5-coder:32b | {待填} | {待填} | {待填} | {待填} |
+| 日期 | 環境 | 模型 | top_k | 人工判定正確性（/20） | 程式碼檔命中 | 定義檔命中 | 關鍵字命中率 | 混入簡體字的回答 | 第 10 題拒答 | 首字延遲平均（秒） | 總耗時平均（秒） | 報告 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | GPU 機器 | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
 ## 5. 模型比較（3B／14B／32B）
 
@@ -172,6 +185,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-02 | 後端單元測試 | 56 個通過（約 1.4 秒，不需網路），包含 504 逾時處理 |
 | 2026-11-01 | Codespaces 上發現、單元測試沒抓到的問題 | {待填}（見 [devlog](devlog/2026-11-01-codespace-setup.md)） |
 | 2026-11-02 | 加入串流（`/query/stream`）後的後端單元測試 | 70 個通過（約 2 秒，不需網路） |
+| 2026-11-02 | 含評估腳本的後端單元測試 | 93 個通過（約 5 秒，不需網路；後端以本機的 SSE 假伺服器取代） |
 | 2026-11-02 | CI 耗時，第一次執行（沒有快取）：單元測試／compose 檢查／映像檔 build（backend、frontend）／冒煙測試 | 40 秒／5 秒／76 秒、45 秒／2 分 41 秒（PR #3） |
 
 ## 量測方式

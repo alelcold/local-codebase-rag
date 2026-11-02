@@ -1,0 +1,2 @@
+# scripts/evaluate.py (compare.py needs only the standard library)
+PyYAML>=6.0

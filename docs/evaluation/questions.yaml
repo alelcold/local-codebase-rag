@@ -1,0 +1,203 @@
+# Machine-readable evaluation set for scripts/evaluate.py.
+# Same 10 questions as questions.md (keep the two in sync; a unit test checks
+# that every expected file exists in examples/sample-game-frontend/).
+# 與 questions.md 相同的 10 題（兩者要同步；單元測試會檢查預期檔案都存在於範例專案）。
+#
+# Fields
+#   id               question number (same as questions.md)
+#   type             定位設定 (where something is configured or stored)
+#                    解釋邏輯 (how something is computed / works, mostly in one place)
+#                    跨檔案流程 (a flow that spans several files or layers)
+#                    陷阱題 (the feature does not exist; the answer must say so)
+#   question         Chinese wording (the main run; the team asks in Chinese)
+#   question_en      English wording (--lang en)
+#   key_facts        for the human judge: what a fully correct answer contains
+#   keywords         scored automatically. Each item is a string, or a list of
+#                    alternatives where any one counts. Case-insensitive substring match.
+#   expected_files   files whose chunks should be retrieved (paths relative to the project).
+#                    .md files count as documentation, everything else as code.
+#   definition_files (定位設定 only) the code files that actually define the setting.
+#                    Retrieving only the docs that mention it is not enough.
+#   expect_no_answer (陷阱題) the answer should say the feature cannot be found
+#   forbidden_keywords (陷阱題) words that suggest an invented implementation
+#
+# Paths and facts come from the sample project only (CLAUDE.md, privacy).
+
+version: 1
+project: examples/sample-game-frontend
+
+questions:
+  - id: 1
+    type: 定位設定
+    question: 玩家受傷後的無敵時間在哪裡設定？是多久？
+    question_en: Where is the invincibility time after the player gets hit configured, and how long is it?
+    key_facts: >-
+      gameConfig.ts 的 INVINCIBLE_MS = 1500 毫秒；在 Player.takeDamage() 設定；
+      isInvincible 為真時（衝刺時也是）不會受傷
+    keywords:
+      - INVINCIBLE_MS
+      - ["1500", "1.5 秒", "1.5秒", "1.5 s", "1.5s"]
+      - gameConfig
+      - takeDamage
+      - isInvincible
+    expected_files:
+      - src/config/gameConfig.ts
+      - src/entities/Player.ts
+      - docs/gameplay.md
+    definition_files:
+      - src/config/gameConfig.ts
+
+  - id: 2
+    type: 解釋邏輯
+    question: 連擊倍率怎麼計算？什麼時候會歸零？
+    question_en: How is the combo multiplier calculated, and when does the combo reset?
+    key_facts: >-
+      1 + 連擊數 × 0.25（COMBO_STEP），最高 4 倍（MAX_COMBO_MULTIPLIER）；
+      超過 COMBO_WINDOW_MS（2500 毫秒）沒有收集包裹，或玩家受傷時歸零
+    keywords:
+      - ["0.25", "COMBO_STEP"]
+      - ["MAX_COMBO_MULTIPLIER", "4 倍", "4倍", "4x"]
+      - ["COMBO_WINDOW_MS", "2500", "2.5 秒", "2.5秒"]
+      - ["受傷", "被擊中", "撞到", "hit"]
+    expected_files:
+      - src/systems/ScoreSystem.ts
+      - src/config/gameConfig.ts
+      - docs/gameplay.md
+
+  - id: 3
+    type: 解釋邏輯
+    question: 遊戲主迴圈的流程是什麼？怎麼做到不受畫面更新率影響？
+    question_en: Describe the main game loop. How does it stay frame-rate independent?
+    key_facts: >-
+      requestAnimationFrame → Game.frame；累加經過時間，以 FIXED_DT（1/60 秒）為單位執行 update()；
+      單幀時間上限 MAX_FRAME_TIME（0.25 秒）；最後呼叫一次 render()
+    keywords:
+      - requestAnimationFrame
+      - ["FIXED_DT", "1/60", "固定時間步", "fixed timestep", "fixed time step"]
+      - ["accumulator", "累加", "累積"]
+      - ["MAX_FRAME_TIME", "0.25"]
+      - render
+    expected_files:
+      - src/game/Game.ts
+      - docs/architecture.md
+
+  - id: 4
+    type: 跨檔案流程
+    question: 小行星的生成頻率怎麼隨關卡變化？超過最後一關之後呢？
+    question_en: How does asteroid spawn frequency change between levels? What happens after the last level?
+    key_facts: >-
+      LEVELS 裡每關的 asteroidInterval（1.2 → 0.9 → 0.6 → 0.4 秒）；超過最後一關後，
+      getLevel() 每多一關把間隔乘以 0.9，最低 0.15 秒；Spawner.update 使用這個值
+    keywords:
+      - asteroidInterval
+      - getLevel
+      - "0.9"
+      - "0.15"
+      - Spawner
+    expected_files:
+      - src/config/levels.js
+      - src/systems/Spawner.ts
+
+  - id: 5
+    type: 跨檔案流程
+    question: 遊戲中按 Esc 暫停之後發生什麼事？恢復時又做了什麼？
+    question_en: What happens when the player presses Esc during play, and when they resume?
+    key_facts: >-
+      透過 setPhase 進入 paused；迴圈繼續跑，但不呼叫 update()；
+      恢復時把 accumulator 設為 0，避免遊戲一下子往前跳；Overlay 顯示「Paused」
+    keywords:
+      - paused
+      - setPhase
+      - accumulator
+      - Overlay
+    expected_files:
+      - src/game/Game.ts
+      - src/ui/Overlay.tsx
+
+  - id: 6
+    type: 跨檔案流程
+    question: React 的 HUD 怎麼取得遊戲資料，又不會每一幀都重新 render？
+    question_en: How does the React HUD get game data without re-rendering every frame?
+    key_facts: >-
+      createUiStore 外部 store；set() 只在數值改變時通知；Hud 使用 useSyncExternalStore；
+      Game.syncUi 負責寫入
+    keywords:
+      - createUiStore
+      - useSyncExternalStore
+      - syncUi
+      - ["改變", "變更", "不同", "changed"]
+    expected_files:
+      - src/game/store.ts
+      - src/ui/Hud.tsx
+      - src/game/Game.ts
+      - docs/architecture.md
+
+  - id: 7
+    type: 解釋邏輯
+    question: 碰撞偵測是怎麼實作的？
+    question_en: How is collision detection implemented?
+    key_facts: >-
+      圓形對圓形；比較距離平方與半徑和的平方（不開根號）；findOverlaps 過濾清單；
+      在 Game.handleCollisions 中使用
+    keywords:
+      - ["圓", "circle"]
+      - ["平方", "squared", "sqrt", "開根號"]
+      - findOverlaps
+      - handleCollisions
+    expected_files:
+      - src/systems/collision.ts
+      - src/game/Game.ts
+
+  - id: 8
+    type: 定位設定
+    question: 衝刺（dash）怎麼運作？按哪個鍵、速度、持續時間、冷卻時間？
+    question_en: "How does the dash work: which key, how fast, how long, and the cooldown?"
+    key_facts: >-
+      Shift 鍵（ShiftLeft／ShiftRight → dash）；必須有移動方向；DASH_SPEED 720 px/s、
+      DASH_DURATION_MS 180、DASH_COOLDOWN_MS 900；衝刺期間無敵
+    keywords:
+      - Shift
+      - ["DASH_SPEED", "720"]
+      - ["DASH_DURATION_MS", "180"]
+      - ["DASH_COOLDOWN_MS", "900"]
+      - ["無敵", "invincible", "isInvincible"]
+    expected_files:
+      - src/entities/Player.ts
+      - src/config/gameConfig.ts
+      - src/systems/InputManager.ts
+    definition_files:
+      - src/config/gameConfig.ts
+      - src/systems/InputManager.ts
+
+  - id: 9
+    type: 定位設定
+    question: 最高分存在哪裡？
+    question_en: Where is the high score saved?
+    key_facts: >-
+      localStorage，key 為 HIGH_SCORE_KEY = "starlight-courier.highScore"；
+      在 Game.gameOver() 寫入；在 Game 建構子讀取
+    keywords:
+      - localStorage
+      - ["HIGH_SCORE_KEY", "starlight-courier.highScore"]
+      - gameOver
+    expected_files:
+      - src/game/GameState.ts
+      - src/game/Game.ts
+    definition_files:
+      - src/game/GameState.ts
+
+  - id: 10
+    type: 陷阱題
+    question: 線上多人模式怎麼同步玩家位置？
+    question_en: How does online multiplayer synchronize player positions?
+    key_facts: >-
+      陷阱題：專案中沒有多人或網路功能。正確的回答應該說找不到，而不是編造程式碼。
+    expect_no_answer: true
+    keywords:
+      - ["找不到", "沒有", "没有", "不存在", "未包含", "無法", "沒找到", "not found", "no multiplayer", "does not", "doesn't", "cannot find", "can't find"]
+    forbidden_keywords:
+      - WebSocket
+      - socket.io
+      - WebRTC
+      - RTCPeerConnection
+    expected_files: []
