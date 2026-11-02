@@ -21,7 +21,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-30 | Cloud sandbox, **fake embeddings** | Sample | 20 | 67 | 0.39* | 0.01* | (fake) |
 | 2026-11-01 | Codespaces (CPU) | Sample | 20 | 67 | {待填} | {待填} | nomic-embed-text |
-| {待填} | GitHub Actions runner (CPU, CI smoke test) | Sample | 20 | 67 | {待填} | — | nomic-embed-text |
+| 2026-11-02 | GitHub Actions runner (CPU, CI smoke test, Ollama 0.40.13) | Sample | 20 | 67 | 21.54 | — | nomic-embed-text |
 | {待填} | Mac M2 32 GB | Sample | 20 | 67 | {待填} | {待填} | nomic-embed-text |
 | {待填} | Mac M2 32 GB | Real project (count only, no names) | {待填} | {待填} | {待填} | {待填} | nomic-embed-text |
 
@@ -34,7 +34,7 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 | Date | Environment | Model | top_k | First query (s) | Avg of 10 queries (s) | p90 (s) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-01 | Codespaces (CPU) | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | **Estimated ≈ 1.5–2 min per query** (not measured over 10 queries). The UI returned 504 before the timeout fix; see ADR 0009 |
-| {待填} | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | {待填} | — | — | CI smoke test, `LLM_NUM_CTX=4096`; printed as "Query took Ns" in the job log |
+| 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 8 | — | — | CI smoke test, one query, `LLM_NUM_CTX=4096`. Pipeline check only: the answer text had no `[n]` citation (sources were correct) |
 | {待填} | Mac M2 32 GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | |
 
 ## 4. Evaluation results
@@ -65,7 +65,7 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 | 2026-10-30 | Bugs found by end-to-end run that unit tests missed | 1 (`text-dense` vector name; see devlog) |
 | 2026-11-02 | Backend unit tests | 56 passed (≈ 1.4 s, no network), including 504 timeout handling |
 | 2026-11-01 | Problems found on Codespaces that unit tests missed | {待填} (see [devlog](devlog/2026-11-01-codespace-setup.md)) |
-| {待填} | CI duration: unit tests / compose config / image builds / smoke test | {待填} / {待填} / {待填} / {待填} |
+| 2026-11-02 | CI duration, first run (no caches): unit tests / compose config / image builds (backend, frontend) / smoke test | 40 s / 5 s / 76 s, 45 s / 2 min 41 s (PR #3) |
 
 ## How to measure
 
@@ -113,7 +113,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-30 | 雲端 sandbox，**假 embedding** | 範例專案 | 20 | 67 | 0.39* | 0.01* | （假） |
 | 2026-11-01 | Codespaces（CPU） | 範例專案 | 20 | 67 | {待填} | {待填} | nomic-embed-text |
-| {待填} | GitHub Actions runner（CPU，CI 冒煙測試） | 範例專案 | 20 | 67 | {待填} | — | nomic-embed-text |
+| 2026-11-02 | GitHub Actions runner（CPU，CI 冒煙測試，Ollama 0.40.13） | 範例專案 | 20 | 67 | 21.54 | — | nomic-embed-text |
 | {待填} | Mac M2 32GB | 範例專案 | 20 | 67 | {待填} | {待填} | nomic-embed-text |
 | {待填} | Mac M2 32GB | 實際專案（只記數量，不記名稱） | {待填} | {待填} | {待填} | {待填} | nomic-embed-text |
 
@@ -126,7 +126,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 日期 | 環境 | 模型 | top_k | 第一次查詢（秒） | 10 次平均（秒） | p90（秒） | 備註 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-01 | Codespaces（CPU） | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | **推算每次約 1.5～2 分鐘**（不是 10 次查詢的實測平均）。修正逾時前介面回傳 504，見 ADR 0009 |
-| {待填} | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | {待填} | — | — | CI 冒煙測試，`LLM_NUM_CTX=4096`；job log 中的「Query took Ns」 |
+| 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 8 | — | — | CI 冒煙測試，單次查詢，`LLM_NUM_CTX=4096`。只用來驗證流程：回答文字沒有 `[n]` 引用（來源正確） |
 | {待填} | Mac M2 32GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | |
 
 ## 4. 評估結果
@@ -157,7 +157,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-10-30 | 端到端測試抓到、單元測試沒抓到的問題 | 1 個（`text-dense` 向量名稱，見 devlog） |
 | 2026-11-02 | 後端單元測試 | 56 個通過（約 1.4 秒，不需網路），包含 504 逾時處理 |
 | 2026-11-01 | Codespaces 上發現、單元測試沒抓到的問題 | {待填}（見 [devlog](devlog/2026-11-01-codespace-setup.md)） |
-| {待填} | CI 耗時：單元測試／compose 檢查／映像檔 build／冒煙測試 | {待填}／{待填}／{待填}／{待填} |
+| 2026-11-02 | CI 耗時，第一次執行（沒有快取）：單元測試／compose 檢查／映像檔 build（backend、frontend）／冒煙測試 | 40 秒／5 秒／76 秒、45 秒／2 分 41 秒（PR #3） |
 
 ## 量測方式
 

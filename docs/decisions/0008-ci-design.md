@@ -24,8 +24,8 @@ One workflow (`.github/workflows/ci.yml`) with four jobs:
 | --- | --- | --- | --- |
 | `backend-tests` | every push and PR | `pytest` with fakes (no Ollama, in-memory Qdrant) | about 1 minute, mostly installing packages |
 | `compose-config` | every push and PR | `docker compose config -q` for the base file, and for the base file combined with every `docker-compose.*.yml` override | seconds |
-| `docker-build` | every push and PR | Builds the `backend` and `frontend` images (matrix), using the GitHub Actions build cache | {待填} |
-| `e2e-smoke` | PRs into `main` only | Installs Ollama on the runner, starts it with `OLLAMA_HOST=0.0.0.0`, pulls `qwen2.5-coder:0.5b` and `nomic-embed-text` (cached), starts compose with `docker-compose.ci.yml`, then runs `scripts/smoke-test.sh` (health → index the sample project → query through `/api` → check citations). On failure it prints `docker compose logs` for every service and the Ollama server log. | {待填} |
+| `docker-build` | every push and PR | Builds the `backend` and `frontend` images (matrix), using the GitHub Actions build cache | 45–76 s (first run, no cache) |
+| `e2e-smoke` | PRs into `main` only | Installs Ollama on the runner, starts it with `OLLAMA_HOST=0.0.0.0`, pulls `qwen2.5-coder:0.5b` and `nomic-embed-text` (cached), starts compose with `docker-compose.ci.yml`, then runs `scripts/smoke-test.sh` (health → index the sample project → query through `/api` → check citations). On failure it prints `docker compose logs` for every service and the Ollama server log. | 2 min 41 s (first run, no model cache) |
 
 ### Why the smoke test uses the smallest model
 
@@ -64,7 +64,7 @@ This is the same topology as the Mac and Codespaces (ADR 0006): Ollama runs nati
   - The smoke test depends on ollama.com, the model registry and Docker Hub being reachable from the runner. A network problem can fail it without a code bug, so re-run it before investigating.
   - The Ollama version is not pinned (the install script installs the latest release), so a new Ollama release can change behavior. Pin it with `OLLAMA_VERSION` if this becomes a problem.
   - CI uses `TOP_K=4` and `LLM_NUM_CTX=4096` to stay fast, which differs from the production defaults.
-- **Follow-ups**: Record the measured job times in `docs/metrics.md`. Consider pinning the Ollama version. Add a `docker-compose.gpu.yml` override if GPU instances ever need compose changes; `compose-config` validates any `docker-compose.*.yml` automatically.
+- **Follow-ups**: Consider pinning the Ollama version. Add a `docker-compose.gpu.yml` override if GPU instances ever need compose changes; `compose-config` validates any `docker-compose.*.yml` automatically.
 
 ---
 
@@ -92,8 +92,8 @@ repo 原本沒有 CI，測試都靠手動執行；而 Codespaces 的測試發現
 | --- | --- | --- | --- |
 | `backend-tests` | 每次 push 與 PR | 用假物件跑 `pytest`（不需 Ollama，Qdrant 用記憶體模式） | 約 1 分鐘，大部分是安裝套件 |
 | `compose-config` | 每次 push 與 PR | 對主檔，以及主檔搭配每個 `docker-compose.*.yml` override，執行 `docker compose config -q` | 幾秒 |
-| `docker-build` | 每次 push 與 PR | 以 matrix build `backend` 與 `frontend` 映像檔，使用 GitHub Actions 的 build 快取 | {待填} |
-| `e2e-smoke` | 只在對 `main` 的 PR | 在 runner 上安裝 Ollama 並以 `OLLAMA_HOST=0.0.0.0` 啟動，拉取 `qwen2.5-coder:0.5b` 與 `nomic-embed-text`（有快取），搭配 `docker-compose.ci.yml` 啟動 compose，再執行 `scripts/smoke-test.sh`（健康檢查 → 索引範例專案 → 透過 `/api` 查詢 → 檢查引用）。失敗時輸出每個服務的 `docker compose logs` 與 Ollama 伺服器的 log。 | {待填} |
+| `docker-build` | 每次 push 與 PR | 以 matrix build `backend` 與 `frontend` 映像檔，使用 GitHub Actions 的 build 快取 | 45～76 秒（第一次執行，沒有快取） |
+| `e2e-smoke` | 只在對 `main` 的 PR | 在 runner 上安裝 Ollama 並以 `OLLAMA_HOST=0.0.0.0` 啟動，拉取 `qwen2.5-coder:0.5b` 與 `nomic-embed-text`（有快取），搭配 `docker-compose.ci.yml` 啟動 compose，再執行 `scripts/smoke-test.sh`（健康檢查 → 索引範例專案 → 透過 `/api` 查詢 → 檢查引用）。失敗時輸出每個服務的 `docker compose logs` 與 Ollama 伺服器的 log。 | 2 分 41 秒（第一次執行，沒有模型快取） |
 
 ### 為什麼冒煙測試用最小模型
 
@@ -132,4 +132,4 @@ repo 原本沒有 CI，測試都靠手動執行；而 Codespaces 的測試發現
   - 冒煙測試需要 runner 能連到 ollama.com、模型 registry 與 Docker Hub。就算程式沒有問題，網路狀況也可能讓它失敗；遇到時先重跑一次，再開始追查。
   - Ollama 版本沒有固定（安裝腳本會安裝最新版），新版 Ollama 可能改變行為。如果造成問題，用 `OLLAMA_VERSION` 固定版本。
   - CI 為了速度使用 `TOP_K=4`、`LLM_NUM_CTX=4096`，和正式環境的預設值不同。
-- **後續工作**：把實際量到的 job 時間記到 `docs/metrics.md`。考慮固定 Ollama 版本。如果之後 GPU 機器需要修改 compose，就新增 `docker-compose.gpu.yml` override；`compose-config` 會自動驗證所有 `docker-compose.*.yml`。
+- **後續工作**：考慮固定 Ollama 版本。如果之後 GPU 機器需要修改 compose，就新增 `docker-compose.gpu.yml` override；`compose-config` 會自動驗證所有 `docker-compose.*.yml`。

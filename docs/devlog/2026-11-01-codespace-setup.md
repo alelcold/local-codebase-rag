@@ -114,7 +114,7 @@ Copied into `docs/metrics.md`.
 - [ ] Confirm where the 504 came from (direct `curl` to the backend inside the codespace).
 - [ ] Measure the query time over 10 queries with the new UI timer and record it in `docs/metrics.md`.
 - [ ] If the port forwarder is the limit, implement the asynchronous query job (ADR 0009).
-- [ ] Record the CI job durations after the first run.
+- [x] Record the CI job durations after the first run (`docs/metrics.md`: smoke test 2 min 41 s, full index 21.54 s, query 8 s with 0.5B).
 
 ---
 
@@ -233,4 +233,4 @@ Copied into `docs/metrics.md`.
 - [ ] 確認 504 的來源（在 codespace 內直接 `curl` 後端）。
 - [ ] 用新的介面計時器量 10 次查詢時間，記錄到 `docs/metrics.md`。
 - [ ] 如果是連接埠轉發的限制，實作非同步查詢工作（ADR 0009）。
-- [ ] 第一次 CI 跑完後，記錄各 job 的耗時。
+- [x] 第一次 CI 跑完後，記錄各 job 的耗時（`docs/metrics.md`：冒煙測試 2 分 41 秒、完整索引 21.54 秒、0.5B 查詢 8 秒）。
