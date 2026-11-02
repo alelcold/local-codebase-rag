@@ -30,6 +30,8 @@ docker compose config -q             # validate compose
 cd frontend && npm run build         # type-check + build the UI
 ./scripts/smoke-test.sh              # end-to-end check against a running stack, plain + streaming query (also run in CI)
 ./scripts/doctor.sh                  # step-by-step diagnosis of Ollama, Docker, services and index, with fixes
+python3 scripts/evaluate.py --label <env-model>  # 10-question evaluation → docs/evaluation/results/ (ADR 0012)
+python3 scripts/compare.py A.json B.json         # compare two evaluation runs
 ```
 
 ## Rules
@@ -91,6 +93,8 @@ docker compose config -q             # 驗證 compose 設定
 cd frontend && npm run build         # 型別檢查並 build 前端
 ./scripts/smoke-test.sh              # 對已啟動的服務做端到端檢查，含一般與串流查詢（CI 也會執行）
 ./scripts/doctor.sh                  # 依序診斷 Ollama、Docker、各服務與索引，並列出修正指令
+python3 scripts/evaluate.py --label <環境-模型>  # 10 題評估 → docs/evaluation/results/（ADR 0012）
+python3 scripts/compare.py A.json B.json         # 比較兩次評估結果
 ```
 
 ## 規則

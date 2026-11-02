@@ -20,6 +20,9 @@ else
   curl -fsSL https://ollama.com/install.sh | sh
 fi
 
+step "Installing PyYAML for scripts/evaluate.py"
+python3 -m pip install --user --quiet -r scripts/requirements-eval.txt || echo "! could not install PyYAML; run: pip install -r scripts/requirements-eval.txt"
+
 mkdir -p .logs "${OLLAMA_MODELS:-$HOME/.ollama/models}"
 
 step "Creating .env"

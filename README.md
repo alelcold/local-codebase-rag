@@ -528,7 +528,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-涵蓋範圍：切塊（TS/TSX/JS/Markdown、行號正確性、大型 class 依 method 切分）、增量索引（新增/修改/刪除/未變更、設定變更、embedding 失敗時保留舊資料）、檢索與提示詞組成、API（`/health`、`/index`、`/index/status`、`/query` 的正常與錯誤情況，包含 Ollama 逾時時回傳 504）、串流查詢（`/query/stream` 的事件順序、heartbeat、串流中的逾時與錯誤事件）、設定。
+涵蓋範圍：切塊（TS/TSX/JS/Markdown、行號正確性、大型 class 依 method 切分）、增量索引（新增/修改/刪除/未變更、設定變更、embedding 失敗時保留舊資料）、檢索與提示詞組成、API（`/health`、`/index`、`/index/status`、`/query` 的正常與錯誤情況，包含 Ollama 逾時時回傳 504）、串流查詢（`/query/stream` 的事件順序、heartbeat、串流中的逾時與錯誤事件）、評估腳本（`questions.yaml` 與範例專案一致、各項指標的計算、以假的 SSE 後端跑完整流程、`compare.py` 差異表）、設定。
 
 ### 持續整合（GitHub Actions）
 
@@ -548,6 +548,40 @@ pytest
 ```bash
 ./scripts/smoke-test.sh
 ```
+
+### 評估回答品質
+
+[`scripts/evaluate.py`](scripts/evaluate.py) 會透過串流查詢端點，依序詢問 [`docs/evaluation/questions.yaml`](docs/evaluation/questions.yaml) 的 10 題（範例專案），並記錄：
+
+- 每題的首字延遲、總耗時、token 數
+- 引用命中：預期的檔案有沒有被取回，程式碼檔與文件檔分開統計；「在哪裡設定」類的題目另外檢查有沒有取回**定義**該設定的程式碼檔
+- 關鍵字命中率、回答是否混入簡體字、陷阱題是否正確回答「找不到」
+
+結果寫到 `docs/evaluation/results/<日期>-<label>.json` 與 `.md` 報告。**關鍵字命中不等於回答正確**，報告每題都有空白的「人工判定正確性」欄位，要由人讀過回答後填寫（[ADR 0012](docs/decisions/0012-automated-evaluation-metrics.md)）。
+
+```bash
+pip install -r scripts/requirements-eval.txt   # PyYAML；codespace 已預先安裝
+```
+
+```bash
+python3 scripts/evaluate.py --label codespace-3b-k4
+```
+
+```bash
+python3 scripts/evaluate.py --label codespace-3b-k8 --top-k 8
+```
+
+填好人工欄位後，把分數寫回 JSON，再比較兩次結果：
+
+```bash
+python3 scripts/evaluate.py --apply-manual docs/evaluation/results/2026-11-03-codespace-3b-k4.md
+```
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4.json docs/evaluation/results/2026-11-03-codespace-3b-k8.json
+```
+
+其他參數：`--base-url`（預設 `http://localhost:8080/api`，也可直接連後端 `http://localhost:8000`）、`--only 1,9`（只跑指定題號）、`--lang en`、`--no-warmup`、`--out-dir`。完整說明見 [docs/evaluation/README.md](docs/evaluation/README.md)。只有範例專案的結果可以提交到 repo；評估其他專案時，請用 `--out-dir` 寫到 repo 以外的地方。
 
 ### 不用 Docker 開發
 
@@ -580,7 +614,9 @@ cd frontend && npm install && npm run dev
 │   ├── setup.sh                # 檢查 Ollama、拉模型、啟動 compose
 │   ├── index.sh                # 在容器內執行索引器
 │   ├── doctor.sh               # 依序診斷 Ollama、Docker、各服務與索引，列出修正指令
-│   └── smoke-test.sh           # 端到端冒煙測試：健康檢查 → 索引 → 查詢 → 串流查詢 → 檢查引用
+│   ├── smoke-test.sh           # 端到端冒煙測試：健康檢查 → 索引 → 查詢 → 串流查詢 → 檢查引用
+│   ├── evaluate.py             # 自動化評估：10 題的延遲、引用命中、關鍵字、簡體字 → JSON + Markdown 報告
+│   └── compare.py              # 比較兩份評估結果（不同模型或 TOP_K）
 ├── backend/                    # FastAPI + LlamaIndex
 │   ├── Dockerfile
 │   ├── app/
@@ -627,9 +663,11 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0009](docs/decisions/0009-timeout-settings.md) | 逾時設定的取捨 / Timeout settings for slow inference |
 | [0010](docs/decisions/0010-streaming-responses.md) | 以 SSE 串流回答 / Streaming answers with Server-Sent Events |
 | [0011](docs/decisions/0011-devcontainer-for-codespaces.md) | Codespaces 的 dev container / Dev container for Codespaces |
+| [0012](docs/decisions/0012-automated-evaluation-metrics.md) | 自動化評估的指標與限制 / Automated evaluation: metrics and their limits |
 | **學習與評估 / Learning & evaluation** | |
 | [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 16 個主題的解釋、程式碼位置、面試題、自我檢核 / 16 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |
+| [docs/evaluation/README.md](docs/evaluation/README.md) | 自動化評估的使用方式（`questions.yaml`、`evaluate.py`、`compare.py`）/ How to run the automated evaluation |
 | [docs/metrics.md](docs/metrics.md) | 成本、索引、查詢時間、評估結果、模型比較 / Cost, indexing, latency, evaluation results, model comparison |
 | **作品集 / Portfolio** | |
 | [docs/portfolio/article-series.md](docs/portfolio/article-series.md) | 5 篇技術文章大綱 / Outlines for 5 technical articles |
