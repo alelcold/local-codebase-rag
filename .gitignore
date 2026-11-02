@@ -1,4 +1,6 @@
 .env
+# Local compose overrides (machine-specific; the CI override is docker-compose.ci.yml)
+docker-compose.override.yml
 .DS_Store
 
 # Python

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import httpx
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.llms import LLM
 
@@ -19,6 +20,32 @@ Answer ONLY from the code excerpts provided. Rules:
 
 NO_INDEX_ANSWER = "目前還沒有任何索引資料。請先執行索引（介面上的「更新索引」按鈕，或 scripts/index.sh）。"
 NO_MATCH_ANSWER = "在目前的索引中找不到與這個問題相關的程式碼。"
+
+
+class OllamaTimeoutError(Exception):
+    """Ollama did not answer within the configured timeout.
+
+    ``stage`` is ``"embedding"`` or ``"llm"`` so the API can tell the user which
+    setting to raise (EMBED_REQUEST_TIMEOUT or LLM_REQUEST_TIMEOUT).
+    """
+
+    def __init__(self, stage: str, timeout: float, setting: str):
+        self.stage = stage
+        self.timeout = timeout
+        self.setting = setting
+        super().__init__(f"Ollama {stage} request timed out after {timeout:g}s ({setting})")
+
+
+def is_timeout(exc: BaseException) -> bool:
+    """True if ``exc`` or anything it was raised from is an HTTP timeout."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, (httpx.TimeoutException, TimeoutError)):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 @dataclass
@@ -68,7 +95,13 @@ class RagService:
 
     def retrieve(self, question: str, top_k: int | None = None) -> list[Source]:
         k = top_k or self.settings.top_k
-        embedding = self.embed_model.get_query_embedding(f"{self.settings.query_prefix}{question}")
+        try:
+            embedding = self.embed_model.get_query_embedding(f"{self.settings.query_prefix}{question}")
+        except Exception as exc:
+            if is_timeout(exc):
+                s = self.settings
+                raise OllamaTimeoutError("embedding", s.embed_request_timeout, "EMBED_REQUEST_TIMEOUT") from exc
+            raise
         results = self.store.query(embedding, k)
         sources = []
         for ref, hit in enumerate(results, start=1):
@@ -94,5 +127,11 @@ class RagService:
         sources = self.retrieve(question, top_k)
         if not sources:
             return QueryResult(answer=NO_MATCH_ANSWER, sources=[])
-        response = self.llm.complete(build_prompt(question, sources))
+        try:
+            response = self.llm.complete(build_prompt(question, sources))
+        except Exception as exc:
+            if is_timeout(exc):
+                s = self.settings
+                raise OllamaTimeoutError("llm", s.llm_request_timeout, "LLM_REQUEST_TIMEOUT") from exc
+            raise
         return QueryResult(answer=response.text.strip(), sources=sources)

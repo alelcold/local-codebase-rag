@@ -1,5 +1,7 @@
 # local-codebase-rag
 
+[![CI](https://github.com/alelcold/local-codebase-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/alelcold/local-codebase-rag/actions/workflows/ci.yml)
+
 地端版的 Codebase RAG 系統：讓團隊用自然語言查詢遊戲前端專案的程式碼（適合約 50–300 個檔案的專案）。
 所有資料與模型都在本機執行，程式碼不會離開你的電腦。
 
@@ -32,6 +34,7 @@ flowchart LR
 - [如何查詢](#如何查詢)
 - [設定](#設定)
 - [常見問題](#常見問題)
+- [在 GitHub Codespaces 測試](#在-github-codespaces-測試)
 - [開發與測試](#開發與測試)
 - [專案結構](#專案結構)
 - [文件導覽](#文件導覽)
@@ -245,6 +248,9 @@ curl -s localhost:8000/query -H 'Content-Type: application/json' \
 | `EMBED_MODEL` | `nomic-embed-text` | 向量化模型 |
 | `LLM_NUM_CTX` | `16384` | LLM 上下文長度；太小會截斷引用的程式碼 |
 | `TOP_K` | `8` | 預設取回的片段數 |
+| `LLM_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 生成回答的秒數 |
+| `EMBED_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 產生向量（embedding）的秒數 |
+| `PROXY_READ_TIMEOUT` / `PROXY_SEND_TIMEOUT` | `300` / `300` | 前端 nginx 代理 `/api` 時等待後端的秒數；改了只要 `docker compose up -d`，不用重新 build |
 | `FRONTEND_PORT` / `FRONTEND_BIND` | `8080` / `127.0.0.1` | 前端連接埠；改成 `0.0.0.0` 開放區網存取 |
 
 修改 `.env` 後執行 `docker compose up -d` 讓設定生效（會重新建立有變更的容器）。改了模型名稱記得先 `ollama pull`，或重新執行 `./scripts/setup.sh`。
@@ -277,11 +283,25 @@ curl -s localhost:8000/query -H 'Content-Type: application/json' \
 
 `.env` 中的模型還沒下載。執行 `ollama pull <模型名稱>`，或重新執行 `./scripts/setup.sh`。可用 `ollama list` 查看已下載的模型。
 
-### 第一次查詢很慢，或查詢逾時
+### 第一次查詢很慢，或查詢逾時（504）
 
 第一次查詢要把約 9GB 的模型載入記憶體，屬正常現象。之後模型會常駐 `OLLAMA_KEEP_ALIVE` 設定的時間。
-如果經常逾時：改用 `qwen2.5-coder:7b`、降低 `LLM_NUM_CTX`、或降低參考片段數；也可以把 `LLM_REQUEST_TIMEOUT` 調高。
-可在另一個終端機執行 `ollama ps` 確認模型是否已載入，以及是否 100% 在 GPU 上執行。
+等待時，介面會顯示「生成中」與已等待秒數；逾時時會說明是哪一段先放棄，並列出可能原因。
+
+一次查詢會經過好幾段連線，每一段都有自己的逾時：
+
+```text
+瀏覽器 →（Codespaces 等連接埠轉發）→ nginx → 後端 → Ollama
+                                   PROXY_READ_TIMEOUT   LLM_REQUEST_TIMEOUT / EMBED_REQUEST_TIMEOUT
+```
+
+- **錯誤訊息寫著「Ollama 生成回答逾時…（LLM_REQUEST_TIMEOUT）」**：後端等不到模型。調高 `.env` 的 `LLM_REQUEST_TIMEOUT`（embedding 階段則是 `EMBED_REQUEST_TIMEOUT`）。
+- **只顯示 `504 Gateway Timeout`**：是 nginx 或更前面的代理先放棄。調高 `PROXY_READ_TIMEOUT`，並讓它比 `LLM_REQUEST_TIMEOUT` 稍大（例如 330 / 300），後端才會先逾時並回傳具體原因。
+- 調整後執行 `docker compose up -d` 即可生效。
+- 根本的解法是讓查詢變快：改用 `qwen2.5-coder:7b`（或只有 CPU 時改用 `3b`）、降低 `LLM_NUM_CTX`、或降低參考片段數。
+- 可在另一個終端機執行 `ollama ps`，確認模型是否已載入，以及是否 100% 在 GPU 上執行。
+
+設計考量見 [ADR 0009](docs/decisions/0009-timeout-settings.md)。
 
 ### Mac 變得很卡、記憶體壓力很高
 
@@ -306,7 +326,7 @@ curl -s localhost:8000/query -H 'Content-Type: application/json' \
 也可以排程自動執行，例如在 crontab 每小時觸發一次：
 
 ```bash
-curl -s -X POST localhost:8000/index > /dev/null
+curl -sS -X POST localhost:8000/index > /dev/null
 ```
 
 ### 掛載的專案路徑在容器裡是空的
@@ -342,6 +362,55 @@ docker compose down
 git pull && docker compose up -d --build
 ```
 
+## 在 GitHub Codespaces 測試
+
+部署到 Mac 之前，可以先在 GitHub Codespaces（Linux、沒有 GPU）跑一次完整流程，確認索引、檢索、引用與介面都正常。只有 CPU，所以這裡的速度與回答品質**不代表**正式環境（見 [ADR 0007](docs/decisions/0007-multi-environment-testing-strategy.md)）。完整紀錄見 [devlog 2026-11-01](docs/devlog/2026-11-01.md) 與 [Codespaces 環境建置](docs/devlog/2026-11-01-codespace-setup.md)。
+
+### 步驟
+
+1. 安裝 Ollama 並在背景啟動，**監聽 `0.0.0.0`**（Linux 上容器是從 Docker bridge 連過來的，連不到 `127.0.0.1`）：
+
+   ```bash
+   curl -fsSL https://ollama.com/install.sh | sh
+   ```
+
+   ```bash
+   OLLAMA_HOST=0.0.0.0 nohup ollama serve >> ollama.log 2>&1 &
+   ```
+
+2. 在 `.env` 改用小模型，並視需要調高逾時：
+
+   ```dotenv
+   LLM_MODEL=qwen2.5-coder:3b
+   LLM_REQUEST_TIMEOUT=300
+   PROXY_READ_TIMEOUT=330
+   ```
+
+3. 拉模型、啟動並建立索引：
+
+   ```bash
+   ./scripts/setup.sh --index
+   ```
+
+4. 從 Ports 面板開啟 8080。**11434 埠請維持 private**，不要設為 public（Ollama 沒有驗證機制）。
+
+### 常見的坑
+
+| 症狀 | 原因 | 解法 |
+| --- | --- | --- |
+| `/health` 顯示 Ollama 無法連線，但在終端機 `curl localhost:11434` 是通的 | Ollama 只監聽 `127.0.0.1`；容器的連線來自 bridge gateway | 用 `OLLAMA_HOST=0.0.0.0` 啟動 Ollama。compose 已經有 `extra_hosts: host.docker.internal:host-gateway` |
+| 啟動 `ollama serve` 後，終端機看起來卡住 | 常駐程式在前景執行，會一直佔住終端機 | 指令結尾加 `&` 放到背景，輸出導到 log |
+| 重新啟動後，log 裡找不到 `Listening` | `>` 會清空檔案，第二次啟動把第一次的紀錄蓋掉了 | 改用 `>>`；重新啟動前先用 `ss -ltnp \| grep 11434` 確認是否已經在跑 |
+| `curl -s` 什麼都沒印，看不出哪裡出錯 | `-s` 會連錯誤訊息一起隱藏 | 改用 `curl -sS`，需要時加上 `-w '%{http_code}\n'` |
+| 不確定容器到底連不連得到 Ollama | 主機上測試成功，不代表容器也連得到 | 從容器裡測試（見下方指令） |
+| 查詢回傳 504，或等很久之後失敗 | 只有 CPU 時，3B 一次查詢約 1.5～2 分鐘；中間的代理可能先放棄 | 見[第一次查詢很慢，或查詢逾時（504）](#第一次查詢很慢或查詢逾時504)。如果直接 `curl -sS localhost:8000/query` 會成功、透過轉發的網址卻失敗，就是 Codespaces 轉發的限制 |
+
+從容器的角度驗證網路，這是最直接的方法：
+
+```bash
+docker run --rm --add-host=host.docker.internal:host-gateway curlimages/curl -sS http://host.docker.internal:11434/api/version
+```
+
 ## 開發與測試
 
 ### 後端單元測試
@@ -364,7 +433,26 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-涵蓋範圍：切塊（TS/TSX/JS/Markdown、行號正確性、大型 class 依 method 切分）、增量索引（新增/修改/刪除/未變更、設定變更、embedding 失敗時保留舊資料）、檢索與提示詞組成、API（`/health`、`/index`、`/index/status`、`/query` 的正常與錯誤情況）、設定。
+涵蓋範圍：切塊（TS/TSX/JS/Markdown、行號正確性、大型 class 依 method 切分）、增量索引（新增/修改/刪除/未變更、設定變更、embedding 失敗時保留舊資料）、檢索與提示詞組成、API（`/health`、`/index`、`/index/status`、`/query` 的正常與錯誤情況，包含 Ollama 逾時時回傳 504）、設定。
+
+### 持續整合（GitHub Actions）
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在每次 push 與 PR 時執行：
+
+| Job | 時機 | 內容 |
+| --- | --- | --- |
+| Backend unit tests | 每次 push／PR | `pytest`（Ollama、Qdrant 皆以假物件取代） |
+| Compose config | 每次 push／PR | `docker compose config -q`：主檔，以及主檔搭配每個 `docker-compose.*.yml` override |
+| Build image | 每次 push／PR | build `backend`、`frontend` 映像檔 |
+| End-to-end smoke test | 對 `main` 的 PR | 在 runner 上安裝 Ollama（`OLLAMA_HOST=0.0.0.0`），使用 `qwen2.5-coder:0.5b` + `nomic-embed-text`（有快取），搭配 [`docker-compose.ci.yml`](docker-compose.ci.yml) 啟動服務，索引範例專案、送出查詢，確認回應附有檔案引用；失敗時輸出各服務的 `docker compose logs` |
+
+冒煙測試只證明「流程能跑通」，不評估回答品質；為什麼用最小模型、為什麼拆成多個 job，見 [ADR 0008](docs/decisions/0008-ci-design.md)。
+
+同一支冒煙測試腳本也可以對本機已啟動的服務執行：
+
+```bash
+./scripts/smoke-test.sh
+```
 
 ### 不用 Docker 開發
 
@@ -386,11 +474,14 @@ cd frontend && npm install && npm run dev
 
 ```text
 .
+├── .github/workflows/ci.yml    # CI：單元測試、compose 檢查、映像檔 build、端到端冒煙測試
 ├── docker-compose.yml          # qdrant / backend / frontend（Ollama 在主機上）
+├── docker-compose.ci.yml       # CI 冒煙測試專用的 override
 ├── .env.example                # 所有可設定項目與說明
 ├── scripts/
 │   ├── setup.sh                # 檢查 Ollama、拉模型、啟動 compose
-│   └── index.sh                # 在容器內執行索引器
+│   ├── index.sh                # 在容器內執行索引器
+│   └── smoke-test.sh           # 端到端冒煙測試：健康檢查 → 索引 → 查詢 → 檢查引用
 ├── backend/                    # FastAPI + LlamaIndex
 │   ├── Dockerfile
 │   ├── app/
@@ -404,7 +495,7 @@ cd frontend && npm install && npm run dev
 │   └── tests/
 ├── frontend/                   # React + Vite，build 後由 nginx 提供並代理 /api
 │   ├── Dockerfile
-│   ├── nginx.conf
+│   ├── nginx.conf.template     # nginx 設定（逾時由環境變數帶入）
 │   └── src/
 └── examples/
     └── sample-game-frontend/   # 測試用的範例專案
@@ -422,6 +513,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [docs/devlog/TEMPLATE.md](docs/devlog/TEMPLATE.md) | 每日開發日誌範本 / Daily devlog template |
 | [docs/devlog/2026-10-30.md](docs/devlog/2026-10-30.md) | 架構設計與雲端建置 / Architecture design and cloud build |
 | [docs/devlog/2026-11-01.md](docs/devlog/2026-11-01.md) | Codespaces 流程驗證 / Validating the flow on Codespaces |
+| [docs/devlog/2026-11-01-codespace-setup.md](docs/devlog/2026-11-01-codespace-setup.md) | Codespaces 環境建置：踩坑與逾時 / Codespaces setup: pitfalls and timeouts |
 | **架構決策紀錄 / ADRs** | |
 | [docs/decisions/TEMPLATE.md](docs/decisions/TEMPLATE.md) | ADR 範本 / ADR template |
 | [0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md) | 採用地端 RAG 而非雲端 API / On-prem RAG instead of a cloud API |
@@ -430,8 +522,11 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0004](docs/decisions/0004-chunking-by-file-type.md) | 依檔案類型切塊 / Chunking by file type |
 | [0005](docs/decisions/0005-model-selection-and-hardware.md) | 模型選擇與硬體對應 / Model selection and hardware |
 | [0006](docs/decisions/0006-multi-environment-deployment.md) | 多環境部署差異 / Multi-environment deployment |
+| [0007](docs/decisions/0007-multi-environment-testing-strategy.md) | 多環境測試策略 / Multi-environment testing strategy |
+| [0008](docs/decisions/0008-ci-design.md) | CI 設計：拆分 job、冒煙測試用最小模型 / CI design: split jobs, smallest model for the smoke test |
+| [0009](docs/decisions/0009-timeout-settings.md) | 逾時設定的取捨 / Timeout settings for slow inference |
 | **學習與評估 / Learning & evaluation** | |
-| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 10 個主題的解釋、程式碼位置、面試題、自我檢核 / 10 topics: explanation, code pointers, interview questions, self-check |
+| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 13 個主題的解釋、程式碼位置、面試題、自我檢核 / 13 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |
 | [docs/metrics.md](docs/metrics.md) | 成本、索引、查詢時間、評估結果、模型比較 / Cost, indexing, latency, evaluation results, model comparison |
 | **作品集 / Portfolio** | |

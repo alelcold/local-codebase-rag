@@ -314,3 +314,57 @@ pre.numbered {
 .chevron {
   color: var(--muted);
 }
+
+/* Query in progress: spinner + elapsed seconds. */
+.generating-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.generating p {
+  margin: 0.5rem 0 0;
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* Timeout explanation. */
+.timeout p {
+  margin: 0.5rem 0 0;
+}
+
+.timeout ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.timeout li {
+  margin: 0.25rem 0;
+  color: var(--text);
+}
+
+.timeout code {
+  background: var(--code-bg);
+  padding: 0 0.25rem;
+  border-radius: 4px;
+}

@@ -45,20 +45,56 @@ export interface IndexStatus {
 
 const BASE = "/api";
 
+/**
+ * Where a failed request broke:
+ * - "backend-timeout": the backend gave up waiting for Ollama (504 with a JSON detail)
+ * - "gateway-timeout": a proxy in front of the backend gave up (nginx, or a port
+ *   forwarder such as Codespaces): 504 without the backend's JSON body
+ * - "network": the connection was dropped before any HTTP response arrived
+ * - "http": any other error status
+ */
+export type ApiErrorKind = "backend-timeout" | "gateway-timeout" | "network" | "http";
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly kind: ApiErrorKind,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+
+  get isTimeout(): boolean {
+    return this.kind !== "http";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+  } catch (e) {
+    throw new ApiError((e as Error).message || "連線中斷", "network");
+  }
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
+    let fromBackend = false;
     try {
       const body = await res.json();
-      if (body?.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      if (body?.detail) {
+        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+        fromBackend = true;
+      }
     } catch {
-      /* not JSON */
+      /* not JSON: an error page from nginx or another proxy */
     }
-    throw new Error(detail);
+    const kind: ApiErrorKind =
+      res.status === 504 ? (fromBackend ? "backend-timeout" : "gateway-timeout") : "http";
+    throw new ApiError(detail, kind, res.status);
   }
   return res.json() as Promise<T>;
 }

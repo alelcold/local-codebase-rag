@@ -26,6 +26,7 @@ docker compose config -q             # validate compose
 ./scripts/setup.sh --index           # check Ollama, pull models, start stack, index
 ./scripts/index.sh [--full]          # (re)index the mounted project
 cd frontend && npm run build         # type-check + build the UI
+./scripts/smoke-test.sh              # end-to-end check against a running stack (also run in CI)
 ```
 
 ## Rules
@@ -83,6 +84,7 @@ docker compose config -q             # 驗證 compose 設定
 ./scripts/setup.sh --index           # 檢查 Ollama、拉模型、啟動服務、建立索引
 ./scripts/index.sh [--full]          # 重新索引掛載的專案
 cd frontend && npm run build         # 型別檢查並 build 前端
+./scripts/smoke-test.sh              # 對已啟動的服務做端到端檢查（CI 也會執行）
 ```
 
 ## 規則

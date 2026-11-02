@@ -31,10 +31,11 @@ services:
       LLM_MODEL: ${LLM_MODEL:-qwen2.5-coder:14b}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
       LLM_NUM_CTX: ${LLM_NUM_CTX:-16384}
-      LLM_REQUEST_TIMEOUT: ${LLM_REQUEST_TIMEOUT:-600}
+      LLM_REQUEST_TIMEOUT: ${LLM_REQUEST_TIMEOUT:-300}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
       EMBED_MODEL: ${EMBED_MODEL:-nomic-embed-text}
       EMBED_BATCH_SIZE: ${EMBED_BATCH_SIZE:-16}
+      EMBED_REQUEST_TIMEOUT: ${EMBED_REQUEST_TIMEOUT:-300}
       # Only passed through when set; otherwise the backend picks defaults per model.
       EMBED_QUERY_PREFIX: ${EMBED_QUERY_PREFIX-}
       EMBED_DOC_PREFIX: ${EMBED_DOC_PREFIX-}
@@ -62,6 +63,10 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      # nginx /api proxy timeouts in seconds (see ADR 0009).
+      PROXY_READ_TIMEOUT: ${PROXY_READ_TIMEOUT:-300}
+      PROXY_SEND_TIMEOUT: ${PROXY_SEND_TIMEOUT:-300}
     ports:
       - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
 

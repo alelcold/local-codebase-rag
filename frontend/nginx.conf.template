@@ -1,3 +1,8 @@
+# nginx config template. At container start the official nginx image runs
+# envsubst on /etc/nginx/templates/*.template and writes the result to
+# /etc/nginx/conf.d/. Only variables matching NGINX_ENVSUBST_FILTER (^PROXY_)
+# are substituted, so nginx's own $host etc. are left alone.
+
 server {
     listen 80;
     server_name _;
@@ -6,15 +11,17 @@ server {
     index index.html;
 
     # /api/* -> FastAPI backend (prefix stripped). Local LLM answers can take
-    # minutes on the first call while Ollama loads the model, hence long timeouts.
+    # minutes (first call loads the model; CPU-only machines are slow), hence
+    # long timeouts. Set PROXY_READ_TIMEOUT / PROXY_SEND_TIMEOUT (seconds) in
+    # .env; defaults live in the Dockerfile. See ADR 0009.
     location /api/ {
         proxy_pass http://backend:8000/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_connect_timeout 10s;
-        proxy_send_timeout 900s;
-        proxy_read_timeout 900s;
+        proxy_send_timeout ${PROXY_SEND_TIMEOUT}s;
+        proxy_read_timeout ${PROXY_READ_TIMEOUT}s;
         client_max_body_size 1m;
     }
 

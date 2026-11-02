@@ -10,6 +10,8 @@
 | Claude Code cloud session (initial build: design → code → tests → PR #1) | **≈ USD 7** | 2026-10-30 | One session |
 | Claude Code (docs / learning structure) | {待填} | 2026-10-31 | |
 | GitHub Codespaces usage | {待填} | 2026-11-01 | Core-hours |
+| Claude Code (timeouts, CI, docs PR) | {待填} | 2026-11-02 | |
+| GitHub Actions minutes | {待填} | | Public repo on GitHub-hosted runners: check the billing page |
 | GPU instance for 32B benchmark | {待填} | | Instance type, USD/h × hours |
 | **Total** | {待填} | | |
 
@@ -19,6 +21,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-30 | Cloud sandbox, **fake embeddings** | Sample | 20 | 67 | 0.39* | 0.01* | (fake) |
 | 2026-11-01 | Codespaces (CPU) | Sample | 20 | 67 | {待填} | {待填} | nomic-embed-text |
+| {待填} | GitHub Actions runner (CPU, CI smoke test) | Sample | 20 | 67 | {待填} | — | nomic-embed-text |
 | {待填} | Mac M2 32 GB | Sample | 20 | 67 | {待填} | {待填} | nomic-embed-text |
 | {待填} | Mac M2 32 GB | Real project (count only, no names) | {待填} | {待填} | {待填} | {待填} | nomic-embed-text |
 
@@ -30,7 +33,8 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 
 | Date | Environment | Model | top_k | First query (s) | Avg of 10 queries (s) | p90 (s) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-01 | Codespaces (CPU) | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | |
+| 2026-11-01 | Codespaces (CPU) | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | **Estimated ≈ 1.5–2 min per query** (not measured over 10 queries). The UI returned 504 before the timeout fix; see ADR 0009 |
+| {待填} | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | {待填} | — | — | CI smoke test, `LLM_NUM_CTX=4096`; printed as "Query took Ns" in the job log |
 | {待填} | Mac M2 32 GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | |
 
 ## 4. Evaluation results
@@ -59,6 +63,9 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 | --- | --- | --- |
 | 2026-10-30 | Backend unit tests | 50 passed (< 1 s, no network) |
 | 2026-10-30 | Bugs found by end-to-end run that unit tests missed | 1 (`text-dense` vector name; see devlog) |
+| 2026-11-02 | Backend unit tests | 56 passed (≈ 1.4 s, no network), including 504 timeout handling |
+| 2026-11-01 | Problems found on Codespaces that unit tests missed | {待填} (see [devlog](devlog/2026-11-01-codespace-setup.md)) |
+| {待填} | CI duration: unit tests / compose config / image builds / smoke test | {待填} / {待填} / {待填} / {待填} |
 
 ## How to measure
 
@@ -69,7 +76,7 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 
 ```bash
 # Query latency
-time curl -s localhost:8000/query -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' > /dev/null
+time curl -sS localhost:8000/query -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' > /dev/null
 ```
 
 ```bash
@@ -95,6 +102,8 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | Claude Code 雲端工作階段（初版建置：設計 → 程式 → 測試 → PR #1） | **約 7 美元** | 2026-10-30 | 單一工作階段 |
 | Claude Code（文件與學習紀錄結構） | {待填} | 2026-10-31 | |
 | GitHub Codespaces 用量 | {待填} | 2026-11-01 | 核心小時數 |
+| Claude Code（逾時、CI、文件 PR） | {待填} | 2026-11-02 | |
+| GitHub Actions 分鐘數 | {待填} | | 公開 repo 使用 GitHub 提供的 runner：請查看帳單頁面 |
 | 32B 測試用的 GPU 機器 | {待填} | | 機型、每小時美元 × 時數 |
 | **總計** | {待填} | | |
 
@@ -104,6 +113,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-30 | 雲端 sandbox，**假 embedding** | 範例專案 | 20 | 67 | 0.39* | 0.01* | （假） |
 | 2026-11-01 | Codespaces（CPU） | 範例專案 | 20 | 67 | {待填} | {待填} | nomic-embed-text |
+| {待填} | GitHub Actions runner（CPU，CI 冒煙測試） | 範例專案 | 20 | 67 | {待填} | — | nomic-embed-text |
 | {待填} | Mac M2 32GB | 範例專案 | 20 | 67 | {待填} | {待填} | nomic-embed-text |
 | {待填} | Mac M2 32GB | 實際專案（只記數量，不記名稱） | {待填} | {待填} | {待填} | {待填} | nomic-embed-text |
 
@@ -115,7 +125,8 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 | 日期 | 環境 | 模型 | top_k | 第一次查詢（秒） | 10 次平均（秒） | p90（秒） | 備註 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-01 | Codespaces（CPU） | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | |
+| 2026-11-01 | Codespaces（CPU） | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | **推算每次約 1.5～2 分鐘**（不是 10 次查詢的實測平均）。修正逾時前介面回傳 504，見 ADR 0009 |
+| {待填} | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | {待填} | — | — | CI 冒煙測試，`LLM_NUM_CTX=4096`；job log 中的「Query took Ns」 |
 | {待填} | Mac M2 32GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | |
 
 ## 4. 評估結果
@@ -144,6 +155,9 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | --- | --- | --- |
 | 2026-10-30 | 後端單元測試 | 50 個通過（< 1 秒，不需網路） |
 | 2026-10-30 | 端到端測試抓到、單元測試沒抓到的問題 | 1 個（`text-dense` 向量名稱，見 devlog） |
+| 2026-11-02 | 後端單元測試 | 56 個通過（約 1.4 秒，不需網路），包含 504 逾時處理 |
+| 2026-11-01 | Codespaces 上發現、單元測試沒抓到的問題 | {待填}（見 [devlog](devlog/2026-11-01-codespace-setup.md)） |
+| {待填} | CI 耗時：單元測試／compose 檢查／映像檔 build／冒煙測試 | {待填}／{待填}／{待填}／{待填} |
 
 ## 量測方式
 
@@ -154,7 +168,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 ```bash
 # 查詢時間
-time curl -s localhost:8000/query -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' > /dev/null
+time curl -sS localhost:8000/query -H 'Content-Type: application/json' -d '{"question":"玩家受傷後的無敵時間在哪裡設定？"}' > /dev/null
 ```
 
 ```bash

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type Health, type IndexStatus, type QueryResponse, type Source } from "./api";
+import { api, ApiError, type Health, type IndexStatus, type QueryResponse, type Source } from "./api";
 
 const EXAMPLES = [
   "玩家受傷後的無敵時間在哪裡設定？",
@@ -14,7 +14,8 @@ export default function App() {
   const [question, setQuestion] = useState("");
   const [topK, setTopK] = useState(8);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<QueryError | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [asked, setAsked] = useState("");
   const [openRefs, setOpenRefs] = useState<Set<number>>(new Set());
@@ -32,6 +33,15 @@ export default function App() {
     refreshHealth();
     api.indexStatus().then(setIndexStatus).catch(() => undefined);
   }, [refreshHealth]);
+
+  // Count seconds while a query is in flight, so slow CPU-only answers do not look frozen.
+  useEffect(() => {
+    if (!loading) return;
+    const started = Date.now();
+    setElapsed(0);
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   // Poll while an indexing job runs.
   useEffect(() => {
@@ -65,10 +75,11 @@ export default function App() {
     setResult(null);
     setAsked(text);
     setOpenRefs(new Set());
+    const started = Date.now();
     try {
       setResult(await api.query(text, topK));
     } catch (e) {
-      setError((e as Error).message);
+      setError({ error: e as Error, seconds: Math.round((Date.now() - started) / 1000) });
     } finally {
       setLoading(false);
     }
@@ -165,15 +176,13 @@ export default function App() {
             </select>
           </label>
           <button type="submit" disabled={loading || !question.trim()}>
-            {loading ? "思考中…" : "送出"}
+            {loading ? `生成中… ${elapsed}s` : "送出"}
           </button>
         </div>
       </form>
 
-      {loading && (
-        <div className="card muted">本機模型正在閱讀相關程式碼並產生回答，第一次查詢需要載入模型，可能要 30 秒以上…</div>
-      )}
-      {error && <div className="card error">查詢失敗：{error}</div>}
+      {loading && <Generating seconds={elapsed} />}
+      {error && <QueryErrorCard error={error} />}
 
       {result && (
         <>
@@ -192,6 +201,75 @@ export default function App() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+interface QueryError {
+  error: Error;
+  /** How long the request ran before it failed. */
+  seconds: number;
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds} 秒`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s ? `${m} 分 ${s} 秒` : `${m} 分`;
+}
+
+function Generating({ seconds }: { seconds: number }) {
+  return (
+    <div className="card generating" role="status" aria-live="polite">
+      <div className="generating-head">
+        <span className="spinner" aria-hidden="true" />
+        <strong>生成中</strong>
+        <span className="muted">已等待 {formatDuration(seconds)}</span>
+      </div>
+      <p className="muted small">
+        本機模型正在閱讀相關程式碼並產生回答。第一次查詢需要載入模型；只有 CPU 的環境（例如 Codespaces）一次查詢可能要
+        1～2 分鐘，請耐心等候。
+      </p>
+    </div>
+  );
+}
+
+function QueryErrorCard({ error: { error, seconds } }: { error: QueryError }) {
+  if (!(error instanceof ApiError) || !error.isTimeout) {
+    return <div className="card error">查詢失敗：{error.message}</div>;
+  }
+  const title =
+    error.kind === "backend-timeout"
+      ? "查詢逾時：後端等不到模型回應"
+      : error.kind === "gateway-timeout"
+        ? "查詢逾時：前端代理先中斷了連線"
+        : "查詢中斷：連線在收到回應前被關閉";
+  return (
+    <div className="card error timeout">
+      <strong>{title}</strong>
+      <p className="small">
+        等待 {formatDuration(seconds)} 後失敗。{error.kind === "backend-timeout" ? error.message : `（${error.message}）`}
+      </p>
+      <p className="small">可能原因與處理方式：</p>
+      <ul className="small">
+        <li>
+          <strong>沒有 GPU，模型推論很慢</strong>（例如 Codespaces）：改用較小的模型（如 <code>qwen2.5-coder:3b</code>
+          ），或把「參考片段」調少。
+        </li>
+        <li>
+          <strong>第一次查詢正在載入模型</strong>：稍候再問一次，模型載入後會快很多（可用 <code>ollama ps</code> 確認）。
+        </li>
+        <li>
+          <strong>逾時設定太短</strong>：在 <code>.env</code> 調高 <code>LLM_REQUEST_TIMEOUT</code>（後端等 Ollama）與{" "}
+          <code>PROXY_READ_TIMEOUT</code>（nginx 等後端），兩者都預設 300 秒，再執行 <code>docker compose up -d</code>。
+        </li>
+        {error.kind !== "backend-timeout" && (
+          <li>
+            <strong>透過 Codespaces 或其他轉發／反向代理連線</strong>：中間的代理可能有自己的逾時上限，調高上面的設定也無效。可改用{" "}
+            <code>curl</code> 直接呼叫後端 <code>http://localhost:8000/query</code> 確認是否為代理造成。
+          </li>
+        )}
+      </ul>
     </div>
   );
 }
