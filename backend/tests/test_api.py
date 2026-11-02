@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+import httpx
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -133,8 +135,49 @@ def test_query_llm_failure_returns_502(settings):
     llm = FakeLLM(prompts=[])
     services = make_services(settings, llm=llm)
     services.indexer.run()
-    object.__setattr__(services.rag, "llm", MagicMock(complete=MagicMock(side_effect=TimeoutError("slow"))))
+    object.__setattr__(services.rag, "llm", MagicMock(complete=MagicMock(side_effect=RuntimeError("model crashed"))))
     with TestClient(create_app(services)) as c:
         resp = c.post("/query", json={"question": "jump"})
     assert resp.status_code == 502
-    assert "TimeoutError" in resp.json()["detail"]
+    assert "RuntimeError" in resp.json()["detail"]
+
+
+def _wrapped_read_timeout() -> Exception:
+    # The ollama client lets httpx.ReadTimeout escape; LlamaIndex may wrap it.
+    try:
+        try:
+            raise httpx.ReadTimeout("timed out")
+        except httpx.ReadTimeout as inner:
+            raise RuntimeError("completion failed") from inner
+    except RuntimeError as outer:
+        return outer
+
+
+@pytest.mark.parametrize("error", [httpx.ReadTimeout("timed out"), TimeoutError("slow"), _wrapped_read_timeout()])
+def test_query_llm_timeout_returns_504_with_setting_name(settings, error):
+    settings = settings.model_copy(update={"llm_request_timeout": 300.0})
+    services = make_services(settings)
+    services.indexer.run()
+    object.__setattr__(services.rag, "llm", MagicMock(complete=MagicMock(side_effect=error)))
+    with TestClient(create_app(services)) as c:
+        resp = c.post("/query", json={"question": "jump"})
+    assert resp.status_code == 504
+    detail = resp.json()["detail"]
+    assert "生成回答逾時" in detail
+    assert "300 秒" in detail
+    assert "LLM_REQUEST_TIMEOUT" in detail
+
+
+def test_query_embedding_timeout_returns_504(settings):
+    settings = settings.model_copy(update={"embed_request_timeout": 45.0})
+    services = make_services(settings)
+    services.indexer.run()
+    slow = MagicMock(get_query_embedding=MagicMock(side_effect=httpx.ReadTimeout("timed out")))
+    object.__setattr__(services.rag, "embed_model", slow)
+    with TestClient(create_app(services)) as c:
+        resp = c.post("/query", json={"question": "jump"})
+    assert resp.status_code == 504
+    detail = resp.json()["detail"]
+    assert "embedding" in detail
+    assert "45 秒" in detail
+    assert "EMBED_REQUEST_TIMEOUT" in detail

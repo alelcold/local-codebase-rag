@@ -1,0 +1,20 @@
+# CI-only override for the end-to-end smoke test on GitHub Actions (Linux).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
+#
+# Ollama runs natively on the runner (started with OLLAMA_HOST=0.0.0.0), the
+# same topology as Mac / Codespaces. See ADR 0007 and ADR 0008.
+services:
+  backend:
+    extra_hosts:
+      # Linux Docker Engine does not define host.docker.internal. The base file
+      # also has this line; repeating it here keeps CI working even if the base
+      # file changes, and documents that CI depends on it.
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Smallest models, picked by the workflow; fail loudly if unset.
+      LLM_MODEL: ${LLM_MODEL:?set LLM_MODEL for the CI smoke test}
+      EMBED_MODEL: ${EMBED_MODEL:?set EMBED_MODEL for the CI smoke test}
+      # A small context keeps CPU inference fast; 4 excerpts are enough to cite files.
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-4096}
+      TOP_K: ${TOP_K:-4}

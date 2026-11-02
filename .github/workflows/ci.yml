@@ -1,0 +1,159 @@
+# CI for local-codebase-rag. Design and trade-offs: docs/decisions/0008-ci-design.md
+#
+# Fast jobs (every push and PR):     backend-tests, compose-config, docker-build
+# Slow job (PRs into main only):      e2e-smoke — real Ollama on the runner, tiny models
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12" # same as backend/Dockerfile
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      # Ollama and Qdrant are faked (in-memory Qdrant, fake embeddings/LLM, mocked HTTP).
+      - run: pytest
+
+  compose-config:
+    name: Compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config -q
+      # Every docker-compose.<name>.yml (ci, and gpu once it exists) is checked
+      # merged with the base file, the way it is used.
+      - name: Validate every override on top of the base file
+        env:
+          # docker-compose.ci.yml requires these; only interpolation matters here.
+          LLM_MODEL: placeholder-llm
+          EMBED_MODEL: placeholder-embed
+        run: |
+          shopt -s nullglob
+          overrides=(docker-compose.*.yml)
+          echo "Overrides: ${overrides[*]:-none}"
+          for f in "${overrides[@]}"; do
+            echo "::group::docker-compose.yml + $f"
+            docker compose -f docker-compose.yml -f "$f" config -q
+            echo "ok"
+            echo "::endgroup::"
+          done
+
+  docker-build:
+    name: Build image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          push: false
+          tags: local-codebase-rag-${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  e2e-smoke:
+    name: End-to-end smoke test
+    # Slow (model download + CPU inference), so only for PRs into main.
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [backend-tests, compose-config]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # Smallest models that still exercise the whole pipeline (ADR 0008).
+      LLM_MODEL: qwen2.5-coder:0.5b
+      EMBED_MODEL: nomic-embed-text
+      OLLAMA_MODELS: /home/runner/.ollama/models
+      COMPOSE_FILES: -f docker-compose.yml -f docker-compose.ci.yml
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          # The installer starts a systemd service bound to 127.0.0.1 as the
+          # "ollama" user. Stop it and run our own server (next step).
+          sudo systemctl stop ollama || true
+          sudo systemctl disable ollama || true
+          ollama --version || true
+
+      - name: Restore model cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OLLAMA_MODELS }}
+          key: ollama-${{ runner.os }}-${{ env.LLM_MODEL }}-${{ env.EMBED_MODEL }}-v1
+
+      - name: Start Ollama on 0.0.0.0
+        run: |
+          mkdir -p "$OLLAMA_MODELS" "$RUNNER_TEMP/logs"
+          # 0.0.0.0, not the default 127.0.0.1: containers arrive via the Docker
+          # bridge gateway, not loopback (ADR 0006).
+          OLLAMA_HOST=0.0.0.0 nohup ollama serve > "$RUNNER_TEMP/logs/ollama.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sS http://127.0.0.1:11434/api/version && break
+            sleep 1
+          done
+          curl -sS --fail http://127.0.0.1:11434/api/version
+
+      - name: Pull models (cached)
+        run: |
+          ollama pull "$LLM_MODEL"
+          ollama pull "$EMBED_MODEL"
+          ollama list
+
+      - name: Start the stack
+        run: docker compose $COMPOSE_FILES up -d --build --wait --wait-timeout 300
+
+      - name: Check a container can reach Ollama on the host
+        run: |
+          docker compose $COMPOSE_FILES exec -T backend python -c \
+            "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:11434/api/version', timeout=10).read().decode())"
+
+      - name: Index the sample project and query it
+        run: ./scripts/smoke-test.sh
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          for svc in qdrant backend frontend; do
+            echo "::group::docker compose logs $svc"
+            docker compose $COMPOSE_FILES logs --no-color --timestamps "$svc" || true
+            echo "::endgroup::"
+          done
+          echo "::group::docker compose ps"
+          docker compose $COMPOSE_FILES ps -a || true
+          echo "::endgroup::"
+          echo "::group::ollama serve"
+          cat "$RUNNER_TEMP/logs/ollama.log" || true
+          echo "::endgroup::"
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose $COMPOSE_FILES down -v || true

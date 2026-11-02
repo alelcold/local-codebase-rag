@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .config import get_settings
+from .rag import OllamaTimeoutError
 from .services import Services, build_services, check_ollama, check_qdrant
 
 log = logging.getLogger(__name__)
@@ -133,6 +134,14 @@ def create_app(services: Services | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="question must not be blank")
         try:
             return svc().rag.answer(question, req.top_k).to_dict()
+        except OllamaTimeoutError as exc:
+            # 504 (not 502) so the UI can explain timeouts separately from crashes.
+            log.warning("Query timed out: %s", exc)
+            stage = "產生向量（embedding）" if exc.stage == "embedding" else "生成回答"
+            raise HTTPException(
+                status_code=504,
+                detail=f"Ollama {stage}逾時：超過 {exc.timeout:g} 秒仍未回應（{exc.setting}）",
+            ) from exc
         except Exception as exc:
             log.exception("Query failed")
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc

@@ -59,6 +59,8 @@ def build_services(settings: Settings | None = None) -> Services:
         base_url=settings.ollama_base_url,
         embed_batch_size=settings.embed_batch_size,
         keep_alive=settings.ollama_keep_alive,
+        # Without this the ollama client waits forever on a stuck embedding call.
+        client_kwargs={"timeout": settings.embed_request_timeout},
     )
     llm = Ollama(
         model=settings.llm_model,

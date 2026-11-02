@@ -124,7 +124,7 @@
 
 **In this repo**:
 - `docker-compose.yml`: `extra_hosts` on the backend; `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
-- `frontend/nginx.conf`: `proxy_pass http://backend:8000/` uses Compose service-name DNS.
+- `frontend/nginx.conf.template`: `proxy_pass http://backend:8000/` uses Compose service-name DNS.
 - [devlog 2026-11-01](../devlog/2026-11-01.md); ADR [0006](../decisions/0006-multi-environment-deployment.md).
 
 **Interview questions**:
@@ -190,6 +190,67 @@
 **Self-check**:
 - [ ] I ran the 10-question set on at least two models and recorded the results.
 - [ ] I can explain recall@k and faithfulness with an example from the sample project.
+
+## 11. Timeouts across a proxy chain
+
+**Plain explanation**: A request from the browser passes through several hops, and each hop gives up after its own timeout: browser → port forwarder (e.g. Codespaces) → nginx → backend → Ollama. The request can only wait as long as the **shortest** timeout in front of the slow part. A gateway that gives up returns **504 Gateway Timeout**. A good setup makes every timeout you own configurable, makes the innermost one fire first so its error message is specific, and shows progress in the UI.
+
+**In this repo**:
+- `frontend/nginx.conf.template`: `proxy_read_timeout ${PROXY_READ_TIMEOUT}s`, rendered by the nginx image's `envsubst` templates.
+- `backend/app/config.py`: `llm_request_timeout`, `embed_request_timeout`. `backend/app/rag.py`: `OllamaTimeoutError`. `backend/app/main.py`: maps it to 504.
+- `frontend/src/api.ts`: `ApiError` tells backend timeouts, proxy timeouts and dropped connections apart. `App.tsx`: "生成中" timer.
+- ADR [0009](../decisions/0009-timeout-settings.md); [devlog 2026-11-01 Codespaces setup](../devlog/2026-11-01-codespace-setup.md).
+
+**Interview questions**:
+- What is the difference between 502 and 504?
+- A query takes 2 minutes and nginx is set to 15 minutes, yet users get 504 after about 100 seconds. Where do you look?
+- Why should the innermost timeout be the shortest one?
+- How would you serve answers that take minutes through proxies you do not control? (Streaming, or an async job with polling.)
+
+**Self-check**:
+- [ ] I can draw the hops of a query in this repo and name the timeout setting of each.
+- [ ] I can explain why raising `PROXY_READ_TIMEOUT` does not help when the 504 comes from a port forwarder.
+
+## 12. Debugging long-running services from the shell
+
+**Plain explanation**: A server runs until it is stopped, so in the foreground it "hangs" the terminal; run it with `&` (and `nohup`) and send its output to a log. `>` truncates a file and `>>` appends, so restarting with `>` can erase the evidence of the last good start. `curl -s` hides errors, while `curl -sS` stays quiet but still prints them. To test what a container can reach, run the test **from a container** (`docker run --rm curlimages/curl ...`), not from the host.
+
+**In this repo**:
+- `scripts/smoke-test.sh`: `curl -sS --fail-with-body` everywhere.
+- `.github/workflows/ci.yml`: Ollama started with `nohup ... > ollama.log 2>&1 &`, and the log printed on failure.
+- [devlog 2026-11-01 Codespaces setup](../devlog/2026-11-01-codespace-setup.md), Problems 1–4.
+
+**Interview questions**:
+- Your terminal "froze" after starting a server. What happened?
+- How do you check whether something is already listening on a port?
+- Why can `curl localhost:11434` work on the host but fail from a container?
+- What does `2>&1` do, and why does its position matter?
+
+**Self-check**:
+- [ ] I can start a server in the background, find its PID and port, and stop it.
+- [ ] I can prove container-to-host connectivity with one `docker run` command.
+
+## 13. CI/CD and GitHub Actions
+
+**Plain explanation**: **CI** (continuous integration) automatically builds and tests every change, so problems are found when they are cheap to fix. **CD** (continuous delivery/deployment) automates releasing it. In GitHub Actions, a **workflow** (`.github/workflows/*.yml`) is triggered by **events** (`push`, `pull_request`), and contains **jobs** that run in parallel on fresh **runners** unless linked with `needs`. Each job is a list of **steps** (shell commands or reusable **actions**). Caches (pip, Docker layers, models) keep repeat runs fast. A good pipeline runs cheap checks on every push and expensive end-to-end tests only where they matter.
+
+**In this repo**:
+- `.github/workflows/ci.yml`: `backend-tests`, `compose-config`, `docker-build` (matrix), and `e2e-smoke` (PRs into `main` only, `needs` the fast jobs).
+- `docker-compose.ci.yml`: the CI-only override. `scripts/smoke-test.sh`: health → index → query → citation checks.
+- ADR [0007](../decisions/0007-multi-environment-testing-strategy.md) (what each environment tests), ADR [0008](../decisions/0008-ci-design.md) (why several jobs, why the smallest model).
+- The CI status badge at the top of the README.
+
+**Interview questions**:
+- What runs in your CI, and why is the end-to-end test separate from the unit tests?
+- Why does the smoke test use a 0.5B model? What can it **not** tell you?
+- How do you keep CI fast? (Parallel jobs, caching, `needs`, running slow jobs only on PRs.)
+- An end-to-end job fails but passes on re-run. How do you tell a flaky test from a real bug?
+- What would CD look like for an on-prem system on one Mac?
+
+**Self-check**:
+- [ ] I can explain workflow, job, step, runner, action and `needs` with this repo's file.
+- [ ] I can read a failed run's logs (including the `docker compose logs` dump) and find the cause.
+- [ ] I can explain the hard checks vs. the soft check in `scripts/smoke-test.sh`.
 
 ---
 
@@ -318,7 +379,7 @@
 
 **本 repo 對應位置**：
 - `docker-compose.yml`：後端的 `extra_hosts`；`OLLAMA_BASE_URL=http://host.docker.internal:11434`。
-- `frontend/nginx.conf`：`proxy_pass http://backend:8000/` 使用 Compose 的服務名稱 DNS。
+- `frontend/nginx.conf.template`：`proxy_pass http://backend:8000/` 使用 Compose 的服務名稱 DNS。
 - [devlog 2026-11-01](../devlog/2026-11-01.md)；ADR [0006](../decisions/0006-multi-environment-deployment.md)。
 
 **面試可能問**：
@@ -384,3 +445,64 @@
 **自我檢核**：
 - [ ] 至少用兩個模型跑過 10 題評估，並記錄結果。
 - [ ] 能用範例專案的例子解釋 recall@k 和忠實度。
+
+## 11. 代理鏈上的逾時
+
+**淺白解釋**：瀏覽器送出的請求會經過好幾段連線，每一段都會在自己的逾時時間到了就放棄：瀏覽器 → 連接埠轉發（例如 Codespaces） → nginx → 後端 → Ollama。請求最多只能等到慢的那一段前面**最短**的那個逾時。負責轉送的閘道放棄時，會回傳 **504 Gateway Timeout**。好的做法是：自己能控制的逾時都可以設定、最內層的逾時最先觸發（錯誤訊息才會具體），並在介面上顯示進度。
+
+**本 repo 對應位置**：
+- `frontend/nginx.conf.template`：`proxy_read_timeout ${PROXY_READ_TIMEOUT}s`，由 nginx 映像檔的 `envsubst` template 機制產生設定。
+- `backend/app/config.py`：`llm_request_timeout`、`embed_request_timeout`。`backend/app/rag.py`：`OllamaTimeoutError`。`backend/app/main.py`：轉成 504。
+- `frontend/src/api.ts`：`ApiError` 區分後端逾時、代理逾時與連線中斷。`App.tsx`：「生成中」計時。
+- ADR [0009](../decisions/0009-timeout-settings.md)；[devlog 2026-11-01 Codespaces 環境建置](../devlog/2026-11-01-codespace-setup.md)。
+
+**面試可能問**：
+- 502 和 504 差在哪裡？
+- 一次查詢要 2 分鐘，nginx 設了 15 分鐘，使用者卻在約 100 秒後收到 504。你會從哪裡查起？
+- 為什麼最內層的逾時應該最短？
+- 要透過你無法控制的代理，提供需要好幾分鐘才能產生的回答，你會怎麼做？（串流，或非同步工作加輪詢。）
+
+**自我檢核**：
+- [ ] 能畫出本 repo 一次查詢經過的連線段，並說出每一段的逾時設定。
+- [ ] 能解釋為什麼 504 來自連接埠轉發時，調高 `PROXY_READ_TIMEOUT` 也沒用。
+
+## 12. 在 shell 裡排查常駐服務
+
+**淺白解釋**：伺服器會一直執行到被停止為止，所以在前景執行時會讓終端機看起來「卡住」；要用 `&`（加上 `nohup`）放到背景，並把輸出寫進 log。`>` 會清空檔案，`>>` 是附加，所以用 `>` 重新啟動，可能會把上一次成功啟動的證據蓋掉。`curl -s` 會隱藏錯誤，`curl -sS` 安靜但照樣印出錯誤。要測試容器連得到什麼，就要**從容器裡**測試（`docker run --rm curlimages/curl ...`），而不是從主機。
+
+**本 repo 對應位置**：
+- `scripts/smoke-test.sh`：一律使用 `curl -sS --fail-with-body`。
+- `.github/workflows/ci.yml`：以 `nohup ... > ollama.log 2>&1 &` 啟動 Ollama，失敗時印出 log。
+- [devlog 2026-11-01 Codespaces 環境建置](../devlog/2026-11-01-codespace-setup.md) 的問題 1～4。
+
+**面試可能問**：
+- 啟動伺服器後終端機「卡住」了，發生了什麼事？
+- 怎麼確認某個連接埠是不是已經有程式在監聽？
+- 為什麼 `curl localhost:11434` 在主機上通，從容器裡卻不通？
+- `2>&1` 是什麼意思？為什麼它的位置很重要？
+
+**自我檢核**：
+- [ ] 能把伺服器放到背景執行、找出它的 PID 與連接埠，並停止它。
+- [ ] 能用一行 `docker run` 指令證明容器連得到主機。
+
+## 13. CI/CD 與 GitHub Actions
+
+**淺白解釋**：**CI**（持續整合）會自動 build 並測試每一次變更，讓問題在修正成本還低的時候就被發現。**CD**（持續交付／部署）則是把發佈也自動化。在 GitHub Actions 裡，**workflow**（`.github/workflows/*.yml`）由**事件**（`push`、`pull_request`）觸發，裡面有多個 **job**；除非用 `needs` 串起來，否則 job 會在各自全新的 **runner** 上平行執行。每個 job 由一連串 **step** 組成（shell 指令，或可重複使用的 **action**）。快取（pip、Docker layer、模型）讓重複執行變快。好的流程是：便宜的檢查每次 push 都跑，昂貴的端到端測試只在真正需要的地方跑。
+
+**本 repo 對應位置**：
+- `.github/workflows/ci.yml`：`backend-tests`、`compose-config`、`docker-build`（matrix），以及 `e2e-smoke`（只在對 `main` 的 PR 執行，用 `needs` 等快速的 job 通過）。
+- `docker-compose.ci.yml`：CI 專用的 override。`scripts/smoke-test.sh`：健康檢查 → 索引 → 查詢 → 檢查引用。
+- ADR [0007](../decisions/0007-multi-environment-testing-strategy.md)（每個環境測什麼）、ADR [0008](../decisions/0008-ci-design.md)（為什麼拆成多個 job、為什麼用最小模型）。
+- README 最上方的 CI 狀態徽章。
+
+**面試可能問**：
+- 你的 CI 跑了哪些東西？為什麼端到端測試要和單元測試分開？
+- 為什麼冒煙測試用 0.5B 模型？它**無法**告訴你什麼？
+- 怎麼讓 CI 保持快速？（平行 job、快取、`needs`、慢的 job 只在 PR 跑。）
+- 端到端 job 失敗了，重跑卻通過。你怎麼分辨是不穩定的測試，還是真的有 bug？
+- 只在一台 Mac 上執行的地端系統，CD 會長什麼樣子？
+
+**自我檢核**：
+- [ ] 能用本 repo 的 workflow 檔解釋 workflow、job、step、runner、action 與 `needs`。
+- [ ] 能讀懂失敗執行的 log（包括 `docker compose logs` 的輸出），找出原因。
+- [ ] 能解釋 `scripts/smoke-test.sh` 裡硬性檢查與軟性檢查的差別。

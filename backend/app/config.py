@@ -26,11 +26,14 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5-coder:14b"
     llm_temperature: float = 0.1
     llm_num_ctx: int = 16384
-    llm_request_timeout: float = 600.0
+    # Seconds per request to Ollama. CPU-only machines (e.g. Codespaces) need
+    # 1.5-2 minutes per answer even with a 3B model; see ADR 0009.
+    llm_request_timeout: float = 300.0
     ollama_keep_alive: str = "30m"
 
     embed_model: str = "nomic-embed-text"
     embed_batch_size: int = 16
+    embed_request_timeout: float = 300.0
     # Unset/empty means "pick a sensible default for EMBED_MODEL".
     embed_query_prefix: str | None = None
     embed_doc_prefix: str | None = None
