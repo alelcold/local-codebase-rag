@@ -399,3 +399,36 @@ def test_apply_manual_copies_scores_from_markdown(backend, tmp_path, questions):
 def test_label_is_required_to_run(tmp_path):
     with pytest.raises(SystemExit):
         ev.main(["--out-dir", str(tmp_path)])
+
+
+# ── questions-identifiers.yaml (ADR 0013) ──────────────────────────────────
+
+
+def test_identifier_question_set_is_valid_and_names_identifiers():
+    from app.retrieval import extract_identifiers
+
+    extra = ev.load_questions(ROOT / "docs" / "evaluation" / "questions-identifiers.yaml")
+    main_ids = {q.id for q in ev.load_questions(QUESTIONS)}
+    assert extra and not ({q.id for q in extra} & main_ids)
+    for q in extra:
+        assert q.question and q.question_en and q.key_facts and q.keywords
+        assert q.expected_files
+        assert set(q.definition_files) <= set(q.expected_files)
+        code = "".join((SAMPLE / f).read_text() for f in q.expected_files)
+        for alternatives in q.keywords:
+            for kw in alternatives:
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*[A-Z_][A-Za-z0-9_]*", kw):
+                    assert kw in code, f"question {q.id}: keyword {kw} not found in its expected files"
+        # The point of this set: every question names at least one identifier.
+        assert extract_identifiers(q.question), f"question {q.id} names no identifier"
+        if q.type == "定位設定":
+            assert q.definition_files and all(not ev.is_doc(f) for f in q.definition_files)
+
+
+def test_retrieval_label_describes_the_server_switches():
+    assert ev.retrieval_label(None).startswith("not reported")
+    base = {"hybrid_search": False, "split_retrieval": False, "chunk_metadata": False, "prompt_variant": "v1"}
+    assert ev.retrieval_label(base) == "vector only (baseline) · prompt v1"
+    full = {**base, "hybrid_search": True, "rrf_k": 60, "split_retrieval": True, "doc_top_k": 1,
+            "chunk_metadata": True, "prompt_variant": "v2"}
+    assert ev.retrieval_label(full) == "hybrid (RRF k=60) + split (docs ≤ 1) + metadata · prompt v2"

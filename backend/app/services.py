@@ -107,9 +107,23 @@ def check_ollama(services: Services) -> dict:
 
 def check_qdrant(services: Services) -> dict:
     s = services.settings
+    from .indexer import index_config
+
     try:
         exists = services.store.exists()
         points = services.store.count() if exists else 0
+        stored = services.store.index_configs() if points else set()
     except Exception as exc:
         return {"ok": False, "url": s.qdrant_url, "error": f"{type(exc).__name__}: {exc}"}
-    return {"ok": True, "url": s.qdrant_url, "collection": s.collection_name, "indexed": exists, "points": points}
+    current = index_config(s)
+    return {
+        "ok": True,
+        "url": s.qdrant_url,
+        "collection": s.collection_name,
+        "indexed": exists,
+        "points": points,
+        "index_config": current,
+        # True when the index was built with other chunking / embedding settings
+        # (e.g. CHUNK_METADATA was toggled): run scripts/index.sh to rebuild.
+        "reindex_needed": bool(stored) and stored != {current},
+    }

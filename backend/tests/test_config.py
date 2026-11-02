@@ -69,3 +69,37 @@ def test_build_services_passes_timeouts_to_ollama_clients(monkeypatch):
     assert services.llm.request_timeout == 111
     # OllamaEmbedding hands client_kwargs to ollama.Client, which builds an httpx client.
     assert services.embed_model._client._client.timeout.read == 222
+
+
+def test_retrieval_toggles_default_off_and_prompt_variant_is_validated(monkeypatch):
+    import pytest
+
+    from app.config import is_doc_path
+
+    s = Settings()
+    assert (s.hybrid_search, s.split_retrieval, s.chunk_metadata, s.prompt_variant) == (False, False, False, "v1")
+    assert s.doc_top_k == 1 and s.rrf_k == 60
+
+    monkeypatch.setenv("HYBRID_SEARCH", "true")
+    monkeypatch.setenv("SPLIT_RETRIEVAL", "1")
+    monkeypatch.setenv("DOC_TOP_K", "2")
+    monkeypatch.setenv("CHUNK_METADATA", "true")
+    monkeypatch.setenv("PROMPT_VARIANT", "V2")
+    s = Settings()
+    assert s.retrieval_summary() == {
+        "hybrid_search": True,
+        "split_retrieval": True,
+        "doc_top_k": 2,
+        "chunk_metadata": True,
+        "prompt_variant": "v2",
+        "rrf_k": 60,
+        "retrieval_candidates": 30,
+    }
+    monkeypatch.setenv("PROMPT_VARIANT", "")  # docker compose passes unset as ""
+    assert Settings().prompt_variant == "v1"
+    monkeypatch.setenv("PROMPT_VARIANT", "v9")
+    with pytest.raises(ValueError):
+        Settings()
+
+    assert is_doc_path("docs/a.md") and is_doc_path("NOTES.TXT")
+    assert not is_doc_path("src/a.ts") and not is_doc_path("Makefile")

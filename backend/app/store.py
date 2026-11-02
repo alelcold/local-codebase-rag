@@ -3,7 +3,8 @@ client for the bookkeeping incremental indexing needs (per-file hashes, deletes)
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import hashlib
+from collections.abc import Iterator, Sequence
 
 from llama_index.core.schema import BaseNode, NodeWithScore
 from llama_index.core.vector_stores.types import VectorStoreQuery
@@ -46,26 +47,53 @@ class CodeVectorStore:
             return 0
         return self.client.count(self.collection, exact=True).count
 
-    def file_hashes(self) -> dict[str, str]:
-        """Map of file_path -> content hash for every file currently indexed."""
+    def _scroll(self, with_payload: bool | list[str]) -> Iterator:
         if not self.exists():
-            return {}
-        hashes: dict[str, str] = {}
+            return
         offset = None
         while True:
             points, offset = self.client.scroll(
                 self.collection,
                 limit=SCROLL_PAGE,
                 offset=offset,
-                with_payload=["file_path", "file_hash"],
+                with_payload=with_payload,
                 with_vectors=False,
             )
-            for point in points:
-                payload = point.payload or {}
-                if "file_path" in payload:
-                    hashes[payload["file_path"]] = payload.get("file_hash", "")
+            yield from points
             if offset is None:
-                return hashes
+                return
+
+    def file_hashes(self) -> dict[str, str]:
+        """Map of file_path -> content hash for every file currently indexed."""
+        hashes: dict[str, str] = {}
+        for point in self._scroll(["file_path", "file_hash"]):
+            payload = point.payload or {}
+            if "file_path" in payload:
+                hashes[payload["file_path"]] = payload.get("file_hash", "")
+        return hashes
+
+    def index_configs(self) -> set[str]:
+        """Distinct ``index_config`` values stored on the points ("" for points
+        written before the field existed). Empty set when nothing is indexed."""
+        return {(p.payload or {}).get("index_config", "") for p in self._scroll(["index_config"])}
+
+    def signature(self) -> str:
+        """Cheap fingerprint of the indexed content: changes whenever a point is
+        added or removed (point ids include the file hash). Lets the in-process
+        keyword index notice re-indexing done by another process (the CLI)."""
+        if not self.exists():
+            return ""
+        h = hashlib.sha256()
+        for point_id in sorted(str(p.id) for p in self._scroll(False)):
+            h.update(point_id.encode())
+        return h.hexdigest()
+
+    def all_nodes(self) -> list[BaseNode]:
+        """Every stored chunk (text + metadata, no vectors), for the keyword index."""
+        points = list(self._scroll(True))
+        if not points:
+            return []
+        return list(self._store().parse_to_query_result(points).nodes)
 
     def delete_file(self, file_path: str) -> None:
         if not self.exists():

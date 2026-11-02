@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+from evaluate import retrieval_label  # same directory; run as python3 scripts/compare.py
+
 # (label, getter, kind) — kind decides formatting and which direction is "better".
 #   seconds: lower is better · rate: higher is better · count-lower: lower is better
 SUMMARY_ROWS: list[tuple[str, Callable[[dict], Any], str]] = [
@@ -86,7 +88,10 @@ def describe(r: dict) -> str:
     cfg = r.get("config", {})
     ollama = (r.get("health") or {}).get("ollama") or {}
     top_k = cfg.get("top_k") or f"default {(r.get('health') or {}).get('top_k', '?')}"
-    return f"`{cfg.get('label')}` · {r.get('date')} · {ollama.get('llm_model', '?')} · top_k {top_k} · {cfg.get('lang', '?')}"
+    return (
+        f"`{cfg.get('label')}` · {r.get('date')} · {ollama.get('llm_model', '?')} · top_k {top_k} · "
+        f"{cfg.get('lang', '?')} · {retrieval_label((r.get('health') or {}).get('retrieval'))}"
+    )
 
 
 def per_question(a: dict, b: dict) -> list[str]:

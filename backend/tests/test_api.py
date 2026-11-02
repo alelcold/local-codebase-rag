@@ -34,7 +34,12 @@ def test_health_ok(client):
         "collection": "codebase_nomic_embed_text",
         "indexed": False,
         "points": 0,
+        "index_config": body["qdrant"]["index_config"],
+        "reindex_needed": False,
     }
+    assert "chunk_metadata=off" in body["qdrant"]["index_config"]
+    assert body["retrieval"]["hybrid_search"] is False
+    assert body["retrieval"]["prompt_variant"] == "v1"
 
 
 def test_health_reports_missing_model(settings):
@@ -343,3 +348,36 @@ def test_stream_llm_failure_sends_error_event(settings):
 
 def test_health_reports_default_top_k(client):
     assert client.get("/health").json()["top_k"] == 4
+
+
+# --- Retrieval switches (ADR 0013) ---------------------------------------------
+
+
+def test_health_reports_reindex_needed_after_changing_chunk_metadata(settings):
+    services = make_services(settings)
+    with TestClient(create_app(services)) as c:
+        assert c.post("/index", json={"wait": True}).status_code == 200
+        assert c.get("/health").json()["qdrant"]["reindex_needed"] is False
+        settings.chunk_metadata = True
+        body = c.get("/health").json()
+        assert body["qdrant"]["reindex_needed"] is True
+        assert body["retrieval"]["chunk_metadata"] is True
+        report = c.post("/index", json={"wait": True}).json()["report"]
+        assert report["full"] is True and "chunk_metadata=on" in report["rebuild_reason"]
+        assert c.get("/health").json()["qdrant"]["reindex_needed"] is False
+
+
+def test_stream_with_every_switch_on_reports_matched_by(settings):
+    settings.hybrid_search = settings.split_retrieval = settings.chunk_metadata = True
+    settings.prompt_variant = "v2"
+    services = make_services(settings, llm=FakeLLM(prompts=[], answer="在 [1] src/player.ts。"))
+    with TestClient(create_app(services)) as c:
+        c.post("/index", json={"wait": True})
+        resp, events = stream_query(c, {"question": "GRAVITY 在哪裡設定？", "top_k": 3})
+    assert resp.status_code == 200
+    events = without_heartbeats(events)
+    assert [name for name, _ in events][0] == "sources" and events[-1][0] == "done"
+    sources = events[0][1]
+    assert sources[0]["file_path"] == "src/player.ts"
+    assert "identifier" in sources[0]["matched_by"]
+    assert sum(s["file_path"].endswith(".md") for s in sources) <= 1

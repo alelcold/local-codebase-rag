@@ -57,6 +57,17 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 | {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | {待填} | GPU instance | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
+### 4a. Retrieval switches (ADR 0013)
+
+Runs from [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan-retrieval.md): Codespaces, `qwen2.5-coder:3b`, `TOP_K=4`. "Main" = `questions.yaml` (10), "Ident." = `questions-identifiers.yaml` (5).
+
+| Date | Group | Switches | Manual correctness, main (/20) | Defining file retrieved, main | Defining file retrieved, ident. | Code file retrieved, main | Docs among retrieved chunks, main | Answers with Simplified | First token, mean (s) | Report |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| {待填} | A. baseline | all off | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | B. + hybrid | `HYBRID_SEARCH` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | C. + split | `SPLIT_RETRIEVAL`, `DOC_TOP_K=1` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | F. all on | + `CHUNK_METADATA`, `PROMPT_VARIANT=v2` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+
 ## 5. Model comparison (3B / 14B / 32B)
 
 | Model | Download size | Memory in use (`ollama ps`) | Runs on GPU? | Tokens/s (generation) | Avg query (s) | Eval score (/20) | Citation accuracy | Subjective quality notes |
@@ -165,6 +176,17 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | {待填} | GPU 機器 | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+
+### 4a. 檢索開關（ADR 0013）
+
+依 [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan-retrieval.md) 執行：Codespaces、`qwen2.5-coder:3b`、`TOP_K=4`。「主要」= `questions.yaml`（10 題），「識別字」= `questions-identifiers.yaml`（5 題）。
+
+| 日期 | 組別 | 開關 | 人工判定正確性，主要（/20） | 定義檔命中，主要 | 定義檔命中，識別字 | 程式碼檔命中，主要 | 取回片段中文件比例，主要 | 混入簡體字的回答 | 首字延遲平均（秒） | 報告 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| {待填} | A. 基準線 | 全部關閉 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | B. + 混合檢索 | `HYBRID_SEARCH` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | C. + 分類取回 | `SPLIT_RETRIEVAL`、`DOC_TOP_K=1` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | F. 全部開啟 | + `CHUNK_METADATA`、`PROMPT_VARIANT=v2` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
 ## 5. 模型比較（3B／14B／32B）
 

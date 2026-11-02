@@ -439,6 +439,20 @@ def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def retrieval_label(r: dict | None) -> str:
+    """One-line summary of the server's retrieval toggles, e.g. 'hybrid + split(doc≤1) + metadata · prompt v2'."""
+    if not r:
+        return "not reported (server older than ADR 0013: vector only)"
+    parts = []
+    if r.get("hybrid_search"):
+        parts.append(f"hybrid (RRF k={r.get('rrf_k')})")
+    if r.get("split_retrieval"):
+        parts.append(f"split (docs ≤ {r.get('doc_top_k')})")
+    if r.get("chunk_metadata"):
+        parts.append("metadata")
+    return f"{' + '.join(parts) or 'vector only (baseline)'} · prompt {r.get('prompt_variant', 'v1')}"
+
+
 def render_markdown(report: dict) -> str:
     s = report["summary"]
     cfg = report["config"]
@@ -465,6 +479,7 @@ def render_markdown(report: dict) -> str:
         f"| Language | {cfg['lang']} |",
         f"| Warm-up query | {'yes (model load not counted)' if cfg['warmup'] else 'no (question 1 includes model load)'} |",
         f"| Indexed chunks | {(h.get('qdrant') or {}).get('points', '?')} |",
+        f"| Retrieval (ADR 0013) | {retrieval_label(h.get('retrieval'))} |",
         "",
         "## Summary / 摘要",
         "",
@@ -623,6 +638,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"! /health reports status={health.get('status')}; continuing", file=sys.stderr)
     ollama = health.get("ollama") or {}
     print(f"Evaluating {len(questions)} question(s) · {ollama.get('llm_model')} · top_k={args.top_k or health.get('top_k')} · {args.base_url}")
+    print(f"Retrieval: {retrieval_label(health.get('retrieval'))}")
+    if (health.get("qdrant") or {}).get("reindex_needed"):
+        print("! The index was built with other settings (e.g. CHUNK_METADATA); run ./scripts/index.sh first", file=sys.stderr)
 
     started = datetime.now(timezone.utc)
     results = run(questions, args.base_url, args.top_k, args.lang, args.timeout, args.warmup)
@@ -639,7 +657,7 @@ def main(argv: list[str] | None = None) -> int:
             "only": sorted(only) if only else None,
             "questions_file": str(args.questions.relative_to(ROOT)) if args.questions.is_relative_to(ROOT) else str(args.questions),
         },
-        "health": {k: health.get(k) for k in ("status", "ollama", "qdrant", "top_k")},
+        "health": {k: health.get(k) for k in ("status", "ollama", "qdrant", "top_k", "retrieval")},
         "summary": summarize(results),
         "results": results,
     }

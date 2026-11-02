@@ -142,7 +142,18 @@ PROJECT_PATH=/Users/you/work/my-game-frontend
 - **增量索引**（預設）：只處理新增、修改、刪除的檔案。每個檔案的內容雜湊值存在 Qdrant 裡，沒變的檔案會直接略過，不會重新呼叫 embedding 模型。專案改動後隨時執行即可，幾秒內就會完成。
 - **完整重建**：清空目前的 collection 後重新處理所有檔案。一般不需要；當你懷疑索引有問題時再用。
 
-修改 `CHUNK_MAX_CHARS` 之後，增量索引會自動判斷所有檔案都需要重新切塊。更換 `EMBED_MODEL` 會自動改用另一個 collection（例如 `codebase_mxbai_embed_large`），因此也只需要執行一次增量索引。
+**修改切塊或 embedding 內容的設定後，需要重新索引，而且會自動全量重建。** 每個片段都記錄了建立索引時的設定（`index_config`：切塊器版本、embedding 內容格式、`CHUNK_MAX_CHARS`、`EMBED_MODEL`、文件前綴、`CHUNK_METADATA`）。執行 `./scripts/index.sh`（或介面上的「更新索引」、`POST /index`）時，若目前設定與索引中記錄的不同，索引器會清空 collection 並全部重建，同時印出原因：
+
+```text
+Index settings changed, rebuilding everything.
+  was: chunker=1;embed_format=2;chunk_max_chars=3000;embed_model=nomic-embed-text;doc_prefix='search_document: ';chunk_metadata=off
+  now: chunker=1;embed_format=2;chunk_max_chars=3000;embed_model=nomic-embed-text;doc_prefix='search_document: ';chunk_metadata=on
+```
+
+- 會觸發重建的設定：`CHUNK_METADATA`、`CHUNK_MAX_CHARS`、`EMBED_DOC_PREFIX`，以及程式更新了切塊或 embedding 內容格式時。改了設定還沒重新索引時，`/health` 的 `qdrant.reindex_needed` 會是 `true`，`scripts/evaluate.py` 也會提醒。
+- **從舊版升級後，第一次索引會全量重建一次**，因為舊版建立的片段沒有 `index_config`。
+- 只影響查詢的設定（`HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K`、`RRF_K`、`PROMPT_VARIANT`、`TOP_K`）不需要重新索引，重新啟動 backend 即可。
+- 更換 `EMBED_MODEL` 會自動改用另一個 collection（例如 `codebase_mxbai_embed_large`），在新的 collection 裡建立索引。
 
 API 的 `/index` 預設在背景執行並立即回傳，可用 `GET /index/status` 查看進度；若要等待完成再回傳，加上 `"wait": true`。
 
@@ -164,6 +175,17 @@ API 的 `/index` 預設在背景執行並立即回傳，可用 `GET /index/statu
 | 其他（若加入 `INDEX_EXTENSIONS`） | 依固定行數切塊 |
 
 每一塊都保留原始的起訖行號；送進 embedding 模型時會加上「檔案路徑＋符號名稱」的標頭，讓「Player 的 jump 在哪」這類問題更容易命中。
+
+每一塊也會記錄它**定義**與 **export** 的名稱（頂層的 `const`／`function`／`class`…，以及 class 的 method），存在 Qdrant 的 payload，供混合檢索比對識別字。設定 `CHUNK_METADATA=true` 時，這些資訊也會放進 embedding 的標頭，例如 `gameConfig.ts` 的片段會變成：
+
+```text
+File: src/config/gameConfig.ts
+Type: code (typescript)
+Defines: FIXED_DT, MAX_FRAME_TIME, …, INVINCIBLE_MS, …
+Exports: FIXED_DT, MAX_FRAME_TIME, …, INVINCIBLE_MS, …
+```
+
+method 片段還會加上所屬的 class（`Class: Player`）。切換這個設定後要重新索引（會自動全量重建，見上方）。
 
 ### 換成自己的專案
 
@@ -286,6 +308,10 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 | `EMBED_MODEL` | `nomic-embed-text` | 向量化模型 |
 | `LLM_NUM_CTX` | `16384` | LLM 上下文長度；太小會截斷引用的程式碼 |
 | `TOP_K` | `8` | 預設取回的片段數 |
+| `HYBRID_SEARCH` | `false` | 混合檢索：向量 + BM25 + 識別字定義比對，以 RRF 合併（[ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)） |
+| `SPLIT_RETRIEVAL` / `DOC_TOP_K` | `false` / `1` | 程式碼與文件分開取回：文件最多 `DOC_TOP_K` 段，其餘給程式碼 |
+| `CHUNK_METADATA` | `false` | 把路徑、類型、符號、定義／export 的名稱放進 embedding 內容（**需重新索引**，會自動全量重建） |
+| `PROMPT_VARIANT` | `v1` | `v2` = 一律繁體中文回答，並先說明程式碼位置（檔案與行號） |
 | `LLM_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 生成回答的秒數 |
 | `EMBED_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 產生向量（embedding）的秒數 |
 | `PROXY_READ_TIMEOUT` / `PROXY_SEND_TIMEOUT` | `300` / `300` | 前端 nginx 代理 `/api` 時等待後端的秒數；改了只要 `docker compose up -d`，不用重新 build |
@@ -352,6 +378,7 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 - 確認索引是最新的（執行一次增量索引，結果會顯示新增/更新了哪些檔案）
 - 展開引用片段，看取回的程式碼是否相關。如果不相關，換個說法或直接提到函式/class 名稱
 - 提高「參考片段」數量
+- 「在哪裡設定」類的問題只引用到文件、沒有引用程式碼時，試試 `SPLIT_RETRIEVAL=true`（限制文件名額）與 `HYBRID_SEARCH=true`（問題中直接寫出識別字，例如 `INVINCIBLE_MS`、`ScoreSystem`，會精準命中定義它的程式碼）；`CHUNK_METADATA=true` 需要重新索引。逐項比較的方法見 [實驗計畫](docs/evaluation/experiment-plan-retrieval.md)
 - 確認相關檔案的副檔名在 `INDEX_EXTENSIONS` 內，且沒有被 `EXCLUDE_DIRS` / `EXCLUDE_PATTERNS` / `MAX_FILE_BYTES` 排除（索引結果會列出因檔案過大而略過的檔案）
 - 可以試試其他 embedding 模型，例如 `EMBED_MODEL=mxbai-embed-large`（`ollama pull` 後執行一次索引即可，會自動使用新的 collection）
 
@@ -363,6 +390,7 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 ### 專案改動後需要重新索引嗎？
 
 需要，但只要執行增量索引（介面上的「更新索引」或 `./scripts/index.sh`），只會處理有變更的檔案。
+改了切塊或 embedding 相關的設定（例如 `CHUNK_METADATA`）時，同一個指令會偵測到並自動全量重建，見[執行索引](#執行索引)。
 也可以排程自動執行，例如在 crontab 每小時觸發一次：
 
 ```bash
@@ -581,6 +609,8 @@ python3 scripts/evaluate.py --apply-manual docs/evaluation/results/2026-11-03-co
 python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4.json docs/evaluation/results/2026-11-03-codespace-3b-k8.json
 ```
 
+檢索相關開關（混合檢索、分類取回、metadata、提示版本）會由 `/health` 回報，記錄在每份報告開頭，方便比較。逐項比較的組合、指令與預期觀察指標見 [docs/evaluation/experiment-plan-retrieval.md](docs/evaluation/experiment-plan-retrieval.md)；`--questions docs/evaluation/questions-identifiers.yaml` 是直接寫出識別字的 5 題補充題組。
+
 其他參數：`--base-url`（預設 `http://localhost:8080/api`，也可直接連後端 `http://localhost:8000`）、`--only 1,9`（只跑指定題號）、`--lang en`、`--no-warmup`、`--out-dir`。完整說明見 [docs/evaluation/README.md](docs/evaluation/README.md)。只有範例專案的結果可以提交到 repo；評估其他專案時，請用 `--out-dir` 寫到 repo 以外的地方。
 
 ### 不用 Docker 開發
@@ -626,6 +656,7 @@ cd frontend && npm install && npm run dev
 │   │   ├── indexer.py          # 增量索引（也可用 python -m app.indexer 執行）
 │   │   ├── store.py            # Qdrant 存取
 │   │   ├── rag.py              # 檢索與回答（附檔案行號引用）
+│   │   ├── retrieval.py        # BM25、識別字比對、RRF、程式碼／文件分類取回（ADR 0013）
 │   │   └── services.py         # 建立 Ollama / Qdrant 用戶端、健康檢查
 │   └── tests/
 ├── frontend/                   # React + Vite，build 後由 nginx 提供並代理 /api
@@ -664,10 +695,12 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0010](docs/decisions/0010-streaming-responses.md) | 以 SSE 串流回答 / Streaming answers with Server-Sent Events |
 | [0011](docs/decisions/0011-devcontainer-for-codespaces.md) | Codespaces 的 dev container / Dev container for Codespaces |
 | [0012](docs/decisions/0012-automated-evaluation-metrics.md) | 自動化評估的指標與限制 / Automated evaluation: metrics and their limits |
+| [0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md) | 混合檢索、分類取回、切塊 metadata / Hybrid retrieval, split code/doc retrieval, chunk metadata |
 | **學習與評估 / Learning & evaluation** | |
-| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 16 個主題的解釋、程式碼位置、面試題、自我檢核 / 16 topics: explanation, code pointers, interview questions, self-check |
+| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 20 個主題的解釋、程式碼位置、面試題、自我檢核 / 20 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |
 | [docs/evaluation/README.md](docs/evaluation/README.md) | 自動化評估的使用方式（`questions.yaml`、`evaluate.py`、`compare.py`）/ How to run the automated evaluation |
+| [docs/evaluation/experiment-plan-retrieval.md](docs/evaluation/experiment-plan-retrieval.md) | 檢索改善的實驗計畫：組合、指令、預期指標 / Retrieval experiment plan: runs, commands, expected metrics |
 | [docs/metrics.md](docs/metrics.md) | 成本、索引、查詢時間、評估結果、模型比較 / Cost, indexing, latency, evaluation results, model comparison |
 | **作品集 / Portfolio** | |
 | [docs/portfolio/article-series.md](docs/portfolio/article-series.md) | 5 篇技術文章大綱 / Outlines for 5 technical articles |
