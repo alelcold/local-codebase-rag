@@ -9,6 +9,10 @@ export interface Source {
   score: number;
   /** Retrievers that found this excerpt ("vector", "keyword", "identifier"); ADR 0013. */
   matched_by?: string[];
+  /** Cosine similarity from the vector channel; null if only keyword / identifier search found it (ADR 0014). */
+  vector_score?: number | null;
+  /** Cross-encoder relevance when RERANK=true (ADR 0015). */
+  rerank_score?: number | null;
   text: string;
 }
 
@@ -56,6 +60,12 @@ export interface StreamStats {
   total_seconds: number | null;
   tokens: number;
   answer_chars: number;
+  /** Vector hits dropped by SCORE_THRESHOLD; no_relevant = nothing was left, LLM not called (ADR 0014). */
+  below_threshold?: number;
+  no_relevant?: boolean;
+  /** Cross-encoder time in seconds (null with RERANK=false) and first-use model load (ADR 0015). */
+  rerank_seconds?: number | null;
+  rerank_load_seconds?: number | null;
 }
 
 export interface StreamHandlers {

@@ -86,6 +86,24 @@ class Settings(BaseSettings):
     # TOP_K goes to code. A type with too few hits leaves its slots to the other.
     split_retrieval: bool = False
     doc_top_k: int = 1
+    # Similarity threshold (ADR 0014): vector hits whose cosine similarity is
+    # below this are dropped before fusion. Empty = no filtering. No universal
+    # default: calibrate per embedding model with scripts/calibrate_threshold.py.
+    # Hits from the identifier channel (and keyword hits containing an exact
+    # identifier from the question) are exempt. When nothing is left, the LLM is
+    # not called and a fixed "not found" answer is returned.
+    score_threshold: float | None = None
+    # Rerank (ADR 0015): retrieve RERANK_CANDIDATES excerpts with the settings
+    # above, re-score them with a cross-encoder and send the best RERANK_TOP_N
+    # to the LLM. The model is loaded on first use only (needs the image built
+    # with INSTALL_RERANK=true); RERANK=false never imports it.
+    rerank: bool = False
+    rerank_model: str = "BAAI/bge-reranker-base"
+    rerank_candidates: int = 10
+    rerank_top_n: int = 3
+    # Tokens per (question, excerpt) pair given to the cross-encoder. CPU cost
+    # grows with it; 512 covers a typical 3000-character chunk's important part.
+    rerank_max_length: int = 512
     # /query/stream sends a heartbeat event when nothing else has been sent for
     # this many seconds (embedding and prompt processing can take a minute on
     # CPU), so proxies that drop idle connections keep seeing data. ADR 0010.
@@ -99,6 +117,28 @@ class Settings(BaseSettings):
     def _empty_prefix_is_auto(cls, value: str | None) -> str | None:
         # docker compose passes unset variables through as "".
         return value or None
+
+    @field_validator("score_threshold", mode="before")
+    @classmethod
+    def _empty_threshold_is_off(cls, value: object) -> object:
+        # SCORE_THRESHOLD= (empty, also what docker compose passes when unset) = no filtering.
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value
+
+    @field_validator("score_threshold")
+    @classmethod
+    def _check_threshold(cls, value: float | None) -> float | None:
+        if value is not None and not -1.0 <= value <= 1.0:
+            raise ValueError(f"SCORE_THRESHOLD is a cosine similarity (-1..1), got {value}")
+        return value
+
+    @field_validator("rerank_candidates", "rerank_top_n", "rerank_max_length")
+    @classmethod
+    def _positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("RERANK_CANDIDATES, RERANK_TOP_N and RERANK_MAX_LENGTH must be >= 1")
+        return value
 
     @field_validator("prompt_variant", mode="before")
     @classmethod
@@ -153,7 +193,20 @@ class Settings(BaseSettings):
             "prompt_variant": self.prompt_variant,
             "rrf_k": self.rrf_k if self.hybrid_search else None,
             "retrieval_candidates": self.retrieval_candidates,
+            # ADR 0014 / 0015
+            "score_threshold": self.score_threshold,
+            "rerank": self.rerank,
+            "rerank_model": self.rerank_model if self.rerank else None,
+            "rerank_candidates": self.rerank_candidates if self.rerank else None,
+            "rerank_top_n": self.rerank_top_n if self.rerank else None,
         }
+
+    @property
+    def default_top_k(self) -> int:
+        """Excerpts sent to the LLM when the request does not say: RERANK_TOP_N
+        with rerank on, else TOP_K. /health reports this as ``top_k`` so the UI
+        starts from the number that is actually used."""
+        return self.rerank_top_n if self.rerank else self.top_k
 
     @property
     def cors_origin_list(self) -> list[str]:

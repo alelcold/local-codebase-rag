@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from .config import get_settings
 from .rag import OllamaTimeoutError, RagService
-from .services import Services, build_services, check_ollama, check_qdrant
+from .services import Services, build_services, check_ollama, check_qdrant, check_reranker
 
 log = logging.getLogger(__name__)
 
@@ -177,15 +177,18 @@ def create_app(services: Services | None = None) -> FastAPI:
     def health() -> dict:
         ollama = check_ollama(svc())
         qdrant = check_qdrant(svc())
+        reranker = check_reranker(svc())
         s = svc().settings
         return {
-            "status": "ok" if ollama["ok"] and qdrant["ok"] else "degraded",
+            "status": "ok" if ollama["ok"] and qdrant["ok"] and reranker.get("ok", True) else "degraded",
             "ollama": ollama,
             "qdrant": qdrant,
             "codebase_path": s.codebase_path,
-            "top_k": s.top_k,
-            # Query-time retrieval settings (ADR 0013); scripts/evaluate.py records them.
+            # Excerpts sent to the LLM by default: RERANK_TOP_N with RERANK=true, else TOP_K.
+            "top_k": s.default_top_k,
+            # Query-time retrieval settings (ADR 0013, 0014, 0015); scripts/evaluate.py records them.
             "retrieval": s.retrieval_summary(),
+            "reranker": reranker,
             "index_job": app.state.index_job.state,
         }
 

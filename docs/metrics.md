@@ -52,25 +52,42 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 
 | Date | Environment | Model | top_k | Manual correctness (/20) | Code file retrieved | Defining file retrieved | Keyword hit rate | Answers with Simplified | Q10 refused | First token, mean (s) | Total, mean (s) | Report |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | GPU instance | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | GPU instance | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
 ### 4a. Retrieval switches (ADR 0013)
 
-Runs from [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan-retrieval.md): Codespaces, `qwen2.5-coder:3b`, `TOP_K=4`. "Main" = `questions.yaml` (10), "Ident." = `questions-identifiers.yaml` (5).
+Runs from [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan-retrieval.md): Codespaces, `qwen2.5-coder:3b`, `TOP_K=4`. "Main" = `questions.yaml` (10), "Ident." = `questions-identifiers.yaml` (5). "Q10 refused" = the trick question answered with "not found" (report: Trick question refused); for G and I also note whether it came from the threshold (LLM not called). "Rerank time" = mean `rerank_seconds` of the `done` event, model load excluded (ADR 0015); "—" = rerank off.
 
-| Date | Group | Switches | Manual correctness, main (/20) | Defining file retrieved, main | Defining file retrieved, ident. | Code file retrieved, main | Docs among retrieved chunks, main | Answers with Simplified | First token, mean (s) | Report |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-03 | A. baseline | all off | {待填} | 0/3 (0%) | 1/3 (33%) | 1/9 (11%) | 95% | 1 / 0 | 13.0 / 21.2 | [main](evaluation/results/2026-11-03-codespace-3b-k4-baseline.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-baseline-ident.md) |
-| 2026-11-03 | B. + hybrid | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | 6.7 / 10.7 ¹ | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
-| 2026-11-03 | C. + split | `SPLIT_RETRIEVAL`, `DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | 15.9 / 17.8 | [main](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
-| 2026-11-03 | F. all on | + `CHUNK_METADATA`, `PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | 19.6 / 23.8 | [main](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
+| Date | Group | Switches | Manual correctness, main (/20) | Defining file retrieved, main | Defining file retrieved, ident. | Code file retrieved, main | Docs among retrieved chunks, main | Answers with Simplified | Q10 refused | First token, mean (s) | Rerank time, mean (s) | Report |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-03 | A. baseline | all off | {待填} | 0/3 (0%) | 1/3 (33%) | 1/9 (11%) | 95% | 1 / 0 | No (0/1) | 13.0 / 21.2 | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-baseline.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-baseline-ident.md) |
+| 2026-11-03 | B. + hybrid | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | No (0/1) | 6.7 / 10.7 ¹ | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
+| 2026-11-03 | C. + split | `SPLIT_RETRIEVAL`, `DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | No (0/1) | 15.9 / 17.8 | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
+| 2026-11-03 | F. all on | + `CHUNK_METADATA`, `PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | No (0/1) | 19.6 / 23.8 | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
+| {待填} | G. + threshold | `SCORE_THRESHOLD={待填}` (from `calibrate_threshold.py`) | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
+| {待填} | H. + rerank | `RERANK`, 10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | I. F + threshold + rerank | F + `SCORE_THRESHOLD={待填}` + `RERANK`, 10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
-"Answers with Simplified" and "First token, mean (s)" are given as main / ident. Manual correctness is not judged yet. Comparisons with A: `evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`.
+"Answers with Simplified" and "First token, mean (s)" are given as main / ident.; "Q10 refused" is from the main set. Manual correctness is not judged yet. Comparisons with A: `evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`.
 
 ¹ Not caused by hybrid search: retrieval took 0.07–0.21 s in every group. In B, 7 of the 10 main questions retrieved exactly the same excerpts as in A, and three of them (2, 4, 9) got their first token in about 0.2 s, which points to Ollama reusing a cached prompt. The questions whose excerpts changed (5, 8) were not faster than in A (11.7 → 13.9 s, 16.2 → 15.0 s). Run order and caching affect these means, so do not read B's latency as a gain. First-token time follows prompt length: C and F put longer code excerpts in the prompt (e.g. 146 lines for question 3 in C → 47 s).
+
+### 4b. Reranker CPU cost (micro-benchmark, ADR 0015)
+
+Cross-encoder only (no LLM, no retrieval): 10 (question, excerpt) pairs from the sample project, question 「玩家受傷後的無敵時間在哪裡設定？」, median of 5 runs after one warm-up, `sentence-transformers` 5.1.2, `torch` 2.9.1+cpu. **Environment: Claude Code cloud container, 4 vCPU x86_64, 15 GB, no GPU** (similar size to a Codespace, not a Codespace; Mac numbers {待填}). Real per-query rerank time on Codespaces goes into §4a.
+
+| Date | Model | `RERANK_MAX_LENGTH` | 10 pairs, median (s) | Peak RSS (MB) | Download (GB) |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-02 | `BAAI/bge-reranker-v2-m3` (568M) | 512 | 11.97 | 2846 | 2.2 |
+| 2026-11-02 | `BAAI/bge-reranker-v2-m3` | 256 | 5.54 | 2579 | 2.2 |
+| 2026-11-02 | **`BAAI/bge-reranker-base` (278M, default)** | 512 | 3.73 | 1851 | 1.1 |
+| 2026-11-02 | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (118M) | 512 | 1.03 | 1326 | 0.47 |
+| {待填} | `BAAI/bge-reranker-base` | 512 | {待填} (Mac M2, in Docker) | {待填} | 1.1 |
+
+First load of `bge-reranker-base` from the local cache inside the backend image: 7.8 s (same container).
 
 ## 5. Model comparison (3B / 14B / 32B)
 
@@ -93,6 +110,8 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 | 2026-11-02 | Backend unit tests after streaming (`/query/stream`) | 70 passed (≈ 2 s, no network) |
 | 2026-11-02 | Backend unit tests including the evaluation scripts | 93 passed (≈ 5 s, no network; the backend is mocked by a local SSE server) |
 | 2026-11-02 | CI duration, first run (no caches): unit tests / compose config / image builds (backend, frontend) / smoke test | 40 s / 5 s / 76 s, 45 s / 2 min 41 s (PR #3) |
+| 2026-11-02 | Backend unit tests with threshold, rerank (fake cross-encoder) and calibration script | 157 passed (≈ 7 s, no network, no model download) |
+| 2026-11-02 | Backend image size, default / `INSTALL_RERANK=true` (`docker images`, linux/amd64) | 616 MB / 2.14 GB (+1.5 GB: torch CPU, transformers, scipy, scikit-learn …; model not included) |
 
 ## How to measure
 
@@ -176,25 +195,42 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 | 日期 | 環境 | 模型 | top_k | 人工判定正確性（/20） | 程式碼檔命中 | 定義檔命中 | 關鍵字命中率 | 混入簡體字的回答 | 第 10 題拒答 | 首字延遲平均（秒） | 總耗時平均（秒） | 報告 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | GPU 機器 | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | GPU 機器 | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
 ### 4a. 檢索開關（ADR 0013）
 
-依 [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan-retrieval.md) 執行：Codespaces、`qwen2.5-coder:3b`、`TOP_K=4`。「主要」= `questions.yaml`（10 題），「識別字」= `questions-identifiers.yaml`（5 題）。
+依 [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan-retrieval.md) 執行：Codespaces、`qwen2.5-coder:3b`、`TOP_K=4`。「主要」= `questions.yaml`（10 題），「識別字」= `questions-identifiers.yaml`（5 題）。「Q10 拒答」= 陷阱題回答「找不到」（報告的「陷阱題正確拒答」）；G、I 組另外註明是否由門檻直接拒答（未呼叫 LLM）。「rerank 耗時」= `done` 事件 `rerank_seconds` 的平均，不含模型載入（ADR 0015）；「—」= 未開啟 rerank。
 
-| 日期 | 組別 | 開關 | 人工判定正確性，主要（/20） | 定義檔命中，主要 | 定義檔命中，識別字 | 程式碼檔命中，主要 | 取回片段中文件比例，主要 | 混入簡體字的回答 | 首字延遲平均（秒） | 報告 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-03 | A. 基準線 | 全部關閉 | {待填} | 0/3 (0%) | 1/3 (33%) | 1/9 (11%) | 95% | 1 / 0 | 13.0 / 21.2 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-baseline.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-baseline-ident.md) |
-| 2026-11-03 | B. + 混合檢索 | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | 6.7 / 10.7 ¹ | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
-| 2026-11-03 | C. + 分類取回 | `SPLIT_RETRIEVAL`、`DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | 15.9 / 17.8 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
-| 2026-11-03 | F. 全部開啟 | + `CHUNK_METADATA`、`PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | 19.6 / 23.8 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
+| 日期 | 組別 | 開關 | 人工判定正確性，主要（/20） | 定義檔命中，主要 | 定義檔命中，識別字 | 程式碼檔命中，主要 | 取回片段中文件比例，主要 | 混入簡體字的回答 | Q10 拒答 | 首字延遲平均（秒） | rerank 耗時平均（秒） | 報告 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-03 | A. 基準線 | 全部關閉 | {待填} | 0/3 (0%) | 1/3 (33%) | 1/9 (11%) | 95% | 1 / 0 | 否（0/1） | 13.0 / 21.2 | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-baseline.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-baseline-ident.md) |
+| 2026-11-03 | B. + 混合檢索 | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | 否（0/1） | 6.7 / 10.7 ¹ | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
+| 2026-11-03 | C. + 分類取回 | `SPLIT_RETRIEVAL`、`DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | 否（0/1） | 15.9 / 17.8 | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
+| 2026-11-03 | F. 全部開啟 | + `CHUNK_METADATA`、`PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | 否（0/1） | 19.6 / 23.8 | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
+| {待填} | G. + 門檻 | `SCORE_THRESHOLD={待填}`（由 `calibrate_threshold.py` 決定） | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
+| {待填} | H. + Rerank | `RERANK`，10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | I. F + 門檻 + Rerank | F + `SCORE_THRESHOLD={待填}` + `RERANK`，10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
-「混入簡體字的回答」與「首字延遲平均」的格式為 主要 / 識別字。人工判定正確性尚未評分。與 A 的比較：`evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`。
+「混入簡體字的回答」與「首字延遲平均」的格式為 主要 / 識別字；「Q10 拒答」來自主要題組。人工判定正確性尚未評分。與 A 的比較：`evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`。
 
 ¹ 不是混合檢索造成的：每一組的檢索都只花 0.07–0.21 秒。B 組主要題組 10 題中有 7 題取回的片段與 A 組完全相同，其中第 2、4、9 題的首字只要約 0.2 秒，看起來是 Ollama 重用了快取的提示。片段有改變的題目（5、8）沒有比 A 快（11.7 → 13.9 秒、16.2 → 15.0 秒）。執行順序與快取都會影響這些平均值，不要把 B 的延遲看成改善。首字延遲取決於提示長度：C、F 會把較長的程式碼片段放進提示（例如 C 組第 3 題 146 行 → 47 秒）。
+
+### 4b. Reranker 的 CPU 成本（微基準測試，ADR 0015）
+
+只量交叉編碼器（不含 LLM 與檢索）：範例專案的 10 組（問題, 片段），問題為「玩家受傷後的無敵時間在哪裡設定？」，暖機一次後跑 5 次取中位數，`sentence-transformers` 5.1.2、`torch` 2.9.1+cpu。**環境：Claude Code 雲端容器，4 vCPU x86_64、15 GB、無 GPU**（規格接近 Codespace，但不是 Codespace；Mac 數據 {待填}）。Codespaces 上每次查詢實際的 rerank 耗時記在 §4a。
+
+| 日期 | 模型 | `RERANK_MAX_LENGTH` | 10 組中位數（秒） | 記憶體峰值（MB） | 下載大小（GB） |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-02 | `BAAI/bge-reranker-v2-m3`（568M） | 512 | 11.97 | 2846 | 2.2 |
+| 2026-11-02 | `BAAI/bge-reranker-v2-m3` | 256 | 5.54 | 2579 | 2.2 |
+| 2026-11-02 | **`BAAI/bge-reranker-base`（278M，預設）** | 512 | 3.73 | 1851 | 1.1 |
+| 2026-11-02 | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`（118M） | 512 | 1.03 | 1326 | 0.47 |
+| {待填} | `BAAI/bge-reranker-base` | 512 | {待填}（Mac M2，Docker 內） | {待填} | 1.1 |
+
+在 backend 映像檔內從本機快取第一次載入 `bge-reranker-base`：7.8 秒（同一個容器環境）。
 
 ## 5. 模型比較（3B／14B／32B）
 
@@ -217,6 +253,8 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-02 | 加入串流（`/query/stream`）後的後端單元測試 | 70 個通過（約 2 秒，不需網路） |
 | 2026-11-02 | 含評估腳本的後端單元測試 | 93 個通過（約 5 秒，不需網路；後端以本機的 SSE 假伺服器取代） |
 | 2026-11-02 | CI 耗時，第一次執行（沒有快取）：單元測試／compose 檢查／映像檔 build（backend、frontend）／冒煙測試 | 40 秒／5 秒／76 秒、45 秒／2 分 41 秒（PR #3） |
+| 2026-11-02 | 含門檻、rerank（假的交叉編碼器）與校準腳本的後端單元測試 | 157 個通過（約 7 秒，不需網路、不下載模型） |
+| 2026-11-02 | backend 映像檔大小，預設／`INSTALL_RERANK=true`（`docker images`，linux/amd64） | 616 MB／2.14 GB（+1.5 GB：torch CPU 版、transformers、scipy、scikit-learn 等；不含模型） |
 
 ## 量測方式
 

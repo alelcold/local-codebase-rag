@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Ollama (LLM `qwen2.5-coder:14b`, embeddings `nomic-embed-text`) | **Natively on the host** (macOS, for Metal GPU). Never in Docker on a Mac. | — |
 | Qdrant vector DB | Docker, named volume `qdrant_data` | `docker-compose.yml` |
-| Backend: FastAPI + LlamaIndex (`/health`, `/index`, `/index/status`, `/query`, `/query/stream` (SSE, ADR 0010)); optional hybrid / split retrieval (`.env` switches, ADR 0013) | Docker | `backend/app/`, `retrieval.py` |
+| Backend: FastAPI + LlamaIndex (`/health`, `/index`, `/index/status`, `/query`, `/query/stream` (SSE, ADR 0010)); optional hybrid / split retrieval, similarity threshold, rerank (`.env` switches, ADR 0013–0015) | Docker | `backend/app/`, `retrieval.py`, `rerank.py` |
 | Indexer (tree-sitter / Markdown-heading chunking, incremental by content hash; full rebuild when `index_config` changes) | Docker, `python -m app.indexer` | `backend/app/indexer.py`, `chunker.py` |
 | Frontend: React + Vite, served by nginx, proxies `/api` (unbuffered for `/api/query/stream`) | Docker | `frontend/` |
 
@@ -32,6 +32,7 @@ cd frontend && npm run build         # type-check + build the UI
 ./scripts/doctor.sh                  # step-by-step diagnosis of Ollama, Docker, services and index, with fixes
 python3 scripts/evaluate.py --label <env-model>  # 10-question evaluation → docs/evaluation/results/ (ADR 0012)
 python3 scripts/compare.py A.json B.json         # compare two evaluation runs
+python3 scripts/calibrate_threshold.py           # suggest SCORE_THRESHOLD from evaluation results (ADR 0014)
 ```
 
 ## Rules
@@ -75,7 +76,7 @@ Every document under `docs/` and this file is written in English first, followed
 | --- | --- | --- |
 | Ollama（LLM `qwen2.5-coder:14b`、embedding `nomic-embed-text`） | **直接在主機上執行**（macOS，為了使用 Metal GPU）。在 Mac 上絕不放進 Docker | — |
 | Qdrant 向量資料庫 | Docker，具名 volume `qdrant_data` | `docker-compose.yml` |
-| 後端：FastAPI + LlamaIndex（`/health`、`/index`、`/index/status`、`/query`、`/query/stream`（SSE，ADR 0010））；可選的混合檢索／分類取回（`.env` 開關，ADR 0013） | Docker | `backend/app/`、`retrieval.py` |
+| 後端：FastAPI + LlamaIndex（`/health`、`/index`、`/index/status`、`/query`、`/query/stream`（SSE，ADR 0010））；可選的混合檢索／分類取回、相似度門檻、Rerank（`.env` 開關，ADR 0013–0015） | Docker | `backend/app/`、`retrieval.py`、`rerank.py` |
 | 索引器（tree-sitter / Markdown 標題切塊，依內容雜湊增量索引；`index_config` 改變時全量重建） | Docker，`python -m app.indexer` | `backend/app/indexer.py`、`chunker.py` |
 | 前端：React + Vite，由 nginx 提供並代理 `/api`（`/api/query/stream` 不緩衝） | Docker | `frontend/` |
 
@@ -95,6 +96,7 @@ cd frontend && npm run build         # 型別檢查並 build 前端
 ./scripts/doctor.sh                  # 依序診斷 Ollama、Docker、各服務與索引，並列出修正指令
 python3 scripts/evaluate.py --label <環境-模型>  # 10 題評估 → docs/evaluation/results/（ADR 0012）
 python3 scripts/compare.py A.json B.json         # 比較兩次評估結果
+python3 scripts/calibrate_threshold.py           # 從評估結果建議 SCORE_THRESHOLD（ADR 0014）
 ```
 
 ## 規則

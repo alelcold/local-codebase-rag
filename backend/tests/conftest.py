@@ -90,6 +90,20 @@ class FakeLLM(CustomLLM):
             yield CompletionResponse(text=text, delta=piece)
 
 
+class FakeReranker:
+    """Stands in for the cross-encoder: no model download. Scores a passage by how
+    many of ``boost`` words it contains (then shorter first), and records calls."""
+
+    def __init__(self, boost: tuple[str, ...] = ()):
+        self.boost = boost
+        self.calls: list[tuple[str, list[str]]] = []
+        self.loaded = True
+
+    def score(self, question, passages):
+        self.calls.append((question, list(passages)))
+        return [sum(w in p for w in self.boost) - len(p) / 1e6 for p in passages]
+
+
 def ollama_transport(models: list[str] | None = None, down: bool = False) -> httpx.MockTransport:
     models = ["qwen2.5-coder:14b", "nomic-embed-text:latest"] if models is None else models
 
@@ -126,6 +140,7 @@ def make_services(
     embed: BaseEmbedding | None = None,
     llm: FakeLLM | None = None,
     transport: httpx.MockTransport | None = None,
+    reranker: object | None = None,
 ) -> Services:
     return assemble(
         settings,
@@ -133,6 +148,7 @@ def make_services(
         embed or FakeEmbedding(),
         llm or FakeLLM(prompts=[]),
         httpx.Client(base_url=settings.ollama_base_url, transport=transport or ollama_transport()),
+        reranker=reranker,
     )
 
 

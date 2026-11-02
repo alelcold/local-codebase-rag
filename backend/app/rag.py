@@ -13,7 +13,8 @@ from llama_index.core.llms import LLM
 from llama_index.core.schema import BaseNode
 
 from .config import Settings, is_doc_path
-from .retrieval import KeywordIndex, extract_identifiers, rrf, split_select
+from .rerank import Reranker, rerank_order
+from .retrieval import KeywordIndex, contains_identifier, extract_identifiers, rrf, split_select
 from .store import CodeVectorStore
 
 SYSTEM_PROMPT = """You are a senior engineer helping a team understand a game front-end codebase.
@@ -38,6 +39,14 @@ PROMPTS = {"v1": SYSTEM_PROMPT, "v2": SYSTEM_PROMPT_V2}
 
 NO_INDEX_ANSWER = "目前還沒有任何索引資料。請先執行索引（介面上的「更新索引」按鈕，或 scripts/index.sh）。"
 NO_MATCH_ANSWER = "在目前的索引中找不到與這個問題相關的程式碼。"
+# SCORE_THRESHOLD removed every excerpt (ADR 0014). Fixed text, the LLM is not
+# called: with nothing relevant to read, a model would only guess. Must contain
+# 「找不到」 (scripts/evaluate.py counts it as a refusal for the trick question).
+NO_RELEVANT_ANSWER = (
+    "在目前索引的專案中找不到與這個問題相關的內容：所有取回片段的相似度都低於門檻（SCORE_THRESHOLD），"
+    "因此不產生回答，以免編造不存在的程式碼。"
+    "如果確定專案中有相關功能，請換個說法，或直接寫出檔名、函式或常數名稱再查詢一次。"
+)
 
 
 class OllamaTimeoutError(Exception):
@@ -79,6 +88,12 @@ class Source:
     text: str
     # Which retrievers found this excerpt: "vector", "keyword", "identifier".
     matched_by: list[str] = field(default_factory=list)
+    # Cosine similarity from the vector channel (None if only keyword /
+    # identifier search found it). Unlike ``score`` it is comparable across
+    # retrieval settings; scripts/calibrate_threshold.py reads it. ADR 0014.
+    vector_score: float | None = None
+    # Cross-encoder relevance when RERANK=true (ADR 0015), else None.
+    rerank_score: float | None = None
 
     @property
     def location(self) -> str:
@@ -123,12 +138,34 @@ class StreamEvent:
     data: object
 
 
+@dataclass
+class Retrieval:
+    """What :meth:`RagService.retrieve_detailed` found, plus what it filtered and how long reranking took."""
+
+    sources: list[Source]
+    # Vector hits dropped by SCORE_THRESHOLD (before fusion).
+    below_threshold: int = 0
+    # True when SCORE_THRESHOLD removed every candidate: answer with NO_RELEVANT_ANSWER.
+    no_relevant: bool = False
+    rerank_seconds: float | None = None
+    rerank_load_seconds: float | None = None
+
+
 class RagService:
-    def __init__(self, settings: Settings, store: CodeVectorStore, embed_model: BaseEmbedding, llm: LLM):
+    def __init__(
+        self,
+        settings: Settings,
+        store: CodeVectorStore,
+        embed_model: BaseEmbedding,
+        llm: LLM,
+        reranker: Reranker | None = None,
+    ):
         self.settings = settings
         self.store = store
         self.embed_model = embed_model
         self.llm = llm
+        # Only used when settings.rerank; built lazily by the services (ADR 0015).
+        self.reranker = reranker
         self._keyword_lock = threading.Lock()
         self._keyword_index: KeywordIndex | None = None
         self._keyword_signature: str | None = None
@@ -153,42 +190,88 @@ class RagService:
             raise
 
     def retrieve(self, question: str, top_k: int | None = None) -> list[Source]:
-        """Vector search, optionally fused with keyword / identifier search (HYBRID_SEARCH)
-        and split into code and documentation quotas (SPLIT_RETRIEVAL). ADR 0013."""
+        return self.retrieve_detailed(question, top_k).sources
+
+    def retrieve_detailed(self, question: str, top_k: int | None = None) -> Retrieval:
+        """The retrieval pipeline, in this order (ADR 0013, 0014, 0015):
+
+        1. vector search (+ BM25 and identifier search with HYBRID_SEARCH);
+        2. SCORE_THRESHOLD on the vector channel's cosine scores, *before* fusion
+           (identifier hits and keyword hits containing an exact identifier are exempt);
+        3. RRF fusion of the remaining lists (HYBRID_SEARCH);
+        4. per-type selection (SPLIT_RETRIEVAL) of the candidates;
+        5. cross-encoder rerank of those candidates, keep the best (RERANK).
+
+        ``top_k`` (or the default: RERANK_TOP_N with rerank, else TOP_K) is the
+        number of excerpts returned, i.e. sent to the LLM.
+        """
         s = self.settings
-        k = top_k or s.top_k
-        pool = max(k, s.retrieval_candidates) if (s.hybrid_search or s.split_retrieval) else k
+        k = top_k or s.default_top_k
+        # With rerank, steps 1-4 select this many candidates instead of k.
+        n_candidates = max(k, s.rerank_candidates) if s.rerank else k
+        pool = n_candidates
+        if s.hybrid_search or s.split_retrieval:
+            pool = max(pool, s.retrieval_candidates)
         vector_hits = self.store.query(self._embed_query(question), pool)
 
         nodes: dict[str, BaseNode] = {}
         found_by: dict[str, list[str]] = {}
-        scores: dict[str, float] = {}
+        cosine = {h.node.node_id: float(h.score or 0.0) for h in vector_hits}
 
         def note(node: BaseNode, retriever: str) -> str:
             nodes.setdefault(node.node_id, node)
             found_by.setdefault(node.node_id, []).append(retriever)
             return node.node_id
 
+        threshold = s.score_threshold
+        below = 0
+        if threshold is not None:
+            kept = [h for h in vector_hits if float(h.score or 0.0) >= threshold]
+            below = len(vector_hits) - len(kept)
+            vector_hits = kept
         vector_ranking = [note(h.node, "vector") for h in vector_hits]
+
         if s.hybrid_search:
             index = self.keyword_index()
-            keyword_ranking = [note(n, "keyword") for n, _ in index.search(question, pool)]
-            ident_ranking = [
-                note(n, "identifier") for n in index.identifier_matches(extract_identifiers(question), pool)
-            ]
+            identifiers = extract_identifiers(question)
+            keyword_hits = [n for n, _ in index.search(question, pool)]
+            if threshold is not None:
+                # A keyword hit must either be semantically close (its vector hit
+                # passed the threshold) or contain an exact identifier from the
+                # question; otherwise common words ("player") would let anything through.
+                passed = set(vector_ranking)
+                keyword_hits = [
+                    n for n in keyword_hits if n.node_id in passed or contains_identifier(n.get_content(), identifiers)
+                ]
+            keyword_ranking = [note(n, "keyword") for n in keyword_hits]
+            # Identifier hits define a name the question spells out: exact evidence, never filtered.
+            ident_ranking = [note(n, "identifier") for n in index.identifier_matches(identifiers, pool)]
             fused = rrf([vector_ranking, keyword_ranking, ident_ranking], k=s.rrf_k)
             ranked = [node_id for node_id, _ in fused]
             scores = {node_id: score for node_id, score in fused}
         else:
             ranked = vector_ranking
-            scores = {h.node.node_id: float(h.score or 0.0) for h in vector_hits}
+            scores = {nid: cosine[nid] for nid in vector_ranking}
+
+        if threshold is not None and not ranked:
+            return Retrieval(sources=[], below_threshold=below, no_relevant=bool(below))
+
+        def is_doc(nid: str) -> bool:
+            return is_doc_path(str(nodes[nid].metadata.get("file_path", "")))
 
         if s.split_retrieval:
-            chosen = split_select(
-                ranked, k, s.doc_top_k, lambda nid: is_doc_path(str(nodes[nid].metadata.get("file_path", "")))
-            )
+            chosen = split_select(ranked, n_candidates, s.doc_top_k, is_doc)
         else:
-            chosen = ranked[:k]
+            chosen = ranked[:n_candidates]
+
+        rerank_scores: dict[str, float] = {}
+        rerank_seconds = rerank_load_seconds = None
+        if s.rerank and len(chosen) > 0:
+            chosen, rerank_scores, rerank_seconds, rerank_load_seconds = self._rerank(question, chosen, nodes, k)
+            if s.split_retrieval:
+                # Keep SPLIT_RETRIEVAL's presentation: code first, each group in rerank order.
+                chosen = [n for n in chosen if not is_doc(n)] + [n for n in chosen if is_doc(n)]
+        chosen = chosen[:k]
 
         sources = []
         for ref, node_id in enumerate(chosen, start=1):
@@ -206,9 +289,37 @@ class RagService:
                     score=round(scores.get(node_id, 0.0), 4),
                     text=node.get_content(),
                     matched_by=found_by[node_id],
+                    vector_score=round(cosine[node_id], 4) if node_id in cosine else None,
+                    rerank_score=round(rerank_scores[node_id], 4) if node_id in rerank_scores else None,
                 )
             )
-        return sources
+        return Retrieval(
+            sources=sources,
+            below_threshold=below,
+            rerank_seconds=rerank_seconds,
+            rerank_load_seconds=rerank_load_seconds,
+        )
+
+    def _rerank(
+        self, question: str, candidates: list[str], nodes: dict[str, BaseNode], k: int
+    ) -> tuple[list[str], dict[str, float], float, float | None]:
+        if self.reranker is None:
+            raise RuntimeError("RERANK=true but no reranker was configured")
+        passages = []
+        for nid in candidates:
+            meta = nodes[nid].metadata
+            # The path and symbol help the cross-encoder as much as they help a reader.
+            header = " ".join(str(x) for x in (meta.get("file_path", ""), meta.get("symbol", "")) if x)
+            passages.append(f"{header}\n{nodes[nid].get_content()}" if header else nodes[nid].get_content())
+        started = time.monotonic()
+        raw = self.reranker.score(question, passages)
+        elapsed = time.monotonic() - started
+        load = getattr(self.reranker, "take_load_seconds", lambda: None)()
+        # Report scoring time only; a first-query model load is reported separately.
+        seconds = round(max(0.0, elapsed - (load or 0.0)), 3)
+        order = rerank_order(raw)
+        reranked = [candidates[i] for i in order][:k]
+        return reranked, {candidates[i]: raw[i] for i in range(len(candidates))}, seconds, load
 
     def _llm_timeout(self, exc: BaseException) -> OllamaTimeoutError | None:
         if not is_timeout(exc):
@@ -218,9 +329,10 @@ class RagService:
     def answer(self, question: str, top_k: int | None = None) -> QueryResult:
         if not self.store.exists():
             return QueryResult(answer=NO_INDEX_ANSWER, sources=[])
-        sources = self.retrieve(question, top_k)
+        found = self.retrieve_detailed(question, top_k)
+        sources = found.sources
         if not sources:
-            return QueryResult(answer=NO_MATCH_ANSWER, sources=[])
+            return QueryResult(answer=NO_RELEVANT_ANSWER if found.no_relevant else NO_MATCH_ANSWER, sources=[])
         try:
             response = self.llm.complete(build_prompt(question, sources, self.settings.prompt_variant))
         except Exception as exc:
@@ -245,6 +357,12 @@ class RagService:
             "total_seconds": None,
             "tokens": 0,
             "answer_chars": 0,
+            # ADR 0014: vector hits dropped by SCORE_THRESHOLD; True when nothing was left.
+            "below_threshold": 0,
+            "no_relevant": False,
+            # ADR 0015: cross-encoder time (None with RERANK=false); model load on first use.
+            "rerank_seconds": None,
+            "rerank_load_seconds": None,
         }
 
         def finish() -> StreamEvent:
@@ -262,9 +380,14 @@ class RagService:
         if not self.store.exists():
             yield from canned(NO_INDEX_ANSWER)
             return
-        sources = self.retrieve(question, top_k)
+        found = self.retrieve_detailed(question, top_k)
+        sources = found.sources
+        stats["below_threshold"] = found.below_threshold
+        stats["no_relevant"] = found.no_relevant
+        stats["rerank_seconds"] = found.rerank_seconds
+        stats["rerank_load_seconds"] = found.rerank_load_seconds
         if not sources:
-            yield from canned(NO_MATCH_ANSWER)
+            yield from canned(NO_RELEVANT_ANSWER if found.no_relevant else NO_MATCH_ANSWER)
             return
         stats["retrieval_seconds"] = round(time.monotonic() - started, 3)
         yield StreamEvent("sources", [asdict(s) for s in sources])

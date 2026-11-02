@@ -48,6 +48,11 @@ DEFAULT_QUESTIONS = ROOT / "docs" / "evaluation" / "questions.yaml"
 DEFAULT_OUT_DIR = ROOT / "docs" / "evaluation" / "results"
 DOC_EXTENSIONS = {".md", ".mdx", ".markdown", ".txt", ".rst"}
 WARMUP_QUESTION = "這個專案主要用什麼程式語言寫的？"
+# Per-source fields kept in the JSON report.
+SOURCE_FIELDS = (
+    "ref", "file_path", "start_line", "end_line", "symbol", "score",
+    "vector_score", "rerank_score", "matched_by",
+)
 
 # Characters that exist only in Simplified Chinese (their Traditional forms are
 # different code points). A hit means the model slipped into Simplified, which
@@ -302,6 +307,10 @@ def score(q: Question, r: StreamResult) -> dict:
         "first_token_seconds": r.first_token_seconds,
         "total_seconds": r.total_seconds,
         "tokens": (r.server or {}).get("tokens"),
+        # ADR 0015: cross-encoder time on the server (None with RERANK=false).
+        "rerank_seconds": (r.server or {}).get("rerank_seconds"),
+        # ADR 0014: answered with the fixed "not found" text, the LLM was not called.
+        "no_relevant": bool((r.server or {}).get("no_relevant")),
         "server": r.server,
         "heartbeats": r.heartbeats,
         "files": files,
@@ -341,6 +350,8 @@ def summarize(results: list[dict]) -> dict:
         else None,
         "total_seconds_mean": _mean(x["total_seconds"] for x in m),
         "tokens_mean": _mean(x["tokens"] for x in m),
+        "rerank_seconds_mean": _mean(x.get("rerank_seconds") for x in m),
+        "threshold_refusals": sum(bool(x.get("no_relevant")) for x in m),
         "file_recall_mean": _mean(x["files"]["all"]["recall"] for x in m),
         "code_hit": _rate(x["files"]["code"]["any"] for x in m),
         "doc_hit": _rate(x["files"]["doc"]["any"] for x in m),
@@ -385,10 +396,9 @@ def run(
             "definition_files": q.definition_files,
             "expect_no_answer": q.expect_no_answer,
             "answer": r.answer,
-            "sources": [
-                {k: s.get(k) for k in ("ref", "file_path", "start_line", "end_line", "symbol", "score")}
-                for s in r.sources
-            ],
+            # vector_score = cosine similarity (None if only keyword / identifier search found
+            # the excerpt): scripts/calibrate_threshold.py reads it (ADR 0014).
+            "sources": [{k: s.get(k) for k in SOURCE_FIELDS} for s in r.sources],
             "error": r.error,
             "metrics": score(q, r),
             "manual_correctness": None,  # 0–2, filled in by a person
@@ -400,7 +410,9 @@ def run(
         else:
             log(
                 f"  first token {mt['first_token_seconds']}s · total {mt['total_seconds']}s · "
-                f"{mt['tokens']} tokens · files {mt['files']['all']['hit']}/{mt['files']['all']['expected']} · "
+                f"{mt['tokens']} tokens · "
+                + (f"rerank {mt['rerank_seconds']}s · " if mt.get("rerank_seconds") is not None else "")
+                + f"files {mt['files']['all']['hit']}/{mt['files']['all']['expected']} · "
                 f"keywords {mt['keywords']['hit']}/{mt['keywords']['total']}"
                 + (f" · Simplified: {''.join(mt['simplified_chars'])}" if mt["has_simplified"] else "")
             )
@@ -440,7 +452,8 @@ def _cell(text: str) -> str:
 
 
 def retrieval_label(r: dict | None) -> str:
-    """One-line summary of the server's retrieval toggles, e.g. 'hybrid + split(doc≤1) + metadata · prompt v2'."""
+    """One-line summary of the server's retrieval toggles, e.g.
+    'hybrid (RRF k=60) + split (docs ≤ 1) + threshold ≥ 0.5 + rerank (…, 10 → 3) · prompt v2'."""
     if not r:
         return "not reported (server older than ADR 0013: vector only)"
     parts = []
@@ -450,6 +463,10 @@ def retrieval_label(r: dict | None) -> str:
         parts.append(f"split (docs ≤ {r.get('doc_top_k')})")
     if r.get("chunk_metadata"):
         parts.append("metadata")
+    if r.get("score_threshold") is not None:
+        parts.append(f"threshold ≥ {r.get('score_threshold')}")
+    if r.get("rerank"):
+        parts.append(f"rerank ({r.get('rerank_model')}, {r.get('rerank_candidates')} → {r.get('rerank_top_n')})")
     return f"{' + '.join(parts) or 'vector only (baseline)'} · prompt {r.get('prompt_variant', 'v1')}"
 
 
@@ -489,6 +506,7 @@ def render_markdown(report: dict) -> str:
         f"| Time to first token, mean / median / 首字延遲 平均／中位數 | {_fmt(s['first_token_seconds_mean'], ' s')} / {_fmt(s['first_token_seconds_median'], ' s')} |",
         f"| Total time, mean / 總耗時平均 | {_fmt(s['total_seconds_mean'], ' s')} |",
         f"| Tokens, mean / 平均 token 數 | {_fmt(s['tokens_mean'])} |",
+        f"| Rerank time, mean / rerank 耗時平均 | {_fmt(s.get('rerank_seconds_mean'), ' s')} |",
         f"| Expected-file recall, mean / 預期檔案命中率平均 | {_pct(s['file_recall_mean'])} |",
         f"| Code file retrieved / 程式碼檔命中 | {_rate_str(s['code_hit'])} |",
         f"| Doc file retrieved / 文件檔命中 | {_rate_str(s['doc_hit'])} |",
@@ -498,6 +516,7 @@ def render_markdown(report: dict) -> str:
         f"| Keyword hit rate, mean / 關鍵字命中率平均 | {_pct(s['keyword_rate_mean'])} |",
         f"| Answers with Simplified characters / 混入簡體字的回答 | {s['simplified_answers']} |",
         f"| Trick question refused / 陷阱題正確拒答 | {_rate_str(s['no_answer_refused'])} |",
+        f"| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | {s.get('threshold_refusals', 0)} |",
         "| Manual correctness / 人工判定正確性 | ___ / " + str(2 * s["questions"]) + " |",
         "",
         "Keyword hit rate by type / 各題型關鍵字命中率："
@@ -531,6 +550,10 @@ def render_markdown(report: dict) -> str:
             lines += [f"- **Error**: `{r['error']}`", ""]
             continue
         retrieved = ", ".join(f"[{s['ref']}] `{s['file_path']}:{s['start_line']}-{s['end_line']}`" for s in r["sources"])
+        if m.get("no_relevant"):
+            lines.append("- **SCORE_THRESHOLD**: every excerpt was below the threshold; fixed answer, LLM not called")
+        if m.get("rerank_seconds") is not None:
+            lines.append(f"- **Rerank**: {m['rerank_seconds']} s")
         lines += [
             f"- **Retrieved**: {retrieved or '—'}",
             f"- **Missed expected files**: {', '.join(f'`{x}`' for x in m['files']['all']['missed']) or '—'}",
