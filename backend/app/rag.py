@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 
 import httpx
@@ -86,6 +88,19 @@ def build_prompt(question: str, sources: list[Source]) -> str:
     return f"{SYSTEM_PROMPT}\n\n## Code excerpts\n\n{context}\n\n## Question\n\n{question}\n\n## Answer\n"
 
 
+@dataclass
+class StreamEvent:
+    """One step of a streamed answer.
+
+    ``kind`` is ``"sources"`` (data: list of source dicts), ``"token"`` (data:
+    ``{"text": ...}``) or ``"done"`` (data: timing stats). Errors are raised,
+    not yielded, so the caller decides how to report them.
+    """
+
+    kind: str
+    data: object
+
+
 class RagService:
     def __init__(self, settings: Settings, store: CodeVectorStore, embed_model: BaseEmbedding, llm: LLM):
         self.settings = settings
@@ -121,6 +136,11 @@ class RagService:
             )
         return sources
 
+    def _llm_timeout(self, exc: BaseException) -> OllamaTimeoutError | None:
+        if not is_timeout(exc):
+            return None
+        return OllamaTimeoutError("llm", self.settings.llm_request_timeout, "LLM_REQUEST_TIMEOUT")
+
     def answer(self, question: str, top_k: int | None = None) -> QueryResult:
         if not self.store.exists():
             return QueryResult(answer=NO_INDEX_ANSWER, sources=[])
@@ -130,8 +150,74 @@ class RagService:
         try:
             response = self.llm.complete(build_prompt(question, sources))
         except Exception as exc:
-            if is_timeout(exc):
-                s = self.settings
-                raise OllamaTimeoutError("llm", s.llm_request_timeout, "LLM_REQUEST_TIMEOUT") from exc
+            timeout = self._llm_timeout(exc)
+            if timeout:
+                raise timeout from exc
             raise
         return QueryResult(answer=response.text.strip(), sources=sources)
+
+    def stream(self, question: str, top_k: int | None = None) -> Iterator[StreamEvent]:
+        """Same pipeline as :meth:`answer`, but yields as soon as each part is ready:
+        the retrieved sources first, then the answer token by token, then stats.
+
+        Sources go first because retrieval takes seconds while generation can
+        take minutes on CPU: the user can start reading the cited files while
+        the model is still thinking (ADR 0010).
+        """
+        started = time.monotonic()
+        stats: dict[str, float | int | None] = {
+            "retrieval_seconds": None,
+            "first_token_seconds": None,
+            "total_seconds": None,
+            "tokens": 0,
+            "answer_chars": 0,
+        }
+
+        def finish() -> StreamEvent:
+            stats["total_seconds"] = round(time.monotonic() - started, 3)
+            return StreamEvent("done", stats)
+
+        def canned(text: str) -> Iterator[StreamEvent]:
+            stats["retrieval_seconds"] = round(time.monotonic() - started, 3)
+            yield StreamEvent("sources", [])
+            stats["first_token_seconds"] = stats["retrieval_seconds"]
+            stats["tokens"], stats["answer_chars"] = 1, len(text)
+            yield StreamEvent("token", {"text": text})
+            yield finish()
+
+        if not self.store.exists():
+            yield from canned(NO_INDEX_ANSWER)
+            return
+        sources = self.retrieve(question, top_k)
+        if not sources:
+            yield from canned(NO_MATCH_ANSWER)
+            return
+        stats["retrieval_seconds"] = round(time.monotonic() - started, 3)
+        yield StreamEvent("sources", [asdict(s) for s in sources])
+
+        text_so_far = ""
+        raw_chars = 0  # length of chunk.text seen so far, before stripping
+        try:
+            for chunk in self.llm.stream_complete(build_prompt(question, sources)):
+                # Ollama sends the new text in ``delta``; fall back to diffing
+                # the accumulated ``text`` for LLMs that only fill that in.
+                delta = chunk.delta if chunk.delta is not None else chunk.text[raw_chars:]
+                raw_chars += len(delta)
+                if not delta:
+                    continue
+                if not text_so_far:
+                    # The model often starts with whitespace or a newline.
+                    delta = delta.lstrip()
+                    if not delta:
+                        continue
+                    stats["first_token_seconds"] = round(time.monotonic() - started, 3)
+                text_so_far += delta
+                stats["tokens"] = int(stats["tokens"] or 0) + 1
+                yield StreamEvent("token", {"text": delta})
+        except Exception as exc:
+            timeout = self._llm_timeout(exc)
+            if timeout:
+                raise timeout from exc
+            raise
+        stats["answer_chars"] = len(text_so_far)
+        yield finish()

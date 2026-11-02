@@ -12,11 +12,13 @@
 | --- | --- | --- |
 | Ollama (LLM `qwen2.5-coder:14b`, embeddings `nomic-embed-text`) | **Natively on the host** (macOS, for Metal GPU). Never in Docker on a Mac. | — |
 | Qdrant vector DB | Docker, named volume `qdrant_data` | `docker-compose.yml` |
-| Backend: FastAPI + LlamaIndex (`/health`, `/index`, `/index/status`, `/query`) | Docker | `backend/app/` |
+| Backend: FastAPI + LlamaIndex (`/health`, `/index`, `/index/status`, `/query`, `/query/stream` (SSE, ADR 0010)) | Docker | `backend/app/` |
 | Indexer (tree-sitter / Markdown-heading chunking, incremental by content hash) | Docker, `python -m app.indexer` | `backend/app/indexer.py`, `chunker.py` |
-| Frontend: React + Vite, served by nginx, proxies `/api` | Docker | `frontend/` |
+| Frontend: React + Vite, served by nginx, proxies `/api` (unbuffered for `/api/query/stream`) | Docker | `frontend/` |
 
 Containers reach Ollama at `http://host.docker.internal:11434`. On Linux (Codespaces, EC2), this relies on `extra_hosts: host.docker.internal:host-gateway` and Ollama listening on `0.0.0.0`. See `docs/decisions/0006-multi-environment-deployment.md`.
+
+In GitHub Codespaces, `.devcontainer/` does all of this on every start (Ollama on `0.0.0.0`, models, `docker compose up`, index) and sets `COMPOSE_FILE` to add `docker-compose.codespaces.yml`. See `docs/decisions/0011-devcontainer-for-codespaces.md`.
 
 ### Common commands
 
@@ -26,7 +28,8 @@ docker compose config -q             # validate compose
 ./scripts/setup.sh --index           # check Ollama, pull models, start stack, index
 ./scripts/index.sh [--full]          # (re)index the mounted project
 cd frontend && npm run build         # type-check + build the UI
-./scripts/smoke-test.sh              # end-to-end check against a running stack (also run in CI)
+./scripts/smoke-test.sh              # end-to-end check against a running stack, plain + streaming query (also run in CI)
+./scripts/doctor.sh                  # step-by-step diagnosis of Ollama, Docker, services and index, with fixes
 ```
 
 ## Rules
@@ -70,11 +73,13 @@ Every document under `docs/` and this file is written in English first, followed
 | --- | --- | --- |
 | Ollama（LLM `qwen2.5-coder:14b`、embedding `nomic-embed-text`） | **直接在主機上執行**（macOS，為了使用 Metal GPU）。在 Mac 上絕不放進 Docker | — |
 | Qdrant 向量資料庫 | Docker，具名 volume `qdrant_data` | `docker-compose.yml` |
-| 後端：FastAPI + LlamaIndex（`/health`、`/index`、`/index/status`、`/query`） | Docker | `backend/app/` |
+| 後端：FastAPI + LlamaIndex（`/health`、`/index`、`/index/status`、`/query`、`/query/stream`（SSE，ADR 0010）） | Docker | `backend/app/` |
 | 索引器（tree-sitter / Markdown 標題切塊，依內容雜湊增量索引） | Docker，`python -m app.indexer` | `backend/app/indexer.py`、`chunker.py` |
-| 前端：React + Vite，由 nginx 提供並代理 `/api` | Docker | `frontend/` |
+| 前端：React + Vite，由 nginx 提供並代理 `/api`（`/api/query/stream` 不緩衝） | Docker | `frontend/` |
 
 容器透過 `http://host.docker.internal:11434` 呼叫 Ollama。在 Linux（Codespaces、EC2）上，這需要 `extra_hosts: host.docker.internal:host-gateway`，而且 Ollama 要監聽 `0.0.0.0`。詳見 `docs/decisions/0006-multi-environment-deployment.md`。
+
+在 GitHub Codespaces 中，`.devcontainer/` 會在每次啟動時自動完成上述步驟（以 `0.0.0.0` 啟動 Ollama、準備模型、`docker compose up`、建立索引），並設定 `COMPOSE_FILE` 加上 `docker-compose.codespaces.yml`。詳見 `docs/decisions/0011-devcontainer-for-codespaces.md`。
 
 ### 常用指令
 
@@ -84,7 +89,8 @@ docker compose config -q             # 驗證 compose 設定
 ./scripts/setup.sh --index           # 檢查 Ollama、拉模型、啟動服務、建立索引
 ./scripts/index.sh [--full]          # 重新索引掛載的專案
 cd frontend && npm run build         # 型別檢查並 build 前端
-./scripts/smoke-test.sh              # 對已啟動的服務做端到端檢查（CI 也會執行）
+./scripts/smoke-test.sh              # 對已啟動的服務做端到端檢查，含一般與串流查詢（CI 也會執行）
+./scripts/doctor.sh                  # 依序診斷 Ollama、Docker、各服務與索引，並列出修正指令
 ```
 
 ## 規則

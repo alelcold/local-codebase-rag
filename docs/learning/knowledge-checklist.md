@@ -252,6 +252,67 @@
 - [ ] I can read a failed run's logs (including the `docker compose logs` dump) and find the cause.
 - [ ] I can explain the hard checks vs. the soft check in `scripts/smoke-test.sh`.
 
+## 14. Server-Sent Events and streaming responses
+
+**Plain explanation**: A normal HTTP response is sent when it is complete. A **streamed** response sends its body in pieces while it is still being produced. **Server-Sent Events (SSE)** is a simple text format for such a stream: `Content-Type: text/event-stream`, and frames like `event: token` / `data: {...}` separated by a blank line. It is one-way (server → client) over a plain HTTP response, unlike a **WebSocket**, which upgrades the connection to a two-way channel. For an LLM this gives two things: the user sees the answer as it is written (**time to first token** instead of total time), and the connection carries data the whole time, so proxies with idle limits do not cut it. A **heartbeat** is a small event sent when there is nothing else to send. Once a stream has started the status code is already 200, so later errors must be sent as events.
+
+**In this repo**:
+- `backend/app/rag.py`: `RagService.stream()` yields `sources` → `token`* → `done`.
+- `backend/app/main.py`: `POST /query/stream`, `stream_answer()` (worker thread → `asyncio.Queue` → SSE frames, heartbeat when the queue is quiet, `error` event).
+- `frontend/src/api.ts`: `queryStream()` reads the body with `fetch` + a stream reader and parses SSE frames. `App.tsx`: cited files first, then tokens, time to first token and total time, partial answer kept on error.
+- `scripts/smoke-test.sh`: the streaming part checks event order and arrival times. ADR [0010](../decisions/0010-streaming-responses.md).
+
+**Interview questions**:
+- SSE or WebSocket for streaming LLM answers? Why?
+- Why not use the browser's `EventSource` here?
+- What do you send first, and why? (Sources: they are ready in seconds and the prompt needs them anyway.)
+- The stream fails halfway. What status code does the client see, and how does it find out?
+- What is time to first token, and why does it matter more than total time for perceived speed?
+
+**Self-check**:
+- [ ] I can write a valid SSE frame by hand and read a stream with `curl -N`.
+- [ ] I can explain how the backend sends heartbeats while the model is silent.
+- [ ] I can explain what the UI does when the connection drops mid-answer.
+
+## 15. Reverse proxy buffering
+
+**Plain explanation**: A reverse proxy such as nginx sits between the client and the application. By default nginx **buffers** responses from the upstream: it reads them into memory (or temp files) so the upstream is freed quickly even for a slow client. Compression (**gzip**) also has to collect data before it can emit a compressed block. Both are good for normal pages and bad for streams: the client may get nothing until a buffer fills or the response ends. For streaming endpoints you turn them off (`proxy_buffering off`, `gzip off`), or the application asks for it with the `X-Accel-Buffering: no` header. Timeouts change meaning too: `proxy_read_timeout` is the time **between two reads**, not for the whole response, so regular data keeps a long stream alive.
+
+**In this repo**:
+- `frontend/nginx.conf.template`: `location = /api/query/stream` with `proxy_buffering off`, `proxy_cache off`, `gzip off`; the normal `/api/` location keeps the defaults.
+- `backend/app/main.py`: `X-Accel-Buffering: no`, `Cache-Control: no-cache` on the stream.
+- `scripts/smoke-test.sh`: `curl --compressed` like a browser; fails with `STREAM_STRICT=1` if all events arrive in one burst. Local finding: nginx 1.29 still passed events through with `proxy_buffering on` alone, but gzip held the whole answer back (ADR [0010](../decisions/0010-streaming-responses.md)).
+
+**Interview questions**:
+- Why does nginx buffer upstream responses by default? What does that protect?
+- Your SSE endpoint works with `curl` against the backend but arrives in one burst through nginx in the browser. What do you check?
+- What does `proxy_read_timeout` measure for a streamed response?
+- Which other layers can buffer a stream? (CDNs, corporate proxies, compression middleware, the client library.)
+
+**Self-check**:
+- [ ] I can show the difference between a buffered and an unbuffered stream with timestamps.
+- [ ] I can explain why the smoke test sends `Accept-Encoding: gzip`.
+
+## 16. Dev Containers and Codespaces
+
+**Plain explanation**: A **dev container** is a development environment described in code (`.devcontainer/devcontainer.json`): a base image, **features** (Docker, Python, Node…), forwarded ports, environment variables, and **lifecycle commands**. **GitHub Codespaces** (and VS Code locally) builds a container from it. `postCreateCommand` runs once when the container is created; `postStartCommand` runs **every time** it starts. A stopped codespace keeps its files but loses its running processes, so servers have to be started in `postStartCommand`. `hostRequirements` asks for a minimum machine size. `portsAttributes` labels ports and controls auto-forwarding. **docker-in-docker** runs a separate Docker daemon inside the container.
+
+**In this repo**:
+- `.devcontainer/devcontainer.json`: 4 cores / 16 GB, docker-in-docker, `COMPOSE_FILE` and `OLLAMA_MODELS` in `containerEnv`, port 8080 labelled, 11434 / 6333 never forwarded.
+- `.devcontainer/post-create.sh` (install Ollama, create `.env` from `.env.codespaces`) and `post-start.sh` (start Ollama on `0.0.0.0`, pull models, `docker compose up`, index if empty, doctor).
+- `docker-compose.codespaces.yml` applied with `COMPOSE_FILE`; `scripts/doctor.sh`. ADR [0011](../decisions/0011-devcontainer-for-codespaces.md).
+
+**Interview questions**:
+- What is the difference between `postCreateCommand` and `postStartCommand`? Which one starts a server, and why?
+- How do you apply a Compose override only in one environment without affecting the others?
+- Why not run Ollama in Compose inside the codespace?
+- How do you keep large downloads (models) across container rebuilds?
+- Why should port 11434 never be forwarded or made public?
+
+**Self-check**:
+- [ ] I can explain each lifecycle command in this repo's `devcontainer.json` and when it runs.
+- [ ] I can read `scripts/doctor.sh` output and fix the first failing check.
+
 ---
 
 # 知識檢核清單
@@ -506,3 +567,64 @@
 - [ ] 能用本 repo 的 workflow 檔解釋 workflow、job、step、runner、action 與 `needs`。
 - [ ] 能讀懂失敗執行的 log（包括 `docker compose logs` 的輸出），找出原因。
 - [ ] 能解釋 `scripts/smoke-test.sh` 裡硬性檢查與軟性檢查的差別。
+
+## 14. Server-Sent Events 與串流回應
+
+**淺白解釋**：一般的 HTTP 回應要等內容完整才送出。**串流**回應則是一邊產生、一邊分段送出內容。**Server-Sent Events（SSE）**是一種簡單的串流文字格式：`Content-Type: text/event-stream`，每個事件寫成 `event: token`／`data: {...}`，以空行分隔。它是在一般 HTTP 回應上的單向傳輸（伺服器 → 用戶端），不像 **WebSocket** 會把連線升級成雙向通道。對 LLM 來說有兩個好處：使用者看著回答逐字出現（在意的是**首字延遲**而不是總時間），而且連線上一直有資料，有閒置上限的代理就不會切斷它。**Heartbeat** 是沒有其他東西可送時送出的小事件。串流一旦開始，狀態碼就已經是 200，之後的錯誤只能用事件傳送。
+
+**本 repo 對應位置**：
+- `backend/app/rag.py`：`RagService.stream()` 依序產生 `sources` → `token`* → `done`。
+- `backend/app/main.py`：`POST /query/stream`、`stream_answer()`（背景執行緒 → `asyncio.Queue` → SSE 事件，佇列沒動靜時送 heartbeat，失敗時送 `error` 事件）。
+- `frontend/src/api.ts`：`queryStream()` 用 `fetch` 加串流讀取器讀取 body 並解析 SSE。`App.tsx`：先顯示引用的檔案，再逐字顯示，顯示首字延遲與總耗時，出錯時保留已收到的內容。
+- `scripts/smoke-test.sh`：串流部分檢查事件順序與到達時間。ADR [0010](../decisions/0010-streaming-responses.md)。
+
+**面試可能問**：
+- 串流 LLM 回答要用 SSE 還是 WebSocket？為什麼？
+- 為什麼這裡不用瀏覽器的 `EventSource`？
+- 第一個送出的是什麼？為什麼？（引用片段：幾秒內就準備好，而且組提示詞本來就需要。）
+- 串流到一半失敗了，用戶端看到的狀態碼是什麼？它怎麼知道出錯？
+- 什麼是首字延遲？為什麼它比總時間更影響「感覺上的速度」？
+
+**自我檢核**：
+- [ ] 能手寫一個正確的 SSE 事件，並用 `curl -N` 讀取串流。
+- [ ] 能解釋模型沉默時，後端怎麼送出 heartbeat。
+- [ ] 能說明回答到一半連線中斷時，介面會怎麼處理。
+
+## 15. 反向代理的緩衝
+
+**淺白解釋**：nginx 這類反向代理位於用戶端與應用程式之間。nginx 預設會**緩衝**上游的回應：先讀進記憶體（或暫存檔），即使用戶端很慢，上游也能盡快被釋放。壓縮（**gzip**）也必須先收集一批資料，才能產生壓縮區塊。這兩者對一般網頁有好處，對串流卻有害：用戶端可能要等緩衝區滿了、或回應結束，才收到任何東西。串流端點要把它們關掉（`proxy_buffering off`、`gzip off`），或由應用程式送出 `X-Accel-Buffering: no` 標頭要求關閉。逾時的意義也會改變：`proxy_read_timeout` 是**兩次讀取之間**的時間，不是整個回應的時間，所以只要定期有資料，長時間的串流就不會被切斷。
+
+**本 repo 對應位置**：
+- `frontend/nginx.conf.template`：`location = /api/query/stream` 設定 `proxy_buffering off`、`proxy_cache off`、`gzip off`；一般的 `/api/` 維持預設。
+- `backend/app/main.py`：串流回應帶有 `X-Accel-Buffering: no`、`Cache-Control: no-cache`。
+- `scripts/smoke-test.sh`：像瀏覽器一樣用 `curl --compressed`；設定 `STREAM_STRICT=1` 時，所有事件同時到達就判定失敗。本機測試的發現：只開 `proxy_buffering on` 時，nginx 1.29 仍會逐一轉送事件，但 gzip 會把整個回答壓到最後才送（ADR [0010](../decisions/0010-streaming-responses.md)）。
+
+**面試可能問**：
+- nginx 為什麼預設會緩衝上游回應？它保護的是什麼？
+- 你的 SSE 端點直接用 `curl` 打後端正常，透過 nginx 在瀏覽器裡卻一次全部出現。你會檢查什麼？
+- 對串流回應來說，`proxy_read_timeout` 量的是什麼？
+- 還有哪些層可能緩衝串流？（CDN、公司代理、壓縮 middleware、用戶端函式庫。）
+
+**自我檢核**：
+- [ ] 能用時間戳記示範有緩衝與沒有緩衝的串流差在哪裡。
+- [ ] 能解釋冒煙測試為什麼要送出 `Accept-Encoding: gzip`。
+
+## 16. Dev Containers 與 Codespaces
+
+**淺白解釋**：**dev container** 是用程式碼描述的開發環境（`.devcontainer/devcontainer.json`）：基底映像、**feature**（Docker、Python、Node…）、轉發的連接埠、環境變數，以及**生命週期指令**。**GitHub Codespaces**（或本機的 VS Code）會依它建立容器。`postCreateCommand` 在容器建立時執行一次；`postStartCommand` 則是**每次**啟動都會執行。停止的 codespace 會保留檔案，但執行中的程序會消失，所以伺服器要在 `postStartCommand` 裡啟動。`hostRequirements` 指定最低機型規格。`portsAttributes` 為連接埠加上標籤並控制自動轉發。**docker-in-docker** 會在容器裡另外執行一個 Docker daemon。
+
+**本 repo 對應位置**：
+- `.devcontainer/devcontainer.json`：4 核心／16GB、docker-in-docker、`containerEnv` 裡的 `COMPOSE_FILE` 與 `OLLAMA_MODELS`、8080 埠的標籤，11434／6333 永遠不轉發。
+- `.devcontainer/post-create.sh`（安裝 Ollama、從 `.env.codespaces` 建立 `.env`）與 `post-start.sh`（以 `0.0.0.0` 啟動 Ollama、拉模型、`docker compose up`、沒有索引時建立索引、執行 doctor）。
+- 透過 `COMPOSE_FILE` 套用的 `docker-compose.codespaces.yml`；`scripts/doctor.sh`。ADR [0011](../decisions/0011-devcontainer-for-codespaces.md)。
+
+**面試可能問**：
+- `postCreateCommand` 和 `postStartCommand` 差在哪裡？伺服器要在哪一個啟動？為什麼？
+- 怎麼讓 Compose override 只在某個環境生效，而不影響其他環境？
+- 為什麼不在 codespace 裡把 Ollama 放進 Compose？
+- 怎麼讓大型下載（模型）在重建容器後仍然保留？
+- 為什麼 11434 埠絕對不能轉發或設為公開？
+
+**自我檢核**：
+- [ ] 能解釋本 repo `devcontainer.json` 裡每個生命週期指令的作用與執行時機。
+- [ ] 能讀懂 `scripts/doctor.sh` 的輸出，並修正第一個失敗的項目。

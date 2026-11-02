@@ -1,0 +1,16 @@
+# Codespaces / dev container override. Applied automatically in a codespace:
+# .devcontainer/devcontainer.json sets
+#   COMPOSE_FILE=<repo>/docker-compose.yml:<repo>/docker-compose.codespaces.yml
+# so a plain `docker compose up -d` uses both files. Mac and EC2 do not set
+# COMPOSE_FILE and keep using docker-compose.yml alone.
+#
+# Ollama runs natively in the codespace (started on 0.0.0.0 by
+# .devcontainer/post-start.sh), the same topology as Mac / CI. See ADR 0006.
+services:
+  backend:
+    extra_hosts:
+      # Linux Docker Engine (docker-in-docker here) does not define
+      # host.docker.internal. The base file also has this line; repeating it
+      # here keeps Codespaces working even if the base file changes, and
+      # replaces the hand-written docker-compose.override.yml from the test log.
+      - "host.docker.internal:host-gateway"

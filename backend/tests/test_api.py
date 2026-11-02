@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock
 
 import httpx
@@ -181,3 +182,164 @@ def test_query_embedding_timeout_returns_504(settings):
     assert "embedding" in detail
     assert "45 秒" in detail
     assert "EMBED_REQUEST_TIMEOUT" in detail
+
+
+# --- /query/stream (Server-Sent Events) -------------------------------------
+
+
+def parse_sse(body: str) -> list[tuple[str, dict]]:
+    """Parse an SSE body into (event, data) pairs, the way the frontend does."""
+    events = []
+    for frame in body.split("\n\n"):
+        name, data = "message", []
+        for line in frame.splitlines():
+            if line.startswith("event:"):
+                name = line[len("event:") :].strip()
+            elif line.startswith("data:"):
+                data.append(line[len("data:") :].strip())
+        if data:
+            events.append((name, json.loads("\n".join(data))))
+    return events
+
+
+def stream_query(client, payload: dict) -> tuple[httpx.Response, list[tuple[str, dict]]]:
+    with client.stream("POST", "/query/stream", json=payload) as resp:
+        body = "".join(resp.iter_text())
+    return resp, parse_sse(body)
+
+
+def without_heartbeats(events):
+    return [(name, data) for name, data in events if name != "heartbeat"]
+
+
+def test_stream_sends_sources_then_tokens_then_done(client, llm):
+    client.post("/index", json={"wait": True})
+    resp, events = stream_query(client, {"question": "How does the player jump?", "top_k": 3})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    assert resp.headers["cache-control"] == "no-cache"
+    assert resp.headers["x-accel-buffering"] == "no"
+    # The first frame is sent before any slow work, so proxies see bytes at once.
+    assert events[0][0] == "heartbeat"
+
+    names = [name for name, _ in without_heartbeats(events)]
+    assert names[0] == "sources"
+    assert names[-1] == "done"
+    assert set(names[1:-1]) == {"token"}
+    assert len(names[1:-1]) > 1, "the answer should arrive in several token events"
+
+    sources = without_heartbeats(events)[0][1]
+    assert len(sources) == 3
+    assert set(sources[0]) >= {"ref", "file_path", "start_line", "end_line", "symbol", "score", "text"}
+
+    tokens = "".join(data["text"] for name, data in events if name == "token")
+    assert tokens == "Jump logic is in Player.jump [1]."
+
+    stats = events[-1][1]
+    assert stats["tokens"] == len(names[1:-1])
+    assert stats["answer_chars"] == len(tokens)
+    assert 0 <= stats["retrieval_seconds"] <= stats["first_token_seconds"] <= stats["total_seconds"]
+    assert len(llm.prompts) == 1
+
+
+def test_stream_answer_matches_non_streaming_query(client):
+    client.post("/index", json={"wait": True})
+    payload = {"question": "How is the score shown?", "top_k": 2}
+    plain = client.post("/query", json=payload).json()
+    _, events = stream_query(client, payload)
+    tokens = "".join(data["text"] for name, data in events if name == "token")
+    sources = next(data for name, data in events if name == "sources")
+    assert tokens == plain["answer"]
+    assert [s["file_path"] for s in sources] == [s["file_path"] for s in plain["sources"]]
+
+
+def test_stream_sends_heartbeats_while_the_model_is_silent(settings):
+    settings = settings.model_copy(update={"stream_heartbeat_seconds": 0.05})
+    llm = FakeLLM(prompts=[], answer="Slow answer [1].", delay=0.4)
+    services = make_services(settings, llm=llm)
+    services.indexer.run()
+    with TestClient(create_app(services)) as c:
+        _, events = stream_query(c, {"question": "jump"})
+    names = [name for name, _ in events]
+    first_token = names.index("token")
+    sources_at = names.index("sources")
+    # Several heartbeats between the sources and the first token (0.4 s / 0.05 s).
+    assert names[sources_at:first_token].count("heartbeat") >= 3
+    elapsed = [data["elapsed_seconds"] for name, data in events if name == "heartbeat"]
+    assert elapsed == sorted(elapsed)
+    assert names[-1] == "done"
+    assert events[-1][1]["first_token_seconds"] >= 0.4
+
+
+def test_stream_before_index_returns_hint(client, llm):
+    _, events = stream_query(client, {"question": "anything"})
+    events = without_heartbeats(events)
+    assert [name for name, _ in events] == ["sources", "token", "done"]
+    assert events[0][1] == []
+    assert "還沒有任何索引" in events[1][1]["text"]
+    assert llm.prompts == []
+
+
+@pytest.mark.parametrize("payload", [{}, {"question": ""}, {"question": "   "}, {"question": "q", "top_k": 0}])
+def test_stream_validation(client, payload):
+    assert client.post("/query/stream", json=payload).status_code == 422
+
+
+def _streaming_llm(error: Exception, after: list[str] | None = None) -> MagicMock:
+    from llama_index.core.llms import CompletionResponse
+
+    def gen(prompt):
+        text = ""
+        for piece in after or []:
+            text += piece
+            yield CompletionResponse(text=text, delta=piece)
+        raise error
+
+    return MagicMock(stream_complete=MagicMock(side_effect=gen))
+
+
+def test_stream_llm_timeout_sends_error_event_after_sources(settings):
+    settings = settings.model_copy(update={"llm_request_timeout": 120.0})
+    services = make_services(settings)
+    services.indexer.run()
+    object.__setattr__(services.rag, "llm", _streaming_llm(httpx.ReadTimeout("timed out"), after=["Partial ", "answer"]))
+    with TestClient(create_app(services)) as c:
+        resp, events = stream_query(c, {"question": "jump"})
+    assert resp.status_code == 200  # the status line went out before the timeout
+    events = without_heartbeats(events)
+    assert [name for name, _ in events] == ["sources", "token", "token", "error"]
+    error = events[-1][1]
+    assert error["kind"] == "timeout"
+    assert error["stage"] == "llm"
+    assert "生成回答逾時" in error["detail"]
+    assert "120 秒" in error["detail"]
+    assert "LLM_REQUEST_TIMEOUT" in error["detail"]
+
+
+def test_stream_embedding_timeout_sends_error_event(settings):
+    services = make_services(settings)
+    services.indexer.run()
+    slow = MagicMock(get_query_embedding=MagicMock(side_effect=httpx.ReadTimeout("timed out")))
+    object.__setattr__(services.rag, "embed_model", slow)
+    with TestClient(create_app(services)) as c:
+        _, events = stream_query(c, {"question": "jump"})
+    events = without_heartbeats(events)
+    assert [name for name, _ in events] == ["error"]
+    assert events[0][1]["stage"] == "embedding"
+    assert "EMBED_REQUEST_TIMEOUT" in events[0][1]["detail"]
+
+
+def test_stream_llm_failure_sends_error_event(settings):
+    services = make_services(settings)
+    services.indexer.run()
+    object.__setattr__(services.rag, "llm", _streaming_llm(RuntimeError("model crashed")))
+    with TestClient(create_app(services)) as c:
+        _, events = stream_query(c, {"question": "jump"})
+    events = without_heartbeats(events)
+    assert [name for name, _ in events] == ["sources", "error"]
+    assert events[-1][1] == {"kind": "error", "detail": "RuntimeError: model crashed"}
+
+
+def test_health_reports_default_top_k(client):
+    assert client.get("/health").json()["top_k"] == 4

@@ -136,7 +136,10 @@ jobs:
           docker compose $COMPOSE_FILES exec -T backend python -c \
             "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:11434/api/version', timeout=10).read().decode())"
 
-      - name: Index the sample project and query it
+      - name: Index the sample project and query it (plain and streaming)
+        env:
+          # Fail if the streamed answer arrives in one burst (nginx buffering or gzip; ADR 0010).
+          STREAM_STRICT: "1"
         run: ./scripts/smoke-test.sh
 
       - name: Dump logs on failure
