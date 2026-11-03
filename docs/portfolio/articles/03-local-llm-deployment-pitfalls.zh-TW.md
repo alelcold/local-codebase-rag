@@ -1,24 +1,17 @@
-# Article 3 (draft) — Lessons from deploying a local LLM: narrowing down failures layer by layer
-
-> **Status**: first draft, not published.
-> **Language**: this article is written in Traditional Chinese for publication on Chinese-language platforms, so it is an exception to the repo's English-first rule. A one-paragraph English summary follows; the full text is below.
-> **Plan**: Article 3 in [`../article-series.md`](../article-series.md). Sources: [devlog 2026-11-01](../../devlog/2026-11-01.md), [devlog 2026-11-01 Codespaces setup](../../devlog/2026-11-01-codespace-setup.md), [devlog 2026-11-02](../../devlog/2026-11-02.md), [`metrics.md`](../../metrics.md), ADRs [0002](../../decisions/0002-ollama-outside-docker-on-mac.md), [0006](../../decisions/0006-multi-environment-deployment.md), [0007](../../decisions/0007-multi-environment-testing-strategy.md), [0008](../../decisions/0008-ci-design.md), [0009](../../decisions/0009-timeout-settings.md), [0010](../../decisions/0010-streaming-responses.md), [0011](../../decisions/0011-devcontainer-for-codespaces.md).
-> **Privacy**: every path, symbol and question comes from `examples/sample-game-frontend/` or this repo.
-
-**English summary.** I built an on-prem RAG system for asking questions about a game front-end codebase (Ollama on the host; Qdrant, FastAPI + LlamaIndex and a React UI in Docker). With no Mac available, I tested it first in GitHub Codespaces (Linux, CPU only). Three failures came up, and each was solved by narrowing the scope one layer at a time: containers could not reach Ollama (`host.docker.internal` does not exist on Linux, and Ollama listens on `127.0.0.1` by default); after restarting the codespace, indexing failed because Ollama does not restart by itself; and queries returned 504 after about 100 seconds, which `curl` tests at each hop traced to the Codespaces port forwarder rather than nginx, fixed by streaming the answer. The article ends with measured numbers, notes on working with an AI coding agent, and next steps (real Mac hardware, 14B model).
-
----
-
 # 地端 LLM 部署踩坑紀錄：一層一層縮小範圍
 
-> 草稿。`[截圖：…]` 是建議放截圖的位置，`{待填}` 是還沒量到的數據。
+> **狀態**：草稿，尚未發布。`[截圖：…]` 是建議放截圖的位置，`{待填}` 是還沒量到的數據。
+> **語言**：繁體中文版。英文版見 [`03-local-llm-deployment-pitfalls.en.md`](03-local-llm-deployment-pitfalls.en.md)，兩篇內容對應，修改時請一起更新。
+> **規劃**：[`../article-series.md`](../article-series.md) 第 3 篇。依據：[devlog 2026-11-01](../../devlog/2026-11-01.md)、[devlog 2026-11-01 Codespaces 環境建置](../../devlog/2026-11-01-codespace-setup.md)、[devlog 2026-11-02](../../devlog/2026-11-02.md)、[devlog 2026-11-03](../../devlog/2026-11-03.md)、[`metrics.md`](../../metrics.md)、ADR [0002](../../decisions/0002-ollama-outside-docker-on-mac.md)、[0006](../../decisions/0006-multi-environment-deployment.md)、[0007](../../decisions/0007-multi-environment-testing-strategy.md)、[0008](../../decisions/0008-ci-design.md)、[0009](../../decisions/0009-timeout-settings.md)、[0010](../../decisions/0010-streaming-responses.md)、[0011](../../decisions/0011-devcontainer-for-codespaces.md)。
+> **隱私**：所有路徑、符號與問題都來自 `examples/sample-game-frontend/` 或本 repo。
 
 ## TL;DR
 
 - 我做了一套地端的 codebase RAG：Ollama 跑在主機上，Qdrant、FastAPI + LlamaIndex 後端、React 前端跑在 Docker 裡。
 - 手邊沒有 Mac，所以先在 GitHub Codespaces（Linux、只有 CPU）上測。踩到三個坑，每個都不是程式邏輯的 bug，而是**環境與網路**的問題，單元測試全部通過也抓不到。
 - 三個坑的除錯方法都一樣：**從呼叫端的位置、一段一段驗證**，每次只排除一層。
-- CPU 上 3B 模型、`TOP_K=4`，一次查詢約 55 秒。最後的 504 是 Codespaces 的連接埠轉發在約 100 秒時切斷連線，調高我們自己的逾時沒有用，改成串流回應才解決。
+- CPU 上跑 3B 模型，在 codespace 內用 `curl` 經 nginx 的單次非串流查詢是 54.7 秒（當時的 `top_k` {待填}）。最後的 504 是 Codespaces 的連接埠轉發在約 100 秒時切斷連線，調高我們自己的逾時沒有用；改成串流回應後，同一類查詢從瀏覽器經轉發網址完成了（首字延遲 30.4 秒、總耗時 43.8 秒、129 個 token）。這一次只有 43.8 秒，**還沒有驗證超過 100 秒的查詢**。
+- 番外：第四個問題不在服務裡，而是 `git push` 被 Git LFS 的 hook 擋下（見「番外」）。
 
 ---
 
@@ -195,7 +188,11 @@ ss -ltnp | grep 11434
 4. Qdrant 沒有索引時建立索引。
 5. 執行 `scripts/doctor.sh` 做健康檢查，印出網址。
 
-`scripts/doctor.sh` 是把這兩個坑的排查步驟直接寫成腳本：Ollama 已安裝 → 程序在跑 → API 有回應 → 監聽位址 → 模型 → Docker → 容器 → **容器連得到 Ollama** → 後端 `/health` → nginx 代理 → Qdrant 有索引。每一項失敗都印出修正指令，依賴它的後續檢查會略過，直接告訴你斷在哪一層。
+`devcontainer.json` 也把網路面的決定寫死：`hostRequirements` 要求 4 核心／16GB／32GB；只自動轉發 8080（前端），11434（Ollama）與 6333（Qdrant）設為 `ignore`，永遠不會被轉發，坑 1 的資安提醒因此不用靠人記得。`postCreateCommand` 用 `.env.codespaces` 建立 `.env`（`qwen2.5-coder:3b`、`TOP_K=4`、`LLM_NUM_CTX=8192`）。
+
+結果：重建（或重新建立）codespace 之後，`scripts/doctor.sh` 11 項全部通過，從瀏覽器問得了第一批問題，不需要輸入任何指令（devlog 2026-11-02）。從建立 codespace 到介面可以回答的時間：{待填}。**停止再啟動後 Ollama 會不會自己回來，也還沒實測**（devlog 2026-11-02 的待辦），所以「坑 2 已解決」目前只有設計上的依據。
+
+`scripts/doctor.sh` 是把這兩個坑的排查步驟直接寫成腳本：Ollama 已安裝 → 程序在跑 → API 有回應 → 監聽位址 → 模型 → Docker → 容器 → **容器連得到 Ollama** → 後端 `/health` → nginx 代理 → Qdrant 有索引（第 12 項是後來加的 Git LFS 檢查，見「番外」）。每一項失敗都印出修正指令，依賴它的後續檢查會略過，直接告訴你斷在哪一層。
 
 [截圖：scripts/doctor.sh 全部通過的輸出]
 
@@ -216,7 +213,7 @@ ss -ltnp | grep 11434
 
 一個請求能等多久，取決於**最沒耐心的那一段**。
 
-#### 第一輪：懷疑 nginx
+#### 第一輪：先檢查我們自己控制的每一段
 
 **現象**：從介面提問，等了一陣子後顯示 504 Gateway Timeout。
 
@@ -226,9 +223,20 @@ ss -ltnp | grep 11434
 
 [截圖：介面顯示 504 Gateway Timeout]
 
-**推測**：504 是代理回的，最近的代理是 nginx，而 nginx 的 `proxy_read_timeout` 預設是 60 秒。CPU 上跑 3B 模型，一次查詢超過 60 秒很合理。
+**推測**：504 是代理回的，最近的代理是 nginx，所以先懷疑我們自己設的逾時太短。CPU 上跑 3B 模型，一次查詢推算要 1.5～2 分鐘（`top_k=8`，推算值，不是 10 次查詢的實測平均），超過任何偏短的預設值都很合理。
 
-**解法嘗試**：把 nginx 與後端呼叫 Ollama 的逾時都改成可以在 `.env` 設定，預設 300 秒（ADR 0009）：
+**驗證**：先把每一段的實際設定列出來（ADR 0009）：
+
+| 連線段 | 修改前的設定 | 問題 |
+| --- | --- | --- |
+| nginx `proxy_read_timeout`／`proxy_send_timeout` | 寫死 900 秒 | 不重新 build 映像檔就改不了 |
+| 後端 → Ollama 生成（`LLM_REQUEST_TIMEOUT`） | 600 秒 | 逾時時回傳籠統的 502 與原始例外名稱 |
+| 後端 → Ollama embedding | **沒有逾時**（ollama client 預設永遠等） | 卡住時請求會掛著，直到別的連線段放棄 |
+| 介面 | 一句固定的「可能需要 30 秒以上」 | 看不到等了多久，失敗時只顯示 `504 Gateway Timeout` |
+
+nginx 是 900 秒、LLM 是 600 秒，而 504 在約 1.5～2 分鐘就出現，這兩段都不可能是放棄的那一個。這個推測在驗證時就被推翻了，剩下的嫌疑是 nginx **前面**的東西。
+
+**仍然做的修正**：這張表本身有三個缺口（寫死、沒逾時、訊息不清楚），所以還是把逾時都改成可在 `.env` 設定，預設 300 秒（ADR 0009）：
 
 | 變數 | 連線段 | 預設 |
 | --- | --- | --- |
@@ -236,17 +244,15 @@ ss -ltnp | grep 11434
 | `LLM_REQUEST_TIMEOUT` | 後端 → Ollama（生成） | 300 |
 | `EMBED_REQUEST_TIMEOUT` | 後端 → Ollama（embedding，原本**完全沒有逾時**） | 300 |
 
-nginx 透過官方映像的 template 機制（`/etc/nginx/templates/*.template` + `envsubst`）讀取設定，改 `.env` 後 `docker compose up -d` 就生效，不用重新 build。
+300 秒大約是推算查詢時間（1.5～2 分鐘）的 2～3 倍。nginx 透過官方映像的 template 機制（`/etc/nginx/templates/*.template` + `envsubst`）讀取設定，改 `.env` 後 `docker compose up -d` 就生效，不用重新 build。
 
 順便處理了兩件事：後端遇到 Ollama 逾時時回傳 504，並寫出是哪個階段、要調哪個變數（以前是籠統的 502）；介面等待時顯示「生成中」與已等待秒數。
 
-> 📝 待確認：repo 的歷史中，PR #1 的 nginx 設定已寫死 `proxy_read_timeout 900s`（ADR 0009 的「修改前」欄位）。發文前請對照測試紀錄，確認第一次遇到 504 時 nginx 實際生效的是預設 60 秒，還是 900 秒，並修正這一段的敘述。
-
-**結果**：還是 504。而且斷線時間點**固定在約 100 秒**，跟我設的 300 秒對不上。
+**結果**：這一輪的修正本身沒有讓 504 消失。斷線時間點在**約 100 秒**，跟 300、600、900 秒都對不上。
 
 #### 第二輪：斷在 100 秒，代表不是我們設的任何一個值
 
-這是整個排查的轉折點。我們這邊的三個逾時都是 300 秒，沒有任何一個是 100 秒。斷線時間和自己的設定對不上，就表示**放棄的是另一段連線**。
+這是整個排查的轉折點。我們這邊的逾時是 300 秒（修改前是 900 與 600 秒），沒有任何一個是 100 秒。斷線時間和自己的設定對不上，就表示**放棄的是另一段連線**。
 
 在 nginx 前面的只剩一段：**Codespaces 的連接埠轉發**。從瀏覽器打開的 `https://<codespace>-8080.app.github.dev` 不是直連 nginx，中間還有 GitHub 的轉發代理，它有自己的上限，我們設定不了。
 
@@ -309,9 +315,39 @@ location = /api/query/stream {
 
 [截圖：串流中的介面，引用已出現、回答逐字顯示中]
 
-**結果**：從瀏覽器經轉發網址的串流查詢 {待填：是否不再於約 100 秒中斷、首字延遲與總耗時}。
+**結果**：在 Codespaces 從瀏覽器經轉發網址問「玩家受傷後的無敵時間在哪裡設定？」（`qwen2.5-coder:3b`、`TOP_K=4`、模型載入後的第一次查詢），串流正常完成：**首字延遲 30.4 秒、總耗時 43.8 秒、129 個 token**，沒有 504。
+
+| 次數 | 首字延遲 | 總耗時 | 備註 |
+| --- | --- | --- | --- |
+| 第一次（模型載入後第一次查詢） | 30.4 秒 | 43.8 秒（129 個 token） | 首字前的 30.4 秒是模型載入加提示詞處理 |
+| 同一題再問一次 | 0.8 秒 | 14.3 秒（134 個 token） | Ollama 重用了快取的提示詞，**不是**一般延遲；兩次的生成速度都約 10 tokens/s |
+
+這個結果要小心解讀：43.8 秒**低於**非串流版本被切斷的約 100 秒，所以它證明的是「串流查詢在這個轉發網址上走得通」，**不是**「轉發不再限制長查詢」。第二次的 0.8 秒是快取造成的，也不能當成延遲數字。更長的查詢（超過 100 秒）還沒有測，devlog 2026-11-02 的待辦清單裡仍是未勾選。
 
 **還沒解決的風險**：如果轉發限制的是請求的**總時間**而不是閒置時間，太長的回答仍會被切。那時的下一步是非同步查詢工作 + 輪詢，讓每個 HTTP 請求都很短。
+
+---
+
+### 番外：`git push` 被 Git LFS 的 hook 擋下
+
+這個問題和服務無關，但同樣是「Mac 上不會遇到」的環境差異，而且是在 dev container 自動化之後才浮現。
+
+**現象**：在 codespace 裡 `git push`，什麼都還沒送出就被拒絕，但這個 repo 根本沒用 Git LFS（沒有 `.gitattributes`、沒有 LFS 檔案）。
+
+```text
+This repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the 'pre-push' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks').
+```
+
+**推測**：訊息說 hook 在、`git-lfs` 執行檔不在。hook 是誰放的、為什麼放，從訊息看不出來。
+
+**驗證**：clone 的 `.git/hooks/` 裡有 Git LFS 的 hook（`pre-push` 等，會呼叫 `git lfs …`），但 dev container 的基底映像（`mcr.microsoft.com/devcontainers/base:ubuntu-24.04`）沒有 `git-lfs`，`post-create.sh` 也沒有安裝。hook 在缺少 `git-lfs` 時會以錯誤結束，而 `pre-push` hook 失敗就會中止 push。
+
+**解法**：
+- `.devcontainer/post-create.sh` 把 `git-lfs` 跟 `jq`、`zstd`、`iproute2` 一起安裝，再執行 `git lfs install --skip-repo`。不加 `--skip-repo` 的 `git lfs install` 在 hook 已存在時會以 2 結束（`Hook already exists: pre-push … run git lfs update --manual`），在 `set -e` 的腳本裡會讓整個 `postCreateCommand` 中斷；`--skip-repo` 只設定全域的 filter。
+- `scripts/doctor.sh` 新增第 12 項檢查：有 LFS hook 但沒有 `git-lfs` 時失敗，並印出安裝指令（因為這個 repo 沒有 LFS 檔案，也列出直接刪除 hook 的替代做法）。這一項與服務無關，所以排在最後。
+- 已經存在的 codespace：`sudo apt-get update && sudo apt-get install -y git-lfs`，或重建容器。
+
+教訓和前三個坑一樣：自動化環境的清單（這裡是 `apt-get install` 的套件）只會包含你踩過的坑，每換一種動作（這次是 push）就可能冒出新的缺口。
 
 ---
 
@@ -323,13 +359,14 @@ location = /api/query/stream {
 
 | 指標 | 數值 | 備註 |
 | --- | --- | --- |
-| 機型 | {待填} | `devcontainer.json` 要求 4 核心／16GB |
-| 範例專案完整索引 | 20 個檔案 → 67 個片段，**35 秒** | CPU 產生 embedding |
-| Prompt eval 速度 | **25.3 tokens/s** | {待填：量測方式，`ollama run --verbose` 或 API 回傳} |
-| 生成（eval）速度 | **12.4 tokens/s** | 同上 |
-| 一次查詢（非串流 `/query`，`curl` 經 nginx） | **約 55 秒**（實測 54.7 秒） | `TOP_K=4` |
+| 機型 | 4 核心（devlog 2026-11-03） | `devcontainer.json` 的 `hostRequirements` 要求 4 核心／16GB；實際機型名稱 {待填} |
+| 範例專案完整索引 | 20 個檔案 → 67 個片段，**41.9 秒**（升級後第一次全量重建）；18.8～20.7 秒（切換 `CHUNK_METADATA` 後的全量重建） | CPU 產生 embedding；2026-11-01 第一次索引的耗時沒有記錄，{待填} |
+| Prompt eval 速度 | {待填} | 尚未用 `ollama run --verbose` 或 API 回傳量測 |
+| 生成（eval）速度 | **約 10 tokens/s** | 兩次手動串流查詢（metrics §3），不是獨立量測 |
+| 一次查詢（非串流 `/query`，`curl` 經 nginx） | **54.7 秒** | 單次查詢；當時的 `top_k` {待填} |
 | 瀏覽器經連接埠轉發（非串流） | 約 100 秒後 504 | |
-| 串流查詢：首字延遲／總耗時 | {待填}／{待填} | |
+| 串流查詢（瀏覽器經轉發網址）：首字延遲／總耗時 | **30.4 秒／43.8 秒**（129 個 token） | `TOP_K=4`，模型載入後第一次查詢；同一題再問：0.8 秒／14.3 秒，是提示詞快取 |
+| `scripts/evaluate.py` 的 10 題平均（`TOP_K=4`） | 首字延遲 13.0 秒、總耗時 20.9 秒（基準線 A 組） | 10 個不同問題、先暖機，主要題組；見 metrics §4a 與第 6 篇 |
 | 建立 codespace 到介面可以回答 | {待填} | 第一次啟動 |
 
 怎麼讀 prompt eval 和 eval 這兩個數字：在 CPU 上，一次 RAG 查詢的時間大致是
@@ -338,7 +375,7 @@ location = /api/query/stream {
 總時間 ≈ 檢索 + 提示詞 token 數 ÷ prompt eval 速度 + 回答 token 數 ÷ eval 速度
 ```
 
-RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所以**首字延遲主要由 prompt eval 決定**，這也是把 `TOP_K` 從 8 降到 4 的原因。這次查詢的提示詞與回答 token 數：{待填}。
+RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所以**首字延遲主要由 prompt eval 決定**，這也是把 `TOP_K` 從 8 降到 4 的原因。串流那次查詢的回答是 129 個 token：以約 10 tokens/s 計，生成約 13 秒，與總耗時 43.8 秒減首字延遲 30.4 秒 = 13.4 秒吻合；其餘 30.4 秒是模型載入加提示詞處理。提示詞的 token 數：{待填}。
 
 ### CI（GitHub Actions runner，CPU，第一次執行、沒有快取）
 
@@ -357,8 +394,8 @@ RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所�
 
 | 項目 | 數值 |
 | --- | --- |
-| 後端單元測試 | 70 個通過，約 2 秒，不需網路 |
-| Codespaces 上發現、單元測試抓不到的問題 | 本文三個坑（測試紀錄完整清單 {待填}） |
+| 後端單元測試 | 加入逾時處理後 56 個、加入串流後 70 個（約 2 秒，不需網路）；本文定稿時 main 上是 170 個（約 7 秒，metrics §6） |
+| Codespaces 上發現、單元測試抓不到的問題 | 本文三個坑加上 Git LFS 番外（測試紀錄完整清單 {待填}） |
 
 ### Mac M2（尚未實測）
 
@@ -389,7 +426,7 @@ RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所�
 
 ### 成本
 
-Claude Code 的花費到目前約 **17 美元**（各工作階段拆分 {待填}；第一個建出初版的工作階段約 7 美元）。Codespaces 核心時數 {待填}，GitHub Actions 是公開 repo，使用 GitHub 提供的 runner。
+Claude Code 的花費：第一個建出初版的工作階段約 **7 美元**（metrics §1）；之後各工作階段的花費與總計 {待填}（`metrics.md` 尚未記錄）。Codespaces 核心時數 {待填}，GitHub Actions 是公開 repo，使用 GitHub 提供的 runner。
 
 心得一句話：**AI agent 把「寫程式」的成本壓得很低，但「在真實環境驗證」的成本沒有變。** 真正省時間的做法，是把驗證結果寫成具體的紀錄（現象、指令、錯誤訊息、數字），再交給 agent。
 
@@ -399,7 +436,7 @@ Claude Code 的花費到目前約 **17 美元**（各工作階段拆分 {待填}
 
 回頭看三個坑，共通點是：
 
-1. **都不是程式邏輯的 bug。** 70 個單元測試全過，CI 也綠的，問題都出在網路拓撲、程序生命週期、代理逾時。
+1. **都不是程式邏輯的 bug。** 單元測試全過（當時 70 個），CI 也是綠的，問題都出在網路拓撲、程序生命週期、代理逾時。
 2. **都在 Mac 上不會發生。** Docker Desktop 幫你處理了 `host.docker.internal` 和 loopback 轉發，App 幫你自動啟動 Ollama，本機沒有連接埠轉發。換到 Linux 才全部浮上來。
 3. **都靠同一個方法解決：從呼叫端的位置、一次只驗證一層。** 用 `curlimages/curl` 容器模擬後端容器的網路；用 `ss` 確認程序和監聽位址；在 codespace 內 `curl` 繞過轉發。每一步都排除一層，直到只剩一個可疑對象。
 
@@ -409,7 +446,8 @@ Claude Code 的花費到目前約 **17 美元**（各工作階段拆分 {待填}
 
 - [ ] **Mac M2 實機測試**：量 14B 在 Metal 上的生成速度與查詢時間，並在同一台機器上比較 Docker 內 CPU 與原生 Metal，用數字支持 ADR 0002。
 - [ ] **14B 模型對比**：用 `docs/evaluation/questions.md` 的 10 題，比較 3B 與 14B 的正確性、引用正確率，以及陷阱題（線上多人同步，範例專案根本沒有這個功能）會不會產生幻覺。
-- [ ] 在 Codespaces 從瀏覽器實測串流查詢，確認不再於約 100 秒中斷，補上首字延遲。
+- [ ] 在 Codespaces 從瀏覽器實測**超過 100 秒**的串流查詢，確認不會被轉發切斷（43.8 秒的那次不足以證明）。
+- [ ] 停止再啟動 codespace，確認 Ollama 與服務自己回來（`./scripts/doctor.sh`），並記錄從建立到可回答的時間。
 
 原始碼、ADR 與開發日誌都在 repo 裡：{待填：repo 網址}
 
@@ -421,14 +459,15 @@ Claude Code 的花費到目前約 **17 美元**（各工作階段拆分 {待填}
 2. 單元測試全過，Codespaces 上卻壞了三次：地端 RAG 部署除錯實錄
 3. 不是 nginx 的錯：從 504 逾時追到 Codespaces 連接埠轉發的除錯過程
 
-## 附錄 B：LinkedIn 摘要（約 150 字）
+## 附錄 B：LinkedIn 摘要（150 字內）
 
-沒有 Mac，我先在 Codespaces 的 CPU 環境測試自己做的地端 RAG。單元測試全過，部署後卻壞了三次：容器連不到 Ollama、重開後 Ollama 沒啟動、查詢固定在約 100 秒回 504。我用 curl 一層一層繞過可疑的連線段，追到 Codespaces 連接埠轉發，改成串流解決。這篇記錄除錯過程，以及用 AI agent 開發時人該負責的事。
+沒有 Mac，我先在 Codespaces 的 CPU 環境測試我的地端 RAG。單元測試全過，部署後卻壞了三次：容器連不到 Ollama、重開後 Ollama 沒啟動、查詢在約 100 秒回 504。我用 curl 逐層排除，追到連接埠轉發，改串流後查詢得以完成。附 AI 協作心得。
 
 ## 發布前檢查
 
 - [ ] 所有路徑、符號與截圖都來自 `examples/sample-game-frontend/` 或本 repo。
-- [ ] 所有數字都對照過 `docs/metrics.md`，並註明環境；35 秒索引、25.3／12.4 tokens/s、約 17 美元同步補進 `metrics.md`。
-- [ ] 確認「第一輪：懷疑 nginx」中 60 秒／900 秒的敘述（見文中待確認）。
+- [ ] 所有數字都對照過 `docs/metrics.md`、devlog 或評估報告，並註明環境。
+- [ ] 每一次 Claude Code 工作階段的花費與總計補進 `metrics.md` §1。
 - [ ] 補上所有 `[截圖：…]` 與 `{待填}`。
+- [ ] 內容有修改時，同步更新英文版。
 - [ ] 轉貼後把連結補回 `article-series.md`。
