@@ -99,8 +99,8 @@ def load_samples(paths: list[Path], include_thresholded: bool = False) -> tuple[
         if (retrieval or {}).get("chunk_metadata"):
             model += " + CHUNK_METADATA"
         group = groups.setdefault(model, Group(model))
-        group.reports.append(path.name)
         before = len(group.samples)
+        scored = 0  # excerpts with a cosine score, before removing duplicates
         for r in report["results"]:
             if r.get("error"):
                 continue
@@ -110,6 +110,7 @@ def load_samples(paths: list[Path], include_thresholded: bool = False) -> tuple[
                 c = cosine_of(s, retrieval)
                 if c is None:
                     continue
+                scored += 1
                 loc = f"{s.get('file_path')}:{s.get('start_line')}-{s.get('end_line')}"
                 key = (model, r.get("question"), loc, round(c, 4))
                 if key in seen:  # the same excerpt for the same question in another run
@@ -125,8 +126,20 @@ def load_samples(paths: list[Path], include_thresholded: bool = False) -> tuple[
                         trick=trick,
                     )
                 )
-        if len(group.samples) == before:
-            notes.append(f"{path.name}: no cosine scores (hybrid run written before vector_score existed?)")
+        # A report is listed as used only when it added samples, so no file ends
+        # up both under "Skipped" and under a group's "Reports".
+        if len(group.samples) > before:
+            group.reports.append(path.name)
+        elif scored:
+            notes.append(
+                f"{path.name}: not used, all {scored} scored excerpts already counted from another report "
+                "(same question, excerpt and score)"
+            )
+        else:
+            notes.append(
+                f"{path.name}: not used, no cosine scores (a hybrid run written before vector_score existed "
+                "stores only RRF scores)"
+            )
     return groups, notes
 
 
@@ -239,7 +252,7 @@ def render(group: Group, rows: list[Row], rec: Recommendation) -> str:
     lines = [
         f"## Embedding `{group.embed_model}`",
         "",
-        f"Reports ({len(group.reports)}): " + ", ".join(f"`{r}`" for r in group.reports),
+        f"Reports used ({len(group.reports)}) / 使用的報告: " + ", ".join(f"`{r}`" for r in group.reports),
         "",
         "### Cosine distribution / 分數分布",
         "",
@@ -311,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
     groups, notes = load_samples(paths, args.include_thresholded)
     out = ["# SCORE_THRESHOLD calibration / 相似度門檻校準", ""]
     if notes:
-        out += ["Skipped / 略過：", ""] + [f"- {n}" for n in notes] + [""]
+        out += ["Not used / 未使用的報告（not counted below / 不列入下方統計）：", ""] + [f"- {n}" for n in notes] + [""]
     usable = [g for g in groups.values() if g.samples]
     if not usable:
         out.append("No cosine scores in these reports / 報告中沒有可用的 cosine 分數。")

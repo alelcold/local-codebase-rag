@@ -512,6 +512,20 @@ def test_calibrate_reads_vector_score_or_cosine_score_and_skips_rrf_and_threshol
     assert set(groups) == {"nomic-embed-text", "nomic-embed-text + CHUNK_METADATA"}
 
 
+def test_calibrate_never_lists_a_report_as_both_skipped_and_used(tmp_path):
+    a = cal_report(tmp_path / "a.json", [result("q1", ["a.ts"], [("a.ts", 0.7)], key="score")])
+    hybrid_old = cal_report(tmp_path / "h.json", [result("q1", ["a.ts"], [("a.ts", 0.03)], key="score")],
+                             {"hybrid_search": True})
+    copy = cal_report(tmp_path / "c.json", [result("q1", ["a.ts"], [("a.ts", 0.7)], key="score")])
+    groups, notes = cal.load_samples([a, hybrid_old, copy])
+    assert groups["nomic-embed-text"].reports == ["a.json"]
+    assert [n.split(":")[0] for n in notes] == ["h.json", "c.json"]
+    assert "no cosine scores" in notes[0] and "already counted" in notes[1]
+    rows = [cal.evaluate_threshold(groups["nomic-embed-text"].samples, 0.5)]
+    text = cal.render(groups["nomic-embed-text"], rows, cal.Recommendation(None, "x"))
+    assert "Reports used (1)" in text and "h.json" not in text and "c.json" not in text
+
+
 def test_calibrate_counts_drops_blocks_lost_questions_and_trick_refusals():
     S = cal.Sample
     samples = [
