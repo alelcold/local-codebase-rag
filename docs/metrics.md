@@ -116,6 +116,14 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 
 ## How to measure
 
+On the Mac M2, one command measures §2, §3, §4, §4a and §5 and writes a summary whose tables have the same columns as this file (ADR 0016; README「在 Mac 實機測試（一鍵量測）」):
+
+```bash
+./scripts/benchmark-mac.sh
+```
+
+The single measurements below are what it runs.
+
 ```bash
 # Index time (prints duration at the end)
 ./scripts/index.sh --full
@@ -259,6 +267,14 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-02 | backend 映像檔大小，預設／`INSTALL_RERANK=true`（`docker images`，linux/amd64） | 616 MB／2.14 GB（+1.5 GB：torch CPU 版、transformers、scipy、scikit-learn 等；不含模型） |
 
 ## 量測方式
+
+在 Mac M2 上，一個指令就能量完 §2、§3、§4、§4a、§5，並輸出欄位與本檔案相同的摘要（ADR 0016；README「在 Mac 實機測試（一鍵量測）」）：
+
+```bash
+./scripts/benchmark-mac.sh
+```
+
+下面是它實際執行的個別量測。
 
 ```bash
 # 索引時間（最後會顯示耗時）

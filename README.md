@@ -7,26 +7,13 @@
 
 回答會附上引用的**檔案路徑與行號**，例如 `src/entities/Player.ts:16-113`，點開即可看到對應的程式碼。
 
-```mermaid
-flowchart LR
-  subgraph mac["macOS（主機）"]
-    ollama["Ollama（Metal GPU）<br/>LLM：qwen2.5-coder:14b<br/>Embedding：nomic-embed-text"]
-    project[("你的專案資料夾")]
-  end
-  subgraph docker["Docker"]
-    fe["frontend<br/>React + Vite（nginx）<br/>:8080"]
-    be["backend<br/>FastAPI + LlamaIndex<br/>:8000"]
-    qd[("Qdrant<br/>volume 持久化")]
-  end
-  user(("團隊成員")) --> fe
-  fe -- "/api" --> be
-  be --> qd
-  be -- "http://host.docker.internal:11434" --> ollama
-  project -. "唯讀掛載 /codebase" .-> be
-```
+> **In English:** an on-premises RAG assistant that answers questions about a game front-end codebase with file-and-line citations. Ollama runs natively on the Mac (Metal GPU); Qdrant, a FastAPI + LlamaIndex backend and a React UI run in Docker. Retrieval changes are decided by automated evaluation runs, not by intuition. Design records and measurements are in [`docs/`](docs/) (English first).
 
 ## 目錄
 
+- [解決什麼問題](#解決什麼問題)
+- [技術亮點](#技術亮點)
+- [用數據做決策](#用數據做決策)
 - [硬體需求](#硬體需求)
 - [為什麼 Ollama 不放在 Docker 裡](#為什麼-ollama-不放在-docker-裡)
 - [安裝步驟](#安裝步驟)
@@ -34,10 +21,78 @@ flowchart LR
 - [如何查詢](#如何查詢)
 - [設定](#設定)
 - [常見問題](#常見問題)
+- [在 Mac 實機測試（一鍵量測）](#在-mac-實機測試一鍵量測)
 - [在 GitHub Codespaces 測試](#在-github-codespaces-測試)
 - [開發與測試](#開發與測試)
 - [專案結構](#專案結構)
 - [文件導覽](#文件導覽)
+
+## 解決什麼問題
+
+遊戲前端專案裡，最常見的問題是「這個數值在哪裡設定？」「這個流程經過哪些檔案？」。新成員或跨組同事要靠搜尋關鍵字、問人才找得到答案；而公司程式碼通常不能貼到雲端的 AI 服務。
+
+這個專案把「問程式碼」做成團隊內部的工具：
+
+- **程式碼不離開本機**：LLM 與 embedding 模型用 Ollama 在 Mac 上執行，沒有任何雲端 API，每次查詢的 API 成本為零（[ADR 0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md)）。
+- **回答可以驗證**：每個回答都附上 `檔案:行號` 引用，點開就能核對，不必相信模型。
+- **用數據調整**：檢索方式的每個改動都是 `.env` 開關、預設關閉，用固定題庫跑自動評估後才決定要不要採用（見[用數據做決策](#用數據做決策)）。
+
+```mermaid
+flowchart LR
+  user(("團隊成員")) -- "問題" --> fe
+  subgraph mac["macOS 主機：程式碼與問題都不離開這台電腦"]
+    ollama["Ollama（Metal GPU）<br/>LLM：qwen2.5-coder:14b<br/>Embedding：nomic-embed-text"]
+    project[("你的專案資料夾")]
+    subgraph docker["Docker Compose"]
+      fe["frontend<br/>React + Vite（nginx）<br/>:8080"]
+      be["backend<br/>FastAPI + LlamaIndex<br/>:8000"]
+      qd[("Qdrant<br/>向量 + 檔案雜湊<br/>volume 持久化")]
+    end
+  end
+  fe -- "/api（SSE 串流）" --> be
+  be <--> qd
+  be -- "http://host.docker.internal:11434" --> ollama
+  project -. "唯讀掛載 /codebase<br/>tree-sitter／Markdown 切塊、增量索引" .-> be
+```
+
+一次查詢在後端經過的步驟（除了向量檢索，其他都是 `.env` 開關，預設關閉）：
+
+```mermaid
+flowchart LR
+  q["問題"] --> vec["向量檢索<br/>（可設 SCORE_THRESHOLD）"]
+  q --> kw["BM25 + 識別字定義比對<br/>HYBRID_SEARCH"]
+  vec --> rrf["RRF 合併"]
+  kw --> rrf
+  rrf --> split["程式碼／文件分開取回<br/>SPLIT_RETRIEVAL、DOC_TOP_K"]
+  split --> rr["Cross-encoder 重新排序<br/>RERANK（選用）"]
+  rr --> llm["LLM 串流回答<br/>先送引用，再逐字送出"]
+```
+
+## 技術亮點
+
+| 亮點 | 做法 | 詳細 |
+| --- | --- | --- |
+| **地端隱私** | Ollama 直接裝在 macOS 上使用 Metal GPU（Docker 在 Mac 上用不到 GPU），Qdrant、後端、前端在 Docker；前端預設只綁定本機，後端與 Qdrant 一律只綁定本機 | [ADR 0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md)、[0002](docs/decisions/0002-ollama-outside-docker-on-mac.md) |
+| **串流回應** | `POST /query/stream`（SSE）：檢索完先送引用、再逐 token 送回答，閒置時每 10 秒送 heartbeat，避開轉發代理約 100 秒切斷沒有回應的連線；nginx 對串流路徑關閉緩衝 | [ADR 0010](docs/decisions/0010-streaming-responses.md) |
+| **混合檢索與分類取回** | 向量 + BM25 + 識別字定義比對，以 RRF 合併；程式碼與文件分開取回，避免文件擠掉程式碼；另有相似度門檻與 cross-encoder rerank。全部是開關，預設關閉 | [ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[0014](docs/decisions/0014-similarity-threshold.md)、[0015](docs/decisions/0015-rerank.md) |
+| **語法感知切塊、增量索引** | tree-sitter 依函式／class 切塊（過大的 class 依 method 再切）、Markdown 依標題切；以內容雜湊做增量索引，切塊設定改變時自動全量重建 | [ADR 0004](docs/decisions/0004-chunking-by-file-type.md) |
+| **自動化評估與實驗** | `evaluate.py` 用 10 題主要題組＋5 題識別字題組量測延遲、引用命中、定義檔命中、簡體字、陷阱題拒答；`compare.py` 比較兩次執行；`calibrate_threshold.py` 從結果校準門檻；`benchmark-mac.sh` 一鍵完成 Mac 實測 | [ADR 0012](docs/decisions/0012-automated-evaluation-metrics.md)、[0016](docs/decisions/0016-one-command-mac-benchmark.md)、[實驗計畫](docs/evaluation/experiment-plan-retrieval.md) |
+| **CI** | GitHub Actions：單元測試（Ollama、Qdrant 皆以假物件取代，157 個測試約 7 秒）、compose 設定檢查、映像檔 build、對 `main` 的 PR 跑端到端冒煙測試（runner 上的 Ollama + `qwen2.5-coder:0.5b`） | [ADR 0008](docs/decisions/0008-ci-design.md)、[metrics §6](docs/metrics.md#6-engineering-quality) |
+| **Dev Container** | 開啟 GitHub Codespace 就自動安裝 Ollama、拉模型、啟動服務、建立索引；`scripts/doctor.sh` 依序做 12 項檢查並印出修正指令 | [ADR 0011](docs/decisions/0011-devcontainer-for-codespaces.md) |
+
+## 用數據做決策
+
+檢索方式的改動都先在 Codespaces（CPU、`qwen2.5-coder:3b`、`TOP_K=4`）用固定題庫逐項比較，再決定要不要採用。下面的數字都來自 [`docs/metrics.md` §4a](docs/metrics.md#4a-retrieval-switches-adr-0013) 與 [devlog 2026-11-03](docs/devlog/2026-11-03.md)，是自動指標（人工判定正確性尚未完成）。
+
+| 問題 | 實驗 | 結果 | 決定 |
+| --- | --- | --- | --- |
+| 「在哪裡設定」的問題，取回的幾乎都是文件 | A 基準線 → C 分類取回（`DOC_TOP_K=1`） | 取回片段中的文件比例 **95% → 25%**；主要題組「有取回程式碼檔」**1/9 → 6/9** | 列入 Mac 實測（D 組）；預設值等人工評分後再決定 |
+| 問題直接寫出識別字（`INVINCIBLE_MS`）時找不到定義 | A → B 混合檢索 | 識別字題組「取回定義檔」**1/3 → 3/3**；每組的檢索時間都只有 0.07–0.21 秒 | 與分類取回一起列入 Mac 實測（D 組） |
+| 陷阱題（不存在的功能）應該回答「找不到」 | 用 A～F 的結果校準 `SCORE_THRESHOLD` | 相關與不相關片段的 cosine 中位數幾乎相同（0.616 vs 0.604）；常見的 0.70 會丟掉 **25/27（93%）**該取回的片段，0.50 就已經丟掉 2/27 | **不採用門檻**，G 組不執行（[校準輸出](docs/evaluation/results/2026-11-03-threshold-calibration.md)） |
+| 通用 reranker 能不能把定義程式碼排上來 | H 只開 rerank；D → I 在混合 + 分類上再加 rerank | H：主要題組定義檔仍 **0/3**、文件比例 85%；`bge-reranker-base` 給 Markdown 0.8–0.99 分、程式碼多半 < 0.1。I：定義檔 0/3 → 3/3，但被排上來的程式碼只有 0.0027 分、只有 3 題各一次，每次查詢多 **4.8 秒** rerank（CPU） | 通用 reranker 對程式碼的判斷有限：維持選用、預設關閉；Mac 實測用 `--with-rerank` 另跑 |
+| B 組首字延遲看起來快一倍（6.7 vs 13.0 秒） | 逐題比對 JSON | 7/10 題取回的片段與 A 完全相同，其中 3 題首字只要約 0.2 秒：是 Ollama 的提示快取，不是混合檢索 | 延遲比較另加註記；`benchmark-mac.sh` 在每次評估前卸載模型 |
+
+Mac M2 上的同一組比較用 [`scripts/benchmark-mac.sh`](#在-mac-實機測試一鍵量測) 一個指令產生（數據 {待填}）。
 
 ## 硬體需求
 
@@ -114,6 +169,8 @@ PROJECT_PATH=/Users/you/work/my-game-frontend
 ### 4. 開始使用
 
 打開 <http://localhost:8080>，右上角的狀態標籤是綠色就表示 Ollama、Qdrant 都正常。
+
+想量測這台 Mac 的生成速度、記憶體、索引與查詢時間，見[在 Mac 實機測試（一鍵量測）](#在-mac-實機測試一鍵量測)。
 
 ### 先用範例專案測試流程
 
@@ -432,6 +489,66 @@ docker compose down
 git pull && docker compose up -d --build
 ```
 
+## 在 Mac 實機測試（一鍵量測）
+
+拿到目標機器（Apple Silicon Mac，以 M2 32GB 為準）時，一個指令完成所有量測，輸出一份可以直接貼進 [`docs/metrics.md`](docs/metrics.md) 的摘要。設計考量見 [ADR 0016](docs/decisions/0016-one-command-mac-benchmark.md)。
+
+先確認：已完成[安裝步驟](#安裝步驟)（Ollama、Docker Desktop），`.env` 的 `PROJECT_PATH` 是範例專案（預設值），Mac 接上電源，並關閉其他吃記憶體的程式。第一次建議先跑 `--quick` 確認流程：
+
+```bash
+./scripts/benchmark-mac.sh --quick
+```
+
+```bash
+./scripts/benchmark-mac.sh
+```
+
+| 參數 | 說明 |
+| --- | --- |
+| （無） | 完整測試：主要題組 10 題＋識別字題組 5 題，各跑兩組 |
+| `--skip-pull` | 不執行 `ollama pull`（模型必須已經存在） |
+| `--quick` | 每個題組只跑 3 題（`1,4,10`、`11,12,13`），結果寫到 `.logs/`，**不要**貼到 metrics |
+| `--with-rerank` | 另跑 Rerank 組。會以 `INSTALL_RERANK=true` build backend（映像檔多約 1.5 GB），第一次查詢會下載約 1 GB 的 reranker 模型 |
+| `--help` | 顯示說明 |
+
+腳本依序：
+
+1. 確認是 Apple Silicon、`PROJECT_PATH` 是範例專案、Docker 在執行（`PROJECT_PATH` 指向其他專案時會停止：題目只適用範例專案，結果也會提交到 repo）
+2. 確認 Ollama 直接安裝在 macOS 上（沒在執行時自動啟動），拉取 `qwen2.5-coder:14b` 與 `nomic-embed-text`
+3. 卸載模型後以 `ollama run --verbose` 量冷啟動的載入時間，再用較長的提示量 **prompt eval rate** 與 **eval rate**（生成速度）；`ollama ps` 確認 **100% GPU**（Metal），只用 CPU 時停止
+4. build 並啟動服務，計時**全量索引**（`index.sh --full`）與**無變更的增量索引**
+5. 依[實驗計畫](docs/evaluation/experiment-plan-retrieval.md)以 `TOP_K=8` 跑兩組，每組都跑主要題組與識別字題組：
+
+   | 組別（label） | 開關 |
+   | --- | --- |
+   | `mac-m2-14b-k8-baseline` | 全部關閉（計畫的 A 組） |
+   | `mac-m2-14b-k8-hybrid-split` | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1`（D 組） |
+   | `mac-m2-14b-k8-hybrid-split-rerank`（`--with-rerank`） | 上一組 + `RERANK=true RERANK_CANDIDATES=20 RERANK_TOP_N=8`（I 組） |
+
+   開關只用 shell 環境變數傳給 `docker compose`，**不會修改 `.env`**；每組執行前確認 `/health` 回報的設定正確，每次評估前卸載模型，避免提示快取讓後面的組別看起來比較快。第一組評估後記錄 `ollama ps`（後端實際使用的 `LLM_NUM_CTX`）與 `memory_pressure`
+6. `compare.py` 比較各組，輸出摘要
+7. 把 backend 恢復成 `.env` 的設定（中途停止時也會恢復）
+
+完整測試約需 {待填：實測時間}。輸出：
+
+| 檔案 | 內容 |
+| --- | --- |
+| `docs/evaluation/results/<日期>-mac-m2-14b-k8-summary.md` | **摘要**：表格欄位對齊 `docs/metrics.md` §2、§3、§4、§4a、§5，英文表格與中文表格各一份，另附 `ollama run` 的原始數值 |
+| `docs/evaluation/results/<日期>-mac-m2-14b-k8-<組別>[-ident].{json,md}` | 每次評估的報告（`evaluate.py` 的格式） |
+| `docs/evaluation/results/<日期>-mac-m2-14b-k8-<A>-vs-<B>[-ident].md` | `compare.py` 的比較 |
+| `.logs/benchmark-<時間>/` | 原始輸出：`ollama run`、`ollama ps`、`/health`、索引與評估的 log（不提交） |
+
+跑完之後：
+
+1. 把摘要的英文表格貼到 `docs/metrics.md` 英文段的對應表格，中文表格貼到中文段
+2. 讀過每份報告的回答，填寫「人工判定正確性」，再執行：
+
+   ```bash
+   python3 scripts/evaluate.py --apply-manual docs/evaluation/results/<日期>-mac-m2-14b-k8-baseline.md
+   ```
+
+3. 確認報告中只有範例專案的路徑與內容後再提交（[CLAUDE.md](CLAUDE.md) 的隱私規則）
+
 ## 在 GitHub Codespaces 測試
 
 部署到 Mac 之前，可以先在 GitHub Codespaces（Linux、沒有 GPU）跑一次完整流程，確認索引、檢索、引用與介面都正常。只有 CPU，所以這裡的速度與回答品質**不代表**正式環境（見 [ADR 0007](docs/decisions/0007-multi-environment-testing-strategy.md)）。
@@ -440,7 +557,7 @@ git pull && docker compose up -d --build
 
 1. 在 GitHub 的 repo 頁面按 **Code → Codespaces → Create codespace on main**。建議使用 **4-core** 機型（[`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) 的 `hostRequirements` 會預先選好）。
 2. 等待自動設定完成，不用輸入任何指令。第一次約需數分鐘（{待填：實測時間}），可以在終端機的 Creation log 看到進度：
-   - **建立時**（`postCreateCommand`，只執行一次）：安裝 Ollama 與 `jq`；沒有 `.env` 時，從 [`.env.codespaces`](.env.codespaces) 建立（`qwen2.5-coder:3b`、`TOP_K=4`、範例專案）。
+   - **建立時**（`postCreateCommand`，只執行一次）：安裝 Ollama、`jq` 與 `git-lfs`；沒有 `.env` 時，從 [`.env.codespaces`](.env.codespaces) 建立（`qwen2.5-coder:3b`、`TOP_K=4`、範例專案）。
    - **每次啟動時**（`postStartCommand`，停止後重開也會執行）：以 `OLLAMA_HOST=0.0.0.0` 在背景啟動 Ollama、等待就緒、拉取缺少的模型、`docker compose up -d --build`、沒有索引時自動建立索引，最後執行 [`scripts/doctor.sh`](scripts/doctor.sh) 並印出網址。
 3. 右下角跳出 8080（**Frontend（查詢介面）**）的通知時，按 **Open in Browser**；或從 **Ports** 面板開啟 8080。
 
@@ -471,6 +588,7 @@ git pull && docker compose up -d --build
 | 8 | **從 backend 容器**呼叫 `host.docker.internal:11434` | 在主機上測試成功，不代表容器連得到 |
 | 9–10 | 後端 `/health`、前端與 nginx 的 `/api` 代理 | |
 | 11 | Qdrant 已有索引 | |
+| 12 | 有 Git LFS 的 hook（例如 `.git/hooks/pre-push`）時，`git-lfs` 已安裝 | Codespace 留有 LFS hook 但沒裝 `git-lfs`，`git push` 被擋（[devlog 2026-11-03](docs/devlog/2026-11-03.md)）；dev container 現在會安裝 `git-lfs` |
 
 在 Mac 上也能執行（使用 bash 3.2、`lsof`；macOS 上 Ollama 聽 `127.0.0.1` 是正常的）。
 
@@ -648,7 +766,10 @@ cd frontend && npm install && npm run dev
 │   ├── doctor.sh               # 依序診斷 Ollama、Docker、各服務與索引，列出修正指令
 │   ├── smoke-test.sh           # 端到端冒煙測試：健康檢查 → 索引 → 查詢 → 串流查詢 → 檢查引用
 │   ├── evaluate.py             # 自動化評估：10 題的延遲、引用命中、關鍵字、簡體字 → JSON + Markdown 報告
-│   └── compare.py              # 比較兩份評估結果（不同模型或 TOP_K）
+│   ├── compare.py              # 比較兩份評估結果（不同模型或 TOP_K）
+│   ├── calibrate_threshold.py  # 從評估結果建議 SCORE_THRESHOLD（ADR 0014）
+│   ├── benchmark-mac.sh        # Mac 一鍵實測：生成速度、GPU、索引、檢索實驗 → 摘要（ADR 0016）
+│   └── benchmark_summary.py    # benchmark-mac.sh 的摘要產生器（欄位對齊 docs/metrics.md）
 ├── backend/                    # FastAPI + LlamaIndex
 │   ├── Dockerfile
 │   ├── app/
@@ -684,6 +805,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [docs/devlog/2026-11-01.md](docs/devlog/2026-11-01.md) | Codespaces 流程驗證 / Validating the flow on Codespaces |
 | [docs/devlog/2026-11-01-codespace-setup.md](docs/devlog/2026-11-01-codespace-setup.md) | Codespaces 環境建置：踩坑與逾時 / Codespaces setup: pitfalls and timeouts |
 | [docs/devlog/2026-11-02.md](docs/devlog/2026-11-02.md) | 串流回答與 Codespaces 的 dev container / Streaming answers and a dev container for Codespaces |
+| [docs/devlog/2026-11-03.md](docs/devlog/2026-11-03.md) | 檢索開關實驗、門檻校準、git-lfs hook / Retrieval switch experiments, threshold calibration, the git-lfs hook |
 | **架構決策紀錄 / ADRs** | |
 | [docs/decisions/TEMPLATE.md](docs/decisions/TEMPLATE.md) | ADR 範本 / ADR template |
 | [0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md) | 採用地端 RAG 而非雲端 API / On-prem RAG instead of a cloud API |
@@ -701,6 +823,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md) | 混合檢索、分類取回、切塊 metadata / Hybrid retrieval, split code/doc retrieval, chunk metadata |
 | [0014](docs/decisions/0014-similarity-threshold.md) | 相似度門檻與固定的「找不到」回答 / Similarity threshold and a fixed "not found" answer |
 | [0015](docs/decisions/0015-rerank.md) | Cross-encoder rerank：選用、延遲載入 / Cross-encoder rerank, optional and lazily loaded |
+| [0016](docs/decisions/0016-one-command-mac-benchmark.md) | Mac M2 一鍵實機測試 / One-command benchmark on the Mac M2 |
 | **學習與評估 / Learning & evaluation** | |
 | [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 23 個主題的解釋、程式碼位置、面試題、自我檢核 / 23 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |
@@ -710,3 +833,4 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | **作品集 / Portfolio** | |
 | [docs/portfolio/article-series.md](docs/portfolio/article-series.md) | 5 篇技術文章大綱 / Outlines for 5 technical articles |
 | [docs/portfolio/resume.md](docs/portfolio/resume.md) | 履歷條目草稿（中英文）/ Resume bullet drafts (EN and ZH) |
+| [docs/portfolio/articles/](docs/portfolio/articles/) | 技術文章草稿 / Article drafts |

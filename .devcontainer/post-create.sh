@@ -7,9 +7,14 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 step() { echo; echo "==> $*"; }
 
-step "Installing jq, zstd and iproute2 (used by the scripts and the Ollama installer)"
+step "Installing jq, zstd, iproute2 and git-lfs (used by the scripts, the Ollama installer and git push)"
+# git-lfs: Codespaces can leave Git LFS hooks (e.g. .git/hooks/pre-push) in the
+# clone without the git-lfs binary, and then every `git push` fails with
+# "This repository is configured for Git LFS but 'git-lfs' was not found on your path".
+# scripts/doctor.sh checks for this (devlog 2026-11-03).
 sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends jq zstd iproute2 >/dev/null
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends jq zstd iproute2 git-lfs >/dev/null
+echo "git-lfs: $(git lfs version 2>/dev/null | head -n1)"
 
 step "Installing Ollama"
 if command -v ollama >/dev/null 2>&1; then

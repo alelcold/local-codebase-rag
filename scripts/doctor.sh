@@ -9,6 +9,7 @@
 #   4. 監聽位址（Linux 需 0.0.0.0）                     5. 模型已下載
 #   6. Docker 在執行         7. 容器都在執行           8. 容器連得到 Ollama
 #   9. 後端 /health          10. 前端與 nginx 代理     11. Qdrant 已有索引
+#  12. Git LFS hook 有對應的 git-lfs（否則 git push 會失敗；與服務無關，最後檢查）
 #
 # 把 Codespaces 測試紀錄踩坑 #1～#7 的手動排查步驟自動化
 # （devlog 2026-11-01、docs/devlog/2026-11-01-codespace-setup.md）。
@@ -263,6 +264,30 @@ if [ -n "$HEALTH" ] && [ "$(json "$HEALTH" .qdrant.ok)" = "true" ]; then
   fi
 else
   skip "後端或 Qdrant 沒有回應"
+fi
+
+# ── 12. Git LFS (independent of the stack: a hook without git-lfs blocks git push) ──
+check "Git LFS（git push 用）"
+if hooks="$(git rev-parse --git-path hooks 2>/dev/null)"; then
+  lfs_hooks=""
+  for h in pre-push post-checkout post-commit post-merge; do
+    [ -f "$hooks/$h" ] && grep -q 'git[- ]lfs' "$hooks/$h" 2>/dev/null && lfs_hooks="$lfs_hooks $h"
+  done
+  if command -v git-lfs >/dev/null 2>&1; then
+    ok "$(git lfs version 2>/dev/null | head -n1)${lfs_hooks:+（hook：${lfs_hooks# }）}"
+  elif [ -n "$lfs_hooks" ]; then
+    bad "$hooks 有 Git LFS 的 hook（${lfs_hooks# }），但沒有安裝 git-lfs：git push 會失敗"
+    if [ "$OS" = "Darwin" ]; then
+      fix "brew install git-lfs"
+    else
+      fix "sudo apt-get update && sudo apt-get install -y git-lfs   # dev container 的 post-create.sh 已包含"
+    fi
+    echo "      ${DIM}# 本專案沒有用 LFS 管理的檔案；也可以改成刪除 hook：rm$(for h in $lfs_hooks; do printf ' %s' "$hooks/$h"; done)${RESET}"
+  else
+    ok "沒有 Git LFS hook，不需要 git-lfs"
+  fi
+else
+  skip "不是 git repo"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────

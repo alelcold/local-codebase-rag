@@ -29,10 +29,11 @@ docker compose config -q             # validate compose
 ./scripts/index.sh [--full]          # (re)index the mounted project
 cd frontend && npm run build         # type-check + build the UI
 ./scripts/smoke-test.sh              # end-to-end check against a running stack, plain + streaming query (also run in CI)
-./scripts/doctor.sh                  # step-by-step diagnosis of Ollama, Docker, services and index, with fixes
+./scripts/doctor.sh                  # step-by-step diagnosis of Ollama, Docker, services, index and git-lfs, with fixes
 python3 scripts/evaluate.py --label <env-model>  # 10-question evaluation → docs/evaluation/results/ (ADR 0012)
 python3 scripts/compare.py A.json B.json         # compare two evaluation runs
 python3 scripts/calibrate_threshold.py           # suggest SCORE_THRESHOLD from evaluation results (ADR 0014)
+./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2: Ollama speed/GPU, indexing, retrieval groups → summary for docs/metrics.md (ADR 0016)
 ```
 
 ## Rules
@@ -93,10 +94,11 @@ docker compose config -q             # 驗證 compose 設定
 ./scripts/index.sh [--full]          # 重新索引掛載的專案
 cd frontend && npm run build         # 型別檢查並 build 前端
 ./scripts/smoke-test.sh              # 對已啟動的服務做端到端檢查，含一般與串流查詢（CI 也會執行）
-./scripts/doctor.sh                  # 依序診斷 Ollama、Docker、各服務與索引，並列出修正指令
+./scripts/doctor.sh                  # 依序診斷 Ollama、Docker、各服務、索引與 git-lfs，並列出修正指令
 python3 scripts/evaluate.py --label <環境-模型>  # 10 題評估 → docs/evaluation/results/（ADR 0012）
 python3 scripts/compare.py A.json B.json         # 比較兩次評估結果
 python3 scripts/calibrate_threshold.py           # 從評估結果建議 SCORE_THRESHOLD（ADR 0014）
+./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2：Ollama 速度與 GPU、索引、檢索組別 → 可貼進 docs/metrics.md 的摘要（ADR 0016）
 ```
 
 ## 規則
