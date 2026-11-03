@@ -1,0 +1,9 @@
+# Optional: cross-encoder rerank (RERANK=true, ADR 0015). Installed only when the
+# image is built with INSTALL_RERANK=true; adds about 1.5 GB to the image, so the
+# default build (and CI) leaves it out.
+#
+# torch itself is installed first from the CPU-only wheel index (see Dockerfile):
+# the default PyPI wheel for Linux x86_64 bundles CUDA and is several GB, and the
+# backend never sees a GPU (Docker on a Mac has none; Ollama keeps the GPU).
+sentence-transformers==5.1.2
+transformers==4.57.6

@@ -1,8 +1,8 @@
-# Experiment plan: hybrid retrieval, split retrieval, chunk metadata, prompt v2
+# Experiment plan: hybrid retrieval, split retrieval, chunk metadata, prompt v2, threshold, rerank
 
 > English first; 繁體中文版本在下方.
 > Privacy: only the sample project (`examples/sample-game-frontend/`) is indexed and evaluated.
-> Design: [ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md). Metrics: [ADR 0012](../decisions/0012-automated-evaluation-metrics.md).
+> Design: [ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md), [ADR 0014](../decisions/0014-similarity-threshold.md) (threshold), [ADR 0015](../decisions/0015-rerank.md) (rerank). Metrics: [ADR 0012](../decisions/0012-automated-evaluation-metrics.md).
 
 ## Goal
 
@@ -36,7 +36,7 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 
 ## Runs
 
-Run them in this order: groups A–D share one index, E–F share the other, so the index is rebuilt only twice.
+Run them in this order: groups A–D, then G and H, share one index; E, F and I share the other, so the index is rebuilt only twice. G and I need the results of A–F first (the threshold is calibrated from them).
 
 | Group | Switches | Answers the question |
 | --- | --- | --- |
@@ -46,6 +46,11 @@ Run them in this order: groups A–D share one index, E–F share the other, so 
 | D. + hybrid + split | both | Do they add up? (optional) |
 | E. + metadata | `CHUNK_METADATA=true` (re-index) | Does the "Defines: … INVINCIBLE_MS" header help vector search alone? (optional) |
 | F. all on | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 CHUNK_METADATA=true PROMPT_VARIANT=v2` | Full package incl. the Traditional-Chinese / code-first prompt |
+| G. + threshold | `SCORE_THRESHOLD=<calibrated>` (ADR 0014) | Does the trick question (Q10) get refused without the LLM, and at what cost to correct answers? |
+| H. + rerank | `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4` (ADR 0015; image built with `INSTALL_RERANK=true`) | Does a cross-encoder put the defining code into the top 4, and how many seconds does it cost on CPU? |
+| I. F + threshold + rerank | F's switches + `SCORE_THRESHOLD=<calibrated for metadata>` + `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4` | Full anti-hallucination package |
+
+`RERANK_TOP_N=4` (not the default 3) in H and I keeps the number of excerpts sent to the model equal to the other groups' `TOP_K=4`, so only the choice of excerpts changes. Run H once more with `RERANK_TOP_N=3` if you want to measure the default.
 
 ### A. baseline
 
@@ -135,6 +140,76 @@ python3 scripts/evaluate.py --label codespace-3b-k4-all
 python3 scripts/evaluate.py --questions docs/evaluation/questions-identifiers.yaml --label codespace-3b-k4-all-ident
 ```
 
+### G. + threshold (after A–F)
+
+**The threshold value is not chosen by hand.** Calibrate it from the A–F reports first. The script groups reports by embedding (with or without `CHUNK_METADATA`, which changes every vector) and prints, for each candidate, how many expected excerpts would be dropped and how many other excerpts blocked, plus a suggestion — or says the data is not enough.
+
+```bash
+python3 scripts/calibrate_threshold.py --out docs/evaluation/results/<date>-calibration.md
+```
+
+Use the suggestion from the `nomic-embed-text` group (no metadata) for G. Do not use a generic 0.70: with `nomic-embed-text` a relevant Markdown excerpt has been measured at only 0.60 (ADR 0014). If the script suggests nothing, skip G and I and record why in `docs/metrics.md`.
+
+G runs on the A–D index. Re-run `index.sh` without variables first if E or F already rebuilt it with metadata:
+
+```bash
+./scripts/index.sh
+```
+
+```bash
+SCORE_THRESHOLD=<value> docker compose up -d backend
+```
+
+```bash
+python3 scripts/evaluate.py --label codespace-3b-k4-threshold
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-identifiers.yaml --label codespace-3b-k4-threshold-ident
+```
+
+Check in the report: 「因門檻直接拒答」 should be 1 (question 10) and 0 for the others; 「陷阱題正確拒答」 1/1.
+
+### H. + rerank
+
+Rerank needs the optional dependencies (about +1.5 GB, ADR 0015). Build once:
+
+```bash
+INSTALL_RERANK=true docker compose build backend
+```
+
+```bash
+RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4 docker compose up -d backend
+```
+
+The first query downloads the model into the `reranker_models` volume (about 1 GB for `bge-reranker-base`) and loads it; `evaluate.py`'s warm-up query absorbs this, and the `done` event reports it separately as `rerank_load_seconds`.
+
+```bash
+python3 scripts/evaluate.py --label codespace-3b-k4-rerank
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-identifiers.yaml --label codespace-3b-k4-rerank-ident
+```
+
+Optional H′: the same with `RERANK_MODEL=BAAI/bge-reranker-v2-m3` (label `codespace-3b-k4-rerank-m3`), to see whether the stronger model is worth about three times the CPU time (ADR 0015, metrics §4b). Add a row to metrics §4a if you run it.
+
+### I. F + threshold + rerank (after F; image with rerank)
+
+The threshold for I comes from the **`nomic-embed-text + CHUNK_METADATA`** group of the calibration output (E and F reports), not from G's value.
+
+```bash
+HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 CHUNK_METADATA=true PROMPT_VARIANT=v2 SCORE_THRESHOLD=<value> RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4 ./scripts/index.sh
+```
+
+```bash
+python3 scripts/evaluate.py --label codespace-3b-k4-all-threshold-rerank
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-identifiers.yaml --label codespace-3b-k4-all-threshold-rerank-ident
+```
+
 ### Back to the baseline afterwards
 
 ```bash
@@ -166,6 +241,9 @@ Metric names are those in the report summary and `compare.py`. "Retrieval" metri
 | D. hybrid + split | Better than B and C alone on Defining file retrieved | If not better than C, hybrid adds little for Chinese questions |
 | E. metadata | Main set question 1: Defining file retrieved (`gameConfig.ts` now has `Defines: … INVINCIBLE_MS`) | Whether cross-lingual matching (無敵 ↔ invincible) is enough for nomic-embed-text |
 | F. all on | Defining file retrieved, Expected file cited with [n] ↑, **Answers with Simplified = 0**, Manual correctness ↑, Trick question refused unchanged | Does v2 make the 3B model cite locations first (read the answers)? Token count and total time (v2 prompt is longer) |
+| G. threshold | **Trick question refused = 1/1**, **Refused by SCORE_THRESHOLD = 1** (question 10 only) | Any other question refused, or Expected-file recall ↓ = the threshold is too high; lower it with `calibrate_threshold.py --max-drop 0` |
+| H. rerank | Defining file retrieved ↑, Expected file cited with [n] ↑, Manual correctness ↑; **Rerank time, mean** | Rerank time vs. first-token time: is the gain worth the seconds on CPU? |
+| I. F + threshold + rerank | Same as F, plus Trick question refused = 1/1 with the LLM not called | Total time vs. F (rerank adds, refusals save a whole LLM call) |
 
 Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row per group, with the report link). Never fill in numbers that were not measured.
 
@@ -173,13 +251,15 @@ Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row
 
 - Turn a switch on by default when it improves Defining file retrieved or Manual correctness and does not lower Manual correctness on any question type. Write a new ADR for the change of defaults.
 - If C alone gives most of the gain, keep hybrid optional (it then mainly helps questions that name identifiers).
+- Threshold (G): turn on only with the calibrated value, and only if no answerable question was refused. The value is tied to the embedding model; a new model needs a new calibration.
+- Rerank (H): turn on by default only if Manual correctness improves **and** the rerank time is acceptable next to the first-token time on the target machine.
 
 ---
 
-# 實驗計畫：混合檢索、分類取回、切塊 metadata、提示 v2
+# 實驗計畫：混合檢索、分類取回、切塊 metadata、提示 v2、相似度門檻、Rerank
 
 > 隱私：只索引與評估範例專案（`examples/sample-game-frontend/`）。
-> 設計：[ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)。指標：[ADR 0012](../decisions/0012-automated-evaluation-metrics.md)。
+> 設計：[ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[ADR 0014](../decisions/0014-similarity-threshold.md)（門檻）、[ADR 0015](../decisions/0015-rerank.md)（Rerank）。指標：[ADR 0012](../decisions/0012-automated-evaluation-metrics.md)。
 
 ## 目標
 
@@ -213,7 +293,7 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 
 ## 執行組合
 
-依這個順序執行：A–D 共用一份索引，E–F 共用另一份，索引只需要重建兩次。
+依這個順序執行：A–D 以及之後的 G、H 共用一份索引；E、F、I 共用另一份，索引只需要重建兩次。G 與 I 需要先有 A～F 的結果（門檻要從這些結果校準）。
 
 | 組別 | 開關 | 回答的問題 |
 | --- | --- | --- |
@@ -223,6 +303,11 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 | D. + 混合 + 分類 | 兩者 | 效果能否疊加？（選用） |
 | E. + metadata | `CHUNK_METADATA=true`（重新索引） | 「Defines: … INVINCIBLE_MS」標頭能否單靠向量檢索改善？（選用） |
 | F. 全部開啟 | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 CHUNK_METADATA=true PROMPT_VARIANT=v2` | 完整組合，含繁體中文／程式碼位置優先的提示 |
+| G. + 門檻 | `SCORE_THRESHOLD=<校準值>`（ADR 0014） | 陷阱題（第 10 題）能否不呼叫 LLM 就拒答？正確回答要付出多少代價？ |
+| H. + Rerank | `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4`（ADR 0015；映像檔以 `INSTALL_RERANK=true` 建置） | 交叉編碼器能否把定義的程式碼排進前 4 段？在 CPU 上要多花幾秒？ |
+| I. F + 門檻 + Rerank | F 的開關 + `SCORE_THRESHOLD=<metadata 版校準值>` + `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4` | 完整的防幻覺組合 |
+
+H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片段數與其他組的 `TOP_K=4` 相同，只改變「選哪些片段」。想量測預設值時，可以再以 `RERANK_TOP_N=3` 跑一次 H 組。
 
 各組指令與上方英文版相同（指令不需翻譯），label 依序為 `codespace-3b-k4-baseline`、`-hybrid`、`-split`、`-hybrid-split`、`-metadata`、`-all`；補充題組加上 `--questions docs/evaluation/questions-identifiers.yaml` 並在 label 後加 `-ident`。
 
@@ -231,6 +316,10 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 - 升級後第一次執行 `index.sh` 會全量重建一次（舊版的 point 沒有 `index_config`）。
 - E、F 組直接以 `CHUNK_METADATA=true ./scripts/index.sh`（F 組加上其他變數）重建容器並索引。
 - E 組的索引輸出應出現 `Index settings changed, rebuilding everything`，並顯示 `chunk_metadata=off` → `on`。
+- **G 組的門檻值不能自己挑**：先跑完 A～F，再用 `python3 scripts/calibrate_threshold.py --out docs/evaluation/results/<日期>-calibration.md` 從 A～F 的結果決定。腳本會依 embedding（有無 `CHUNK_METADATA`，它會改變所有向量）分組，列出每個候選值會丟掉多少正確片段、擋掉多少非預期片段，並給出建議值；資料不足時會直接說明、不給數字。G 組用 `nomic-embed-text`（無 metadata）那組的建議值；不要用通用的 0.70：實測中一個相關的 Markdown 片段用 nomic-embed-text 只有 0.60 分（ADR 0014）。腳本沒有給建議值時，略過 G、I 組，並在 `docs/metrics.md` 記錄原因。
+- G 組在 A–D 的索引上執行（若 E、F 已改成 metadata 索引，先不帶變數執行 `./scripts/index.sh`），指令為 `SCORE_THRESHOLD=<值> docker compose up -d backend`，label `codespace-3b-k4-threshold`。報告中「因門檻直接拒答」應為 1（第 10 題），其他題為 0；「陷阱題正確拒答」為 1/1。
+- H 組需要 rerank 的選用依賴（約 +1.5 GB，ADR 0015），先建置一次：`INSTALL_RERANK=true docker compose build backend`，再 `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4 docker compose up -d backend`，label `codespace-3b-k4-rerank`。第一次查詢會把模型下載到 `reranker_models` volume 並載入；`evaluate.py` 的暖機查詢會吸收這段時間，`done` 事件也會另外以 `rerank_load_seconds` 回報。選用的 H′ 組：同樣指令加上 `RERANK_MODEL=BAAI/bge-reranker-v2-m3`（label `codespace-3b-k4-rerank-m3`），看較強的模型是否值得約三倍的 CPU 時間（ADR 0015、metrics §4b）；有跑的話在 metrics §4a 加一列。
+- I 組在 F 之後執行，門檻值取校準結果中 **`nomic-embed-text + CHUNK_METADATA`** 那組（E、F 的報告），不是 G 組的值：`HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 CHUNK_METADATA=true PROMPT_VARIANT=v2 SCORE_THRESHOLD=<值> RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4 ./scripts/index.sh`，label `codespace-3b-k4-all-threshold-rerank`。
 - 全部跑完後，執行 `docker compose up -d backend` 與 `./scripts/index.sh` 回到基準線。
 - 每份 `.md` 報告都要填寫「人工判定正確性」並執行 `--apply-manual`，再用 `compare.py` 把每一組與 A 比較。
 
@@ -245,6 +334,9 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 | D. 混合 + 分類 | 定義檔命中優於 B、C 單獨開啟 | 若沒有優於 C，表示混合檢索對中文問題幫助有限 |
 | E. metadata | 主要題組第 1 題的定義檔命中（`gameConfig.ts` 現在有 `Defines: … INVINCIBLE_MS`） | nomic-embed-text 的跨語言對應（無敵 ↔ invincible）是否足夠 |
 | F. 全部開啟 | 定義檔命中、回答引用預期檔案 ↑、**混入簡體字的回答 = 0**、人工判定正確性 ↑、陷阱題拒答不變 | v2 是否讓 3B 模型先說位置（要讀回答）；token 數與總耗時（v2 提示較長） |
+| G. 門檻 | **陷阱題正確拒答 = 1/1**、**因門檻直接拒答 = 1**（只有第 10 題） | 其他題被拒答，或預期檔案命中率下降 = 門檻太高；改用 `calibrate_threshold.py --max-drop 0` 的建議 |
+| H. Rerank | 定義檔命中 ↑、回答引用預期檔案 ↑、人工判定正確性 ↑；**rerank 耗時平均** | rerank 耗時與首字延遲相比：在 CPU 上多花的秒數值得嗎？ |
+| I. F + 門檻 + Rerank | 同 F，另外陷阱題正確拒答 = 1/1 且不呼叫 LLM | 總耗時與 F 相比（rerank 會增加，拒答則省下整次 LLM 呼叫） |
 
 把摘要數據記到 [`docs/metrics.md`](../metrics.md) 第 4 節（每組一列，附報告連結）。沒有量測的數字不要填。
 
@@ -252,3 +344,5 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 
 - 某個開關若能提升定義檔命中或人工判定正確性，且沒有讓任何題型的人工判定正確性下降，就改為預設開啟，並新增 ADR 記錄預設值的改變。
 - 若 C 單獨就帶來大部分的改善，混合檢索維持選用（主要幫助直接寫出識別字的問題）。
+- 門檻（G）：只能用校準出的值開啟，且沒有任何可回答的題目被拒答。這個值綁定 embedding 模型，換模型就要重新校準。
+- Rerank（H）：只有在人工判定正確性提升，**而且**在目標機器上 rerank 耗時相對首字延遲可以接受時，才預設開啟。

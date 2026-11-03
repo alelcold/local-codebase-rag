@@ -94,6 +94,11 @@ def test_retrieval_toggles_default_off_and_prompt_variant_is_validated(monkeypat
         "prompt_variant": "v2",
         "rrf_k": 60,
         "retrieval_candidates": 30,
+        "score_threshold": None,
+        "rerank": False,
+        "rerank_model": None,
+        "rerank_candidates": None,
+        "rerank_top_n": None,
     }
     monkeypatch.setenv("PROMPT_VARIANT", "")  # docker compose passes unset as ""
     assert Settings().prompt_variant == "v1"
@@ -103,3 +108,37 @@ def test_retrieval_toggles_default_off_and_prompt_variant_is_validated(monkeypat
 
     assert is_doc_path("docs/a.md") and is_doc_path("NOTES.TXT")
     assert not is_doc_path("src/a.ts") and not is_doc_path("Makefile")
+
+
+def test_threshold_and_rerank_default_off_and_are_validated(monkeypatch):
+    import pytest
+
+    s = Settings()
+    assert s.score_threshold is None and s.rerank is False
+    assert (s.rerank_model, s.rerank_candidates, s.rerank_top_n) == ("BAAI/bge-reranker-base", 10, 3)
+    assert s.default_top_k == s.top_k
+
+    monkeypatch.setenv("SCORE_THRESHOLD", "")  # docker compose passes unset as ""
+    assert Settings().score_threshold is None
+    monkeypatch.setenv("SCORE_THRESHOLD", "0.55")
+    monkeypatch.setenv("RERANK", "true")
+    monkeypatch.setenv("RERANK_TOP_N", "2")
+    s = Settings()
+    assert s.score_threshold == 0.55
+    assert s.default_top_k == 2
+    summary = s.retrieval_summary()
+    assert summary["score_threshold"] == 0.55
+    assert summary["rerank"] is True
+    assert (summary["rerank_model"], summary["rerank_candidates"], summary["rerank_top_n"]) == (
+        "BAAI/bge-reranker-base",
+        10,
+        2,
+    )
+
+    monkeypatch.setenv("SCORE_THRESHOLD", "1.5")
+    with pytest.raises(ValueError):
+        Settings()
+    monkeypatch.setenv("SCORE_THRESHOLD", "0.5")
+    monkeypatch.setenv("RERANK_CANDIDATES", "0")
+    with pytest.raises(ValueError):
+        Settings()

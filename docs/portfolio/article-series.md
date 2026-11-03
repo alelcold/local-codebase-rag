@@ -69,6 +69,20 @@
 - **Screenshots**: a filled score sheet; one correct answer and one hallucinated answer for comparison.
 - **Data**: score per model (M§4); the effect of changing `top_k` or `CHUNK_MAX_CHARS` on the score, if tested ({待填}).
 
+## Article 6 — Improving RAG retrieval with data
+
+- **Target readers**: Engineers whose RAG prototype "sort of works" and who want to improve retrieval step by step without guessing.
+- **Thesis**: change one thing at a time and let the evaluation set decide. Each step fixes one named failure and has its own metric.
+- **Key sections** (each step: the failure it targets → the change → the metric → the result):
+  1. **Baseline** (vector only, `TOP_K=4`): the failure — 定位設定 questions retrieve docs, not the defining code; the trick question sometimes gets an invented answer. Metrics: Defining file retrieved, Docs among retrieved chunks, Trick question refused, Manual correctness, time to first token (M§4a group A).
+  2. **Hybrid retrieval** (BM25 + identifier + RRF, ADR 0013): for questions that name an identifier. Metrics: Defining file retrieved on the identifier set, Code file retrieved; `matched_by` to show which channel found it (group B).
+  3. **Split retrieval** (docs ≤ 1, ADR 0013): docs crowding out code. Metrics: Docs among retrieved chunks ↓, Code / Defining file retrieved ↑, correctness on doc-heavy questions unchanged (groups C, D).
+  4. **Similarity threshold** (ADR 0014): the trick question. Calibration table from `calibrate_threshold.py` (expected excerpts dropped vs. others blocked per candidate; why not 0.70); then Q10 refused, Refused by SCORE_THRESHOLD, Expected-file recall unchanged, time saved by not calling the LLM (group G).
+  5. **Rerank** (ADR 0015): ordering within the candidates. Metrics: Defining file retrieved / cited ↑, Manual correctness ↑, **rerank time vs. first-token time**; model choice table (v2-m3 vs. base vs. MiniLM, metrics §4b); image size cost (+1.5 GB, §6) (groups H, I).
+  6. What did not help, what was kept off by default, and why (the "decision rule" of the experiment plan).
+- **Figures**: one chart of Defining file retrieved and Manual correctness across groups A → I; the calibration score distribution (expected vs. other); a latency stack (retrieval / rerank / first token).
+- **Data**: all from `docs/metrics.md` §4a, §4b, §6 ({待填} until the experiment plan has been run).
+
 ## Publishing checklist (each article)
 
 - [ ] All code and screenshots come from the sample project or this repo.
@@ -147,6 +161,20 @@
   6. 下一步：LLM-as-judge、在 CI 中自動執行、從檢索紀錄計算 recall@k。
 - **截圖**：填好的計分表；一則正確回答與一則幻覺回答的對比。
 - **數據**：各模型分數（M§4）；調整 `top_k` 或 `CHUNK_MAX_CHARS` 對分數的影響（如有測試，{待填}）。
+
+## 第 6 篇 — 用數據改善 RAG 檢索
+
+- **目標讀者**：RAG 原型「大致能用」、想一步一步改善檢索而不是靠猜的工程師。
+- **主軸**：一次只改一件事，讓評估題組來決定。每一步解決一個具體的失敗，並有自己的指標。
+- **重點段落**（每一步：要解決的失敗 → 改動 → 指標 → 結果）：
+  1. **基準線**（只有向量檢索、`TOP_K=4`）：失敗——「定位設定」題取回的是文件而不是定義的程式碼；陷阱題有時會得到編造的回答。指標：定義檔命中、取回片段中文件比例、陷阱題正確拒答、人工判定正確性、首字延遲（M§4a A 組）。
+  2. **混合檢索**（BM25 + 識別字 + RRF，ADR 0013）：處理寫出識別字的問題。指標：識別字題組的定義檔命中、程式碼檔命中；用 `matched_by` 說明是哪個通道找到的（B 組）。
+  3. **分類取回**（文件 ≤ 1，ADR 0013）：文件擠掉程式碼。指標：取回片段中文件比例 ↓、程式碼檔／定義檔命中 ↑、重點在文件的題目正確性不變（C、D 組）。
+  4. **相似度門檻**（ADR 0014）：處理陷阱題。`calibrate_threshold.py` 的校準表（每個候選值丟掉的正確片段 vs. 擋掉的其他片段；為什麼不用 0.70）；接著是 Q10 拒答、因門檻直接拒答、預期檔案命中率不變、不呼叫 LLM 省下的時間（G 組）。
+  5. **Rerank**（ADR 0015）：候選內的排序。指標：定義檔命中／引用 ↑、人工判定正確性 ↑、**rerank 耗時與首字延遲的比較**；模型選擇表（v2-m3 vs. base vs. MiniLM，metrics §4b）；映像檔大小成本（+1.5 GB，§6）（H、I 組）。
+  6. 哪些沒有幫助、哪些維持預設關閉，以及原因（實驗計畫的「決策規則」）。
+- **圖表**：A → I 各組的定義檔命中與人工判定正確性折線圖；校準的分數分布（預期 vs. 其他）；延遲堆疊圖（檢索／rerank／首字）。
+- **數據**：全部取自 `docs/metrics.md` §4a、§4b、§6（實驗計畫跑完前為 {待填}）。
 
 ## 發布前檢查（每篇）
 

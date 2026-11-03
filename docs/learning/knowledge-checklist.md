@@ -397,6 +397,60 @@
 - [ ] I can show the embedding text of the `gameConfig.ts` chunk with and without `CHUNK_METADATA`.
 - [ ] I can explain which settings trigger a full rebuild and which do not, and why.
 
+## 21. Similarity threshold calibration
+
+**Plain explanation**: A **similarity threshold** drops retrieved chunks whose similarity to the question is below a value, so that a question about something the project does not contain gets "not found" instead of an answer built from unrelated code. The hard part is the value. Cosine similarities are not probabilities: each embedding model has its own range (with `nomic-embed-text` a *relevant* Markdown chunk can score 0.60), and prefixes, language mix and metadata headers shift it. **Calibration** means labelling retrieved chunks as relevant / irrelevant (here: from an expected-files list), looking at both score distributions, and picking the value with the best trade-off: how many correct chunks it drops vs. how many irrelevant ones it blocks. If the distributions overlap, no threshold is safe. A threshold also only makes sense on a similarity score — never on a rank-based score such as RRF.
+
+**In this repo**:
+- `SCORE_THRESHOLD` (empty = off) in `.env.example`; applied to the vector channel before fusion in `retrieve_detailed()` (`backend/app/rag.py`); identifier hits are exempt. ADR [0014](../decisions/0014-similarity-threshold.md).
+- `scripts/calibrate_threshold.py`: reads evaluation reports, groups by embedding, prints drops / blocks per candidate and a suggestion, or "not enough data". `vector_score` on every source makes this possible.
+
+**Interview questions**:
+- Why is 0.7 a bad universal threshold? What changes the score range?
+- Which errors does a threshold trade off, and how would you decide which matters more for a code assistant?
+- Why can't you threshold an RRF score? What would you threshold in a hybrid system?
+- How do you calibrate with only ten labelled questions, and what are the risks?
+
+**Self-check**:
+- [ ] I can read the calibration table and explain why the suggested value was chosen.
+- [ ] I can explain why identifier hits bypass the threshold, and why plain BM25 hits do not.
+
+## 22. Cross-encoder vs. bi-encoder
+
+**Plain explanation**: A **bi-encoder** (an embedding model) turns the question and every document into vectors *separately*; relevance is a vector similarity. Document vectors are computed once at index time, so searching millions is cheap — but the model never sees question and document together, so it misses fine relations (negation, "where is X *set*" vs. "where is X *mentioned*"). A **cross-encoder** takes the pair `[question, document]` as one input and outputs one relevance score; attention runs across both texts, so it is much more accurate. Nothing can be precomputed: every pair needs a full forward pass, so it is too slow for search, but right for re-scoring a short list. Rule of thumb: bi-encoder for **recall** (find candidates), cross-encoder for **precision** (order them).
+
+**In this repo**:
+- Bi-encoder: `nomic-embed-text` via Ollama (`backend/app/indexer.py`, `rag.py`).
+- Cross-encoder: `CrossEncoderReranker` in `backend/app/rerank.py` (`BAAI/bge-reranker-base` by default). Measured cost on 4 vCPU: 3.7 s for 10 pairs (`docs/metrics.md` §4b).
+
+**Interview questions**:
+- Why can't a cross-encoder be used to search the whole index?
+- Why does a cross-encoder usually beat a bi-encoder on the same pair? What does attention across both texts buy you?
+- What is late interaction (ColBERT), and where does it sit between the two?
+- Your cross-encoder scores are sigmoid outputs; can you compare them with cosine similarities?
+
+**Self-check**:
+- [ ] I can draw both architectures and say what is computed at index time and at query time.
+- [ ] I can estimate rerank latency from the per-pair cost and the number of candidates.
+
+## 23. Rerank
+
+**Plain explanation**: **Rerank** is a second retrieval stage: retrieve N candidates cheaply (vector / hybrid search), re-score them with a more accurate model (usually a cross-encoder), and keep the top K for the LLM. It improves *which* chunks the model reads without changing the index. Design questions: how many candidates (cost is linear in N), how many to keep (prompt size), which model (quality vs. CPU/GPU latency and memory), and how it interacts with other stages — filters and quotas such as "at most one documentation chunk" must be applied in the right order, or the reranker can undo them. Load it lazily and make it optional when it is heavy.
+
+**In this repo**:
+- `RERANK`, `RERANK_MODEL`, `RERANK_CANDIDATES` (10), `RERANK_TOP_N` (3), `RERANK_MAX_LENGTH`; image built with `INSTALL_RERANK=true` (+1.5 GB). Order: threshold → fusion → split → rerank → code first. ADR [0015](../decisions/0015-rerank.md).
+- `rerank_seconds` in the stream's `done` event and in evaluation reports; `FakeReranker` in `backend/tests/conftest.py`.
+
+**Interview questions**:
+- Where would you put a rerank stage in a RAG pipeline that also has a document quota? Why?
+- How would you choose N candidates and K kept? What do you measure?
+- How do you keep a 1.5 GB optional dependency out of CI and of users who never enable it?
+- When is an LLM a better reranker than a cross-encoder, and what does it cost?
+
+**Self-check**:
+- [ ] I can explain why split retrieval runs before rerank here.
+- [ ] I can explain the trade-off behind choosing `bge-reranker-base` over `bge-reranker-v2-m3` with the measured numbers.
+
 ---
 
 # 知識檢核清單
@@ -796,3 +850,57 @@
 **自我檢核**：
 - [ ] 能展示 `gameConfig.ts` 片段在開啟與關閉 `CHUNK_METADATA` 時的 embedding 內容。
 - [ ] 能解釋哪些設定會觸發全量重建、哪些不會，以及原因。
+
+## 21. 相似度門檻校準
+
+**淺白解釋**：**相似度門檻**把與問題相似度低於某個值的片段丟掉，讓「專案中根本沒有」的問題得到「找不到」，而不是一個用不相關程式碼拼湊的回答。難的是數值。Cosine 相似度不是機率：每個 embedding 模型有自己的分數範圍（`nomic-embed-text` 下，一個*相關*的 Markdown 片段可能只有 0.60），前綴、語言組合、metadata 標頭也會讓它偏移。**校準**是把取回的片段標成相關／不相關（本 repo 依預期檔案清單），看兩者的分數分布，選出最好的取捨：會丟掉多少正確片段、能擋掉多少不相關片段。兩個分布重疊時，沒有任何門檻是安全的。門檻也只能套在相似度分數上——絕不能套在 RRF 這種依名次計算的分數。
+
+**本 repo 對應位置**：
+- `.env.example` 的 `SCORE_THRESHOLD`（空值 = 關閉）；在 `backend/app/rag.py` 的 `retrieve_detailed()` 中、融合之前套用在向量那一路；識別字的結果不受影響。ADR [0014](../decisions/0014-similarity-threshold.md)。
+- `scripts/calibrate_threshold.py`：讀取評估報告，依 embedding 分組，列出每個候選值丟掉／擋掉的片段數與建議值，或說明「資料不足」。每個引用片段的 `vector_score` 讓這件事成為可能。
+
+**面試可能問**：
+- 為什麼 0.7 不適合當通用門檻？哪些因素會改變分數範圍？
+- 門檻在哪兩種錯誤之間取捨？對程式碼助理來說，哪一種比較嚴重？
+- 為什麼不能對 RRF 分數設門檻？混合檢索系統要對什麼設門檻？
+- 只有十題標註資料要怎麼校準？有什麼風險？
+
+**自我檢核**：
+- [ ] 能讀懂校準表格，並說明為什麼選了那個建議值。
+- [ ] 能解釋為什麼識別字的結果不受門檻影響，而一般 BM25 結果要受影響。
+
+## 22. Cross-encoder 與 Bi-encoder 的差異
+
+**淺白解釋**：**Bi-encoder**（embedding 模型）把問題與每份文件*分別*轉成向量，相關性就是向量相似度。文件向量在索引時算一次就好，所以搜尋數百萬份也很便宜——但模型從來沒有同時看到問題和文件，細微的關係會漏掉（否定、「X 在哪裡*設定*」與「X 在哪裡*被提到*」）。**Cross-encoder** 把 `[問題, 文件]` 當成一個輸入，輸出一個相關性分數；attention 跨越兩段文字，準確得多。但什麼都無法預先計算：每一組都要完整跑一次模型，太慢不能拿來搜尋，正適合為一小段清單重新打分。經驗法則：bi-encoder 負責**召回**（找候選），cross-encoder 負責**精準**（排順序）。
+
+**本 repo 對應位置**：
+- Bi-encoder：透過 Ollama 的 `nomic-embed-text`（`backend/app/indexer.py`、`rag.py`）。
+- Cross-encoder：`backend/app/rerank.py` 的 `CrossEncoderReranker`（預設 `BAAI/bge-reranker-base`）。4 vCPU 上實測 10 組 3.7 秒（`docs/metrics.md` §4b）。
+
+**面試可能問**：
+- 為什麼 cross-encoder 不能拿來搜尋整個索引？
+- 同一組（問題, 文件），為什麼 cross-encoder 通常比 bi-encoder 準？跨兩段文字的 attention 帶來什麼？
+- 什麼是 late interaction（ColBERT）？它介於兩者之間的哪裡？
+- Cross-encoder 的分數是 sigmoid 輸出，可以和 cosine 相似度比較嗎？
+
+**自我檢核**：
+- [ ] 能畫出兩種架構，並說明哪些在索引時計算、哪些在查詢時計算。
+- [ ] 能從每組的成本與候選數估算 rerank 延遲。
+
+## 23. Rerank
+
+**淺白解釋**：**Rerank** 是檢索的第二階段：先便宜地取回 N 個候選（向量／混合檢索），再用更準確的模型（通常是 cross-encoder）重新打分，保留前 K 個給 LLM。它改善模型讀到「哪些」片段，而且不用改索引。設計問題：要幾個候選（成本與 N 成正比）、保留幾個（提示長度）、用哪個模型（品質 vs. CPU/GPU 延遲與記憶體），以及和其他階段的關係——「文件最多一段」這類過濾與配額必須放在正確的順序，否則 reranker 會把它們抵銷掉。模型很重時，要延遲載入並做成選用。
+
+**本 repo 對應位置**：
+- `RERANK`、`RERANK_MODEL`、`RERANK_CANDIDATES`（10）、`RERANK_TOP_N`（3）、`RERANK_MAX_LENGTH`；映像檔以 `INSTALL_RERANK=true` 建置（+1.5 GB）。順序：門檻 → 融合 → 分類取回 → rerank → 程式碼在前。ADR [0015](../decisions/0015-rerank.md)。
+- 串流 `done` 事件與評估報告中的 `rerank_seconds`；`backend/tests/conftest.py` 的 `FakeReranker`。
+
+**面試可能問**：
+- RAG 流程中同時有文件配額時，rerank 要放在哪裡？為什麼？
+- 怎麼決定候選數 N 與保留數 K？要量測什麼？
+- 怎麼讓 1.5 GB 的選用依賴不影響 CI，也不影響從不開啟它的使用者？
+- 什麼時候 LLM 比 cross-encoder 更適合當 reranker？代價是什麼？
+
+**自我檢核**：
+- [ ] 能解釋為什麼本 repo 先做分類取回、再 rerank。
+- [ ] 能用實測數字說明選 `bge-reranker-base` 而不是 `bge-reranker-v2-m3` 的取捨。

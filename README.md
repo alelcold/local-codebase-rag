@@ -152,7 +152,7 @@ Index settings changed, rebuilding everything.
 
 - 會觸發重建的設定：`CHUNK_METADATA`、`CHUNK_MAX_CHARS`、`EMBED_DOC_PREFIX`，以及程式更新了切塊或 embedding 內容格式時。改了設定還沒重新索引時，`/health` 的 `qdrant.reindex_needed` 會是 `true`，`scripts/evaluate.py` 也會提醒。
 - **從舊版升級後，第一次索引會全量重建一次**，因為舊版建立的片段沒有 `index_config`。
-- 只影響查詢的設定（`HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K`、`RRF_K`、`PROMPT_VARIANT`、`TOP_K`）不需要重新索引，重新啟動 backend 即可。
+- 只影響查詢的設定（`HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K`、`RRF_K`、`PROMPT_VARIANT`、`TOP_K`、`SCORE_THRESHOLD`、`RERANK*`）不需要重新索引，重新啟動 backend 即可。
 - 更換 `EMBED_MODEL` 會自動改用另一個 collection（例如 `codebase_mxbai_embed_large`），在新的 collection 裡建立索引。
 
 API 的 `/index` 預設在背景執行並立即回傳，可用 `GET /index/status` 查看進度；若要等待完成再回傳，加上 `"wait": true`。
@@ -312,6 +312,8 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 | `SPLIT_RETRIEVAL` / `DOC_TOP_K` | `false` / `1` | 程式碼與文件分開取回：文件最多 `DOC_TOP_K` 段，其餘給程式碼 |
 | `CHUNK_METADATA` | `false` | 把路徑、類型、符號、定義／export 的名稱放進 embedding 內容（**需重新索引**，會自動全量重建） |
 | `PROMPT_VARIANT` | `v1` | `v2` = 一律繁體中文回答，並先說明程式碼位置（檔案與行號） |
+| `SCORE_THRESHOLD` | （空值 = 不過濾） | 向量檢索 cosine 低於此值的片段在 RRF 前丟掉；全部被丟掉時不呼叫 LLM，直接回答「找不到」。數值用 `scripts/calibrate_threshold.py` 決定（[ADR 0014](docs/decisions/0014-similarity-threshold.md)） |
+| `RERANK` / `RERANK_MODEL` | `false` / `BAAI/bge-reranker-base` | 交叉編碼器重新排序：取 `RERANK_CANDIDATES`（10）段候選，保留 `RERANK_TOP_N`（3）段。需以 `INSTALL_RERANK=true docker compose build backend` 建置（映像檔多約 1.5 GB）（[ADR 0015](docs/decisions/0015-rerank.md)） |
 | `LLM_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 生成回答的秒數 |
 | `EMBED_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 產生向量（embedding）的秒數 |
 | `PROXY_READ_TIMEOUT` / `PROXY_SEND_TIMEOUT` | `300` / `300` | 前端 nginx 代理 `/api` 時等待後端的秒數；改了只要 `docker compose up -d`，不用重新 build |
@@ -657,6 +659,7 @@ cd frontend && npm install && npm run dev
 │   │   ├── store.py            # Qdrant 存取
 │   │   ├── rag.py              # 檢索與回答（附檔案行號引用）
 │   │   ├── retrieval.py        # BM25、識別字比對、RRF、程式碼／文件分類取回（ADR 0013）
+│   │   ├── rerank.py           # 選用的交叉編碼器 rerank，延遲載入（ADR 0015）
 │   │   └── services.py         # 建立 Ollama / Qdrant 用戶端、健康檢查
 │   └── tests/
 ├── frontend/                   # React + Vite，build 後由 nginx 提供並代理 /api
@@ -696,8 +699,10 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0011](docs/decisions/0011-devcontainer-for-codespaces.md) | Codespaces 的 dev container / Dev container for Codespaces |
 | [0012](docs/decisions/0012-automated-evaluation-metrics.md) | 自動化評估的指標與限制 / Automated evaluation: metrics and their limits |
 | [0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md) | 混合檢索、分類取回、切塊 metadata / Hybrid retrieval, split code/doc retrieval, chunk metadata |
+| [0014](docs/decisions/0014-similarity-threshold.md) | 相似度門檻與固定的「找不到」回答 / Similarity threshold and a fixed "not found" answer |
+| [0015](docs/decisions/0015-rerank.md) | Cross-encoder rerank：選用、延遲載入 / Cross-encoder rerank, optional and lazily loaded |
 | **學習與評估 / Learning & evaluation** | |
-| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 20 個主題的解釋、程式碼位置、面試題、自我檢核 / 20 topics: explanation, code pointers, interview questions, self-check |
+| [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 23 個主題的解釋、程式碼位置、面試題、自我檢核 / 23 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |
 | [docs/evaluation/README.md](docs/evaluation/README.md) | 自動化評估的使用方式（`questions.yaml`、`evaluate.py`、`compare.py`）/ How to run the automated evaluation |
 | [docs/evaluation/experiment-plan-retrieval.md](docs/evaluation/experiment-plan-retrieval.md) | 檢索改善的實驗計畫：組合、指令、預期指標 / Retrieval experiment plan: runs, commands, expected metrics |

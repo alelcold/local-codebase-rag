@@ -114,6 +114,24 @@ def extract_identifiers(question: str) -> list[str]:
     return found
 
 
+def contains_identifier(text: str, identifiers: Sequence[str]) -> bool:
+    """True if ``text`` contains one of ``identifiers`` as a whole word, case-sensitively.
+
+    Used by SCORE_THRESHOLD (ADR 0014): a keyword hit that spells out an
+    identifier from the question is exact evidence and is kept even when its
+    cosine similarity is low. For ``Player.takeDamage`` the method name
+    ``takeDamage`` is enough (code calls it as ``this.takeDamage``), but not a
+    plain word: ``Game.frame`` needs ``Game.frame``, since ``frame`` is prose.
+    """
+    for ident in identifiers:
+        last = ident.rsplit(".", 1)[-1]
+        names = {ident, last} if looks_like_identifier(last) else {ident}
+        for name in names:
+            if name and re.search(rf"(?<![A-Za-z0-9_$]){re.escape(name)}(?![A-Za-z0-9_$])", text):
+                return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # BM25
 # ---------------------------------------------------------------------------

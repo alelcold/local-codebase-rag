@@ -330,12 +330,21 @@ function CitedFiles({ sources, onRef }: { sources: Source[]; onRef: (ref: number
   );
 }
 
+function scoreTitle(source: Source): string {
+  const parts = [source.matched_by?.length ? `分數（RRF 融合）· 命中：${source.matched_by.join("、")}` : "相似度分數"];
+  if (source.matched_by?.length && source.vector_score != null) parts.push(`向量相似度 ${source.vector_score.toFixed(3)}`);
+  if (source.rerank_score != null) parts.push(`rerank 分數 ${source.rerank_score.toFixed(3)}`);
+  return parts.join(" · ");
+}
+
 function TimingLine({ phase, timing, elapsed }: { phase: Phase; timing: Timing; elapsed: number }) {
   const parts: string[] = [];
   if (timing.firstTokenMs !== null) parts.push(`首字延遲 ${formatMs(timing.firstTokenMs)}`);
   if (timing.totalMs !== null) parts.push(`總耗時 ${formatMs(timing.totalMs)}`);
   else if (phase === "streaming" || phase === "generating") parts.push(`已經過 ${formatDuration(elapsed)}`);
   if (timing.server?.tokens) parts.push(`${timing.server.tokens} 個 token`);
+  if (timing.server?.rerank_seconds != null) parts.push(`rerank ${timing.server.rerank_seconds.toFixed(1)} 秒`);
+  if (timing.server?.rerank_load_seconds != null) parts.push(`載入 rerank 模型 ${timing.server.rerank_load_seconds.toFixed(1)} 秒`);
   if (phase === "stopped") parts.push("已停止");
   if (!parts.length) return null;
   return (
@@ -521,7 +530,7 @@ function SourceCard({ source, open, onToggle }: { source: Source; open: boolean;
           </span>
         </span>
         {source.symbol && <span className="symbol">{source.symbol}</span>}
-        <span className="score" title={source.matched_by?.length ? `分數（RRF 融合）· 命中：${source.matched_by.join("、")}` : "相似度分數"}>
+        <span className="score" title={scoreTitle(source)}>
           {source.score.toFixed(3)}
         </span>
         <span className="chevron">{open ? "▾" : "▸"}</span>

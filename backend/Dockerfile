@@ -10,9 +10,23 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Optional cross-encoder rerank (RERANK=true, ADR 0015): about +1.5 GB, so off by
+# default. Build with: INSTALL_RERANK=true docker compose build backend
+ARG INSTALL_RERANK=false
+ARG TORCH_VERSION=2.9.1
+COPY requirements-rerank.txt .
+RUN if [ "$INSTALL_RERANK" = "true" ]; then \
+      pip install --index-url https://download.pytorch.org/whl/cpu "torch==${TORCH_VERSION}" \
+      && pip install -r requirements-rerank.txt; \
+    fi
+
 COPY app ./app
 
-RUN useradd --create-home --uid 1000 rag
+RUN useradd --create-home --uid 1000 rag \
+    # Reranker model cache. A named volume is mounted here (docker-compose.yml);
+    # creating it owned by rag makes the new volume writable for the app.
+    && mkdir -p /models/hf && chown -R rag:rag /models
+ENV HF_HOME=/models/hf
 USER rag
 
 EXPOSE 8000

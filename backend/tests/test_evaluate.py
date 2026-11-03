@@ -212,7 +212,8 @@ class MockBackend(BaseHTTPRequestHandler):
         if canned.get("cut"):
             return  # connection closes without done
         frame("done", {"retrieval_seconds": 0.01, "first_token_seconds": 0.02, "total_seconds": 0.05,
-                       "tokens": len(canned["tokens"]), "answer_chars": len("".join(canned["tokens"]))})
+                       "tokens": len(canned["tokens"]), "answer_chars": len("".join(canned["tokens"])),
+                       **canned.get("done", {})})
 
 
 @pytest.fixture
@@ -432,3 +433,149 @@ def test_retrieval_label_describes_the_server_switches():
     full = {**base, "hybrid_search": True, "rrf_k": 60, "split_retrieval": True, "doc_top_k": 1,
             "chunk_metadata": True, "prompt_variant": "v2"}
     assert ev.retrieval_label(full) == "hybrid (RRF k=60) + split (docs ≤ 1) + metadata · prompt v2"
+
+
+# ── ADR 0014 / 0015: threshold, rerank and per-excerpt scores ───────────────
+
+
+def test_retrieval_label_shows_threshold_and_rerank():
+    base = {"hybrid_search": False, "split_retrieval": False, "chunk_metadata": False, "prompt_variant": "v1",
+            "score_threshold": 0.5, "rerank": True, "rerank_model": "m", "rerank_candidates": 10, "rerank_top_n": 3}
+    assert ev.retrieval_label(base) == "threshold ≥ 0.5 + rerank (m, 10 → 3) · prompt v1"
+    assert ev.retrieval_label({**base, "score_threshold": None, "rerank": False}) == "vector only (baseline) · prompt v1"
+
+
+def test_report_records_excerpt_scores_rerank_time_and_threshold_refusals(backend, tmp_path, questions):
+    q = {x.id: x for x in questions}
+    scored = {**src(1, "src/config/gameConfig.ts"), "vector_score": 0.61, "rerank_score": 0.9, "matched_by": ["vector"]}
+    MockBackend.answers[q[1].question] = {
+        "sources": [scored], "tokens": ["在 [1]。"], "done": {"rerank_seconds": 1.25, "no_relevant": False},
+    }
+    MockBackend.answers[q[10].question] = {
+        "sources": [], "tokens": ["在目前索引的專案中找不到與這個問題相關的內容。"],
+        "done": {"rerank_seconds": None, "no_relevant": True},
+    }
+    assert ev.main(["--base-url", backend, "--label", "g", "--only", "1,10", "--no-warmup",
+                    "--out-dir", str(tmp_path)]) == 0
+    report = json.loads(next(tmp_path.glob("*.json")).read_text())
+    r1, r10 = report["results"]
+    assert r1["sources"][0]["vector_score"] == 0.61
+    assert r1["sources"][0]["rerank_score"] == 0.9 and r1["sources"][0]["matched_by"] == ["vector"]
+    assert r1["metrics"]["rerank_seconds"] == 1.25
+    assert r10["metrics"]["no_relevant"] is True and r10["metrics"]["refused"] is True
+    s = report["summary"]
+    assert s["rerank_seconds_mean"] == 1.25 and s["threshold_refusals"] == 1
+    md = next(tmp_path.glob("*.md")).read_text()
+    assert "rerank 耗時平均 | 1.2 s" in md and "因門檻直接拒答 | 1" in md
+    assert "LLM not called" in md
+
+
+# ── scripts/calibrate_threshold.py ─────────────────────────────────────────
+
+import calibrate_threshold as cal  # noqa: E402
+
+
+def cal_report(path: Path, results: list[dict], retrieval: dict | None = None, embed: str = "nomic-embed-text") -> Path:
+    path.write_text(json.dumps({
+        "schema": 1,
+        "health": {"ollama": {"embed_model": embed}, "retrieval": retrieval},
+        "results": results,
+    }), encoding="utf-8")
+    return path
+
+
+def result(question: str, expected: list[str], sources: list[tuple[str, float]], trick: bool = False,
+           key: str = "vector_score") -> dict:
+    return {
+        "question": question, "expected_files": expected, "expect_no_answer": trick, "error": None,
+        "sources": [{"file_path": f, "start_line": i, "end_line": i + 5, key: c} for i, (f, c) in enumerate(sources)],
+    }
+
+
+def test_calibrate_reads_vector_score_or_cosine_score_and_skips_rrf_and_thresholded_runs(tmp_path):
+    a = cal_report(tmp_path / "a.json", [result("q1", ["a.ts"], [("a.ts", 0.7), ("b.md", 0.5)], key="score")])
+    hybrid_old = cal_report(tmp_path / "h.json", [result("q1", ["a.ts"], [("a.ts", 0.03)], key="score")],
+                             {"hybrid_search": True})
+    thresholded = cal_report(tmp_path / "t.json", [result("q1", ["a.ts"], [("a.ts", 0.9)])],
+                              {"hybrid_search": False, "score_threshold": 0.5})
+    groups, notes = cal.load_samples([a, hybrid_old, thresholded])
+    samples = groups["nomic-embed-text"].samples
+    assert sorted((s.file_path, s.cosine, s.expected) for s in samples) == [("a.ts", 0.7, True), ("b.md", 0.5, False)]
+    assert any("h.json" in n and "no cosine" in n for n in notes)
+    assert any("t.json" in n and "SCORE_THRESHOLD" in n for n in notes)
+    # The same excerpt for the same question in two runs counts once.
+    groups, _ = cal.load_samples([a, a])
+    assert len(groups["nomic-embed-text"].samples) == 2
+    # CHUNK_METADATA changes the vectors: calibrated separately.
+    meta = cal_report(tmp_path / "m.json", [result("q1", ["a.ts"], [("a.ts", 0.8)])], {"chunk_metadata": True})
+    groups, _ = cal.load_samples([a, meta])
+    assert set(groups) == {"nomic-embed-text", "nomic-embed-text + CHUNK_METADATA"}
+
+
+def test_calibrate_counts_drops_blocks_lost_questions_and_trick_refusals():
+    S = cal.Sample
+    samples = [
+        S("q1", "a.ts", "a.ts:1-5", 0.62, True, False),
+        S("q1", "doc.md", "doc.md:1-5", 0.58, True, False),
+        S("q2", "c.ts", "c.ts:1-5", 0.55, True, False),
+        S("q1", "x.ts", "x.ts:1-5", 0.40, False, False),
+        S("trick", "y.ts", "y.ts:1-5", 0.45, False, True),
+    ]
+    r = cal.evaluate_threshold(samples, 0.56)
+    assert (r.expected_dropped, r.expected_total) == (1, 3)
+    assert (r.other_blocked, r.other_total) == (2, 2)
+    assert r.questions_losing_all == ["q2"]
+    assert (r.trick_refused, r.trick_total) == (1, 1)
+
+
+def _synthetic(n_questions: int = 6, per: int = 5) -> list:
+    S = cal.Sample
+    samples = []
+    for q in range(n_questions):
+        samples += [S(f"q{q}", "a.ts", f"a.ts:{i}", 0.60 + i / 100, True, False) for i in range(per)]
+        samples += [S(f"q{q}", "z.ts", f"z.ts:{i}", 0.35 + i / 100, False, False) for i in range(per)]
+    samples += [S("trick", "z.ts", "z.ts:99", 0.42, False, True)]
+    return samples
+
+
+def test_calibrate_recommends_the_highest_safe_threshold():
+    samples = _synthetic()
+    rows = [cal.evaluate_threshold(samples, t) for t in cal.DEFAULT_CANDIDATES]
+    rec = cal.recommend(samples, rows, max_drop=0.05, min_samples=20)
+    assert rec.threshold == 0.60  # every expected excerpt is >= 0.60
+    assert "1/1 trick" in rec.reason
+    text = cal.render(cal.Group("nomic-embed-text", ["a.json"], samples), rows, rec)
+    assert "**SCORE_THRESHOLD=0.60**" in text and "| 0.60 **←** |" in text
+
+
+def test_calibrate_refuses_to_guess_with_too_little_data():
+    samples = _synthetic(n_questions=2, per=3)
+    rows = [cal.evaluate_threshold(samples, t) for t in cal.DEFAULT_CANDIDATES]
+    rec = cal.recommend(samples, rows, max_drop=0.05, min_samples=20)
+    assert rec.threshold is None and "資料不足" in rec.reason
+
+
+def test_calibrate_says_so_when_distributions_overlap():
+    S = cal.Sample
+    samples = [S(f"q{q}", "a.ts", f"a{q}:{i}", 0.30 + 0.01 * i, True, False) for q in range(4) for i in range(10)]
+    samples += [S(f"q{q}", "z.ts", f"z{q}:{i}", 0.31 + 0.01 * i, False, False) for q in range(4) for i in range(10)]
+    rows = [cal.evaluate_threshold(samples, t) for t in [0.35, 0.40]]
+    rec = cal.recommend(samples, rows, max_drop=0.0, min_samples=20)
+    assert rec.threshold is None and "overlap" in rec.reason
+
+
+def test_calibrate_main_without_reports_explains_what_to_run(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(cal, "DEFAULT_RESULTS", tmp_path)
+    assert cal.main([]) == 2
+    assert "evaluate.py" in capsys.readouterr().out
+
+
+def test_calibrate_main_writes_markdown(tmp_path, capsys):
+    results = [result(f"q{q}", ["a.ts"], [("a.ts", 0.6 + i / 100) for i in range(5)] + [("z.ts", 0.3 + i / 100) for i in range(5)])
+               for q in range(6)]
+    results.append(result("trick", [], [("z.ts", 0.41)], trick=True))
+    path = cal_report(tmp_path / "A.json", results, {"hybrid_search": False})
+    out = tmp_path / "cal.md"
+    assert cal.main([str(path), "--out", str(out)]) == 0
+    text = out.read_text()
+    assert "nomic-embed-text" in text and "SCORE_THRESHOLD=0.60" in text

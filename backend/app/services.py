@@ -16,6 +16,7 @@ from qdrant_client import QdrantClient
 from .config import Settings, get_settings
 from .indexer import CodebaseIndexer
 from .rag import RagService
+from .rerank import CrossEncoderReranker, Reranker, rerank_installed
 from .store import CodeVectorStore
 
 
@@ -28,6 +29,8 @@ class Services:
     indexer: CodebaseIndexer
     rag: RagService
     ollama_http: httpx.Client
+    # Only set with RERANK=true; the model inside loads on first use (ADR 0015).
+    reranker: Reranker | None = None
 
 
 def assemble(
@@ -36,16 +39,21 @@ def assemble(
     embed_model: BaseEmbedding,
     llm: LLM,
     ollama_http: httpx.Client,
+    reranker: Reranker | None = None,
 ) -> Services:
     store = CodeVectorStore(qdrant, settings.collection_name)
+    if reranker is None and settings.rerank:
+        # Cheap: no import of torch / sentence-transformers until the first query.
+        reranker = CrossEncoderReranker(settings.rerank_model, settings.rerank_max_length)
     return Services(
         settings=settings,
         store=store,
         embed_model=embed_model,
         llm=llm,
         indexer=CodebaseIndexer(settings, store, embed_model),
-        rag=RagService(settings, store, embed_model, llm),
+        rag=RagService(settings, store, embed_model, llm, reranker),
         ollama_http=ollama_http,
+        reranker=reranker,
     )
 
 
@@ -126,4 +134,20 @@ def check_qdrant(services: Services) -> dict:
         # True when the index was built with other chunking / embedding settings
         # (e.g. CHUNK_METADATA was toggled): run scripts/index.sh to rebuild.
         "reindex_needed": bool(stored) and stored != {current},
+    }
+
+
+def check_reranker(services: Services) -> dict:
+    """RERANK state for /health. Never loads the model (that happens on the first query)."""
+    s = services.settings
+    if not s.rerank:
+        return {"enabled": False}
+    installed = rerank_installed() if isinstance(services.reranker, CrossEncoderReranker) else True
+    return {
+        "enabled": True,
+        "model": s.rerank_model,
+        # False: the image was built without INSTALL_RERANK=true; queries will fail.
+        "installed": installed,
+        "loaded": bool(getattr(services.reranker, "loaded", True)),
+        "ok": installed,
     }

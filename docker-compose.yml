@@ -21,7 +21,11 @@ services:
       start_period: 5s
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        # true = include torch (CPU) + sentence-transformers for RERANK (ADR 0015), about +1.5 GB.
+        INSTALL_RERANK: ${INSTALL_RERANK:-false}
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -56,11 +60,21 @@ services:
       SPLIT_RETRIEVAL: ${SPLIT_RETRIEVAL:-false}
       DOC_TOP_K: ${DOC_TOP_K:-1}
       PROMPT_VARIANT: ${PROMPT_VARIANT:-v1}
+      # Anti-hallucination switches (ADR 0014, 0015); empty / false = off.
+      SCORE_THRESHOLD: ${SCORE_THRESHOLD:-}
+      RERANK: ${RERANK:-false}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-base}
+      RERANK_CANDIDATES: ${RERANK_CANDIDATES:-10}
+      RERANK_TOP_N: ${RERANK_TOP_N:-3}
+      RERANK_MAX_LENGTH: ${RERANK_MAX_LENGTH:-512}
       STREAM_HEARTBEAT_SECONDS: ${STREAM_HEARTBEAT_SECONDS:-10}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     volumes:
       # The project being indexed, mounted read-only.
       - ${PROJECT_PATH:-./examples/sample-game-frontend}:/codebase:ro
+      # Reranker model cache (HF_HOME): downloaded once on the first RERANK query,
+      # kept across container rebuilds. Stays empty with RERANK=false.
+      - reranker_models:/models
     extra_hosts:
       # Docker Desktop defines this already; needed for Colima/OrbStack/Linux.
       - "host.docker.internal:host-gateway"
@@ -81,3 +95,4 @@ services:
 
 volumes:
   qdrant_data:
+  reranker_models:

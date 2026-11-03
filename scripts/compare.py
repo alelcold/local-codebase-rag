@@ -27,6 +27,7 @@ SUMMARY_ROWS: list[tuple[str, Callable[[dict], Any], str]] = [
     ("Time to first token, mean / 首字延遲平均", lambda s: s.get("first_token_seconds_mean"), "seconds"),
     ("Time to first token, median / 首字延遲中位數", lambda s: s.get("first_token_seconds_median"), "seconds"),
     ("Total time, mean / 總耗時平均", lambda s: s.get("total_seconds_mean"), "seconds"),
+    ("Rerank time, mean / rerank 耗時平均", lambda s: s.get("rerank_seconds_mean"), "seconds"),
     ("Tokens, mean / 平均 token 數", lambda s: s.get("tokens_mean"), "number"),
     ("Expected-file recall / 預期檔案命中率", lambda s: s.get("file_recall_mean"), "rate"),
     ("Code file retrieved / 程式碼檔命中", lambda s: (s.get("code_hit") or {}).get("rate"), "rate"),
@@ -37,6 +38,7 @@ SUMMARY_ROWS: list[tuple[str, Callable[[dict], Any], str]] = [
     ("Keyword hit rate / 關鍵字命中率", lambda s: s.get("keyword_rate_mean"), "rate"),
     ("Answers with Simplified / 混入簡體字的回答", lambda s: s.get("simplified_answers"), "count-lower"),
     ("Trick question refused / 陷阱題正確拒答", lambda s: (s.get("no_answer_refused") or {}).get("rate"), "rate"),
+    ("Refused by SCORE_THRESHOLD / 因門檻直接拒答", lambda s: s.get("threshold_refusals"), "number"),
     ("Manual correctness / 人工判定正確性", lambda s: (s.get("manual_correctness") or {}).get("total"), "number"),
     ("Errors / 失敗題數", lambda s: s.get("errors"), "count-lower"),
 ]
