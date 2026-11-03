@@ -252,6 +252,10 @@ python3 scripts/compare.py docs/evaluation/results/<date>-codespace-3b-k4-baseli
 
 Same for `-split`, `-all`, and the `-ident` pairs.
 
+## Mac M2 run (`scripts/benchmark-mac.sh`)
+
+The Codespaces conditions above do not apply on the Mac. There, `scripts/benchmark-mac.sh` (ADR 0016) runs groups **A** (`baseline`) and **D** (`hybrid-split`), and with `--with-rerank` also **I** (`hybrid-split-rerank`, `RERANK_CANDIDATES=20 RERANK_TOP_N=8`), on both question sets, with `qwen2.5-coder:14b` and `TOP_K=8`. Labels: `mac-m2-14b-k8-<group>[-ident]`. Switches are exported per group as shown in [How switches are set](#how-switches-are-set), `/health` is checked before each group, and the model is unloaded before each run so no group reuses another's cached prompt. It ends with `compare.py` (A → D, D → I) and a summary in the column layout of `docs/metrics.md`.
+
 ## What to look at, per group
 
 Metric names are those in the report summary and `compare.py`. "Retrieval" metrics do not depend on the LLM, so they are the most reliable signal with a 3B model.
@@ -350,6 +354,10 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
 - 比較（主要與識別字題組各一份）：A → H（只有 Rerank）、A → I、**C → I**（混合檢索與 Rerank 在分類取回之上的效果），指令同英文版。D 組（混合 + 分類、不含 Rerank）沒有跑，所以 C → I 看到的是混合檢索與 Rerank 的合計效果；要分開兩者需要再跑 D 組。
 - 全部跑完後，執行 `docker compose up -d backend` 與 `./scripts/index.sh` 回到基準線。
 - 每份 `.md` 報告都要填寫「人工判定正確性」並執行 `--apply-manual`，再用 `compare.py` 把每一組與 A 比較。
+
+## Mac M2 上的執行（`scripts/benchmark-mac.sh`）
+
+上方的 Codespaces 固定條件不適用於 Mac。在 Mac 上由 `scripts/benchmark-mac.sh`（ADR 0016）以 `qwen2.5-coder:14b`、`TOP_K=8` 執行 **A** 組（`baseline`）與 **D** 組（`hybrid-split`），加上 `--with-rerank` 時另跑 **I** 組（`hybrid-split-rerank`，`RERANK_CANDIDATES=20 RERANK_TOP_N=8`），兩個題組都跑。label 為 `mac-m2-14b-k8-<組別>[-ident]`。開關依[如何設定開關](#如何設定開關)的方式逐組 export，每組執行前檢查 `/health`，每次評估前卸載模型，避免各組重用彼此的提示快取。最後執行 `compare.py`（A → D、D → I），並輸出欄位與 `docs/metrics.md` 相同的摘要。
 
 ## 各組要看的指標
 

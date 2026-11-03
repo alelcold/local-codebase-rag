@@ -7,17 +7,14 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 step() { echo; echo "==> $*"; }
 
-step "Installing jq, zstd, iproute2 (used by the scripts and the Ollama installer) and git-lfs"
+step "Installing jq, zstd, iproute2 and git-lfs (used by the scripts, the Ollama installer and git push)"
+# git-lfs: Codespaces can leave Git LFS hooks (e.g. .git/hooks/pre-push) in the
+# clone without the git-lfs binary, and then every `git push` fails with
+# "This repository is configured for Git LFS but 'git-lfs' was not found on your path".
+# scripts/doctor.sh checks for this (devlog 2026-11-03).
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends jq zstd iproute2 git-lfs >/dev/null
-
-# The repository's git hooks (post-checkout, post-commit, post-merge, pre-push)
-# call git-lfs; without it every checkout prints "This repository is configured
-# for Git LFS but 'git-lfs' was not found on your path".
-# --skip-repo: only the global filter config. Plain `git lfs install` exits 2
-# when the repo already has these hooks, which would stop this script (set -e).
-step "Setting up Git LFS"
-git lfs install --skip-repo
+echo "git-lfs: $(git lfs version 2>/dev/null | head -n1)"
 
 step "Installing Ollama"
 if command -v ollama >/dev/null 2>&1; then
@@ -40,6 +37,11 @@ else
   cp .env.codespaces .env
   echo "created .env from .env.codespaces (qwen2.5-coder:3b, TOP_K=4, sample project)"
 fi
+
+# --skip-repo: only the global filter config. Plain `git lfs install` exits 2
+# when the repo already has these hooks, which would stop this script (set -e).
+step "Setting up Git LFS"
+git lfs install --skip-repo
 
 echo
 echo "post-create done. post-start.sh starts Ollama and the stack (every time the codespace starts)."
