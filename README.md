@@ -368,7 +368,7 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 | `HYBRID_SEARCH` | `false` | 混合檢索：向量 + BM25 + 識別字定義比對，以 RRF 合併（[ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)） |
 | `SPLIT_RETRIEVAL` / `DOC_TOP_K` | `false` / `1` | 程式碼與文件分開取回：文件最多 `DOC_TOP_K` 段，其餘給程式碼 |
 | `CHUNK_METADATA` | `false` | 把路徑、類型、符號、定義／export 的名稱放進 embedding 內容（**需重新索引**，會自動全量重建） |
-| `PROMPT_VARIANT` | `v1` | `v2` = 一律繁體中文回答，並先說明程式碼位置（檔案與行號） |
+| `PROMPT_VARIANT` | `v1` | `v2` = 一律繁體中文回答，並先說明程式碼位置（檔案與行號）；`v3` = 以 v1 為基礎，片段沒有直接提到問題主題時明確回答找不到，並一律使用繁體中文（[ADR 0016](docs/decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md)） |
 | `SCORE_THRESHOLD` | （空值 = 不過濾） | 向量檢索 cosine 低於此值的片段在 RRF 前丟掉；全部被丟掉時不呼叫 LLM，直接回答「找不到」。數值用 `scripts/calibrate_threshold.py` 決定（[ADR 0014](docs/decisions/0014-similarity-threshold.md)） |
 | `RERANK` / `RERANK_MODEL` | `false` / `BAAI/bge-reranker-base` | 交叉編碼器重新排序：取 `RERANK_CANDIDATES`（10）段候選，保留 `RERANK_TOP_N`（3）段。需以 `INSTALL_RERANK=true docker compose build backend` 建置（映像檔多約 1.5 GB）（[ADR 0015](docs/decisions/0015-rerank.md)） |
 | `LLM_REQUEST_TIMEOUT` | `300` | 後端等待 Ollama 生成回答的秒數 |

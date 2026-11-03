@@ -13,7 +13,8 @@ through the streaming endpoint and score what can be scored automatically.
 Per question: time to first token, total time, tokens (client-side timing), file
 hit rate of the retrieved sources (code and documentation separately, plus the
 file that defines a setting for 定位設定 questions), keyword hit rate, whether
-the answer contains Simplified Chinese characters, and refusals for 陷阱題.
+the answer contains Simplified Chinese characters, refusals for 陷阱題
+(拒答率) and "not found" answers to answerable questions (誤拒率, ADR 0016).
 
 Writes docs/evaluation/results/<YYYY-MM-DD>-<label>.json and .md. The Markdown
 report has an empty 「人工判定正確性」 column: keyword hits are not correctness
@@ -52,6 +53,17 @@ WARMUP_QUESTION = "這個專案主要用什麼程式語言寫的？"
 SOURCE_FIELDS = (
     "ref", "file_path", "start_line", "end_line", "symbol", "score",
     "vector_score", "rerank_score", "matched_by",
+)
+
+# Phrases that mark an answer as "not found" when judging an *answerable*
+# question (誤拒, false refusal; ADR 0016). Narrower than a trick question's
+# keywords on purpose: a bare 「沒有」 is common in correct answers ("no package
+# collected within COMBO_WINDOW_MS"), so it is not listed. Includes the fixed
+# sentence of PROMPT_VARIANT=v3 and the backend's canned NO_RELEVANT /
+# NO_MATCH answers (all contain 「找不到」).
+REFUSAL_PHRASES = (
+    "找不到", "沒找到", "没找到", "不存在", "沒有提到", "未提及", "沒有相關", "没有相关", "無法回答",
+    "not found", "cannot find", "can't find", "could not find", "couldn't find", "no relevant",
 )
 
 # Characters that exist only in Simplified Chinese (their Traditional forms are
@@ -299,6 +311,12 @@ def simplified_chars(text: str) -> list[str]:
     return seen
 
 
+def refusal_phrases(text: str) -> list[str]:
+    """REFUSAL_PHRASES found in ``text`` (case-insensitive)."""
+    folded = text.casefold()
+    return [p for p in REFUSAL_PHRASES if p.casefold() in folded]
+
+
 def score(q: Question, r: StreamResult) -> dict:
     files = file_metrics(q, r.sources, r.answer)
     keywords = keyword_metrics(q, r.answer)
@@ -321,6 +339,12 @@ def score(q: Question, r: StreamResult) -> dict:
     if q.expect_no_answer:
         # Refusal = a refusal phrase (the keywords) and no sign of invented code.
         out["refused"] = bool(keywords["hit"]) and not keywords["forbidden_hits"]
+    else:
+        # False refusal (ADR 0016) = says "not found" and gives none of the expected
+        # facts. "沒有音效檔，音效由 SoundManager 合成" says 沒有 but hits a keyword: not a refusal.
+        phrases = refusal_phrases(r.answer)
+        out["refusal_phrases"] = phrases
+        out["falsely_refused"] = bool(phrases) and not keywords["hit"] if not r.error else None
     return out
 
 
@@ -341,6 +365,7 @@ def summarize(results: list[dict]) -> dict:
     for r in ok:
         by_type.setdefault(r["type"], []).append(r["metrics"])
     no_answer = [r["metrics"].get("refused") for r in ok if r.get("expect_no_answer")]
+    answerable = [r["metrics"].get("falsely_refused") for r in ok if not r.get("expect_no_answer")]
     return {
         "questions": len(results),
         "errors": len(results) - len(ok),
@@ -360,7 +385,9 @@ def summarize(results: list[dict]) -> dict:
         "retrieved_doc_share_mean": _mean(x["files"]["retrieved_doc_share"] for x in m),
         "keyword_rate_mean": _mean(x["keywords"]["rate"] for x in m),
         "simplified_answers": sum(x["has_simplified"] for x in m),
+        # 拒答率: trick questions refused. 誤拒率: answerable questions answered "not found" (ADR 0016).
         "no_answer_refused": _rate(no_answer),
+        "false_refusals": _rate(answerable),
         "keyword_rate_by_type": {t: _mean(x["keywords"]["rate"] for x in xs) for t, xs in by_type.items()},
     }
 
@@ -515,7 +542,8 @@ def render_markdown(report: dict) -> str:
         f"| Share of retrieved chunks that are docs / 取回片段中文件的比例 | {_pct(s['retrieved_doc_share_mean'])} |",
         f"| Keyword hit rate, mean / 關鍵字命中率平均 | {_pct(s['keyword_rate_mean'])} |",
         f"| Answers with Simplified characters / 混入簡體字的回答 | {s['simplified_answers']} |",
-        f"| Trick question refused / 陷阱題正確拒答 | {_rate_str(s['no_answer_refused'])} |",
+        f"| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | {_rate_str(s['no_answer_refused'])} |",
+        f"| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | {_rate_str(s.get('false_refusals') or {'of': 0})} |",
         f"| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | {s.get('threshold_refusals', 0)} |",
         "| Manual correctness / 人工判定正確性 | ___ / " + str(2 * s["questions"]) + " |",
         "",
@@ -536,6 +564,8 @@ def render_markdown(report: dict) -> str:
         kw = f"{m['keywords']['hit']}/{m['keywords']['total']}"
         if r["expect_no_answer"]:
             kw += " (refused)" if m.get("refused") else " (**not refused**)"
+        elif m.get("falsely_refused"):
+            kw += " (**falsely refused**)"
         lines.append(
             f"| {r['id']} | {r['type']} | {_fmt(m['first_token_seconds'], ' s')} | {_fmt(m['total_seconds'], ' s')} | "
             f"{_fmt(m['tokens'])} | {_ratio(f['all'])} | {_ratio(f['code'])} | {_ratio(f['doc'])} | "
@@ -561,6 +591,8 @@ def render_markdown(report: dict) -> str:
         ]
         if m["keywords"]["forbidden_hits"]:
             lines.append(f"- **Forbidden keywords found**: {', '.join(m['keywords']['forbidden_hits'])}")
+        if m.get("falsely_refused"):
+            lines.append(f"- **False refusal**: says {', '.join(m['refusal_phrases'])} and hits no keyword")
         if m["has_simplified"]:
             lines.append(f"- **Simplified characters**: {''.join(m['simplified_chars'])}")
         answer = r["answer"].strip().replace("~~~~", "~ ~ ~ ~")
@@ -695,7 +727,8 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(f"first token mean {s['first_token_seconds_mean']}s · total mean {s['total_seconds_mean']}s · "
           f"code hit {_rate_str(s['code_hit'])} · keywords {_pct(s['keyword_rate_mean'])} · "
-          f"Simplified {s['simplified_answers']} · errors {s['errors']}")
+          f"Simplified {s['simplified_answers']} · refused {_rate_str(s['no_answer_refused'])} · "
+          f"falsely refused {_rate_str(s['false_refusals'])} · errors {s['errors']}")
     print(f"→ {json_path}")
     print(f"→ {md_path}  (fill in 人工判定正確性)")
     return 1 if s["errors"] else 0

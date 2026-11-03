@@ -301,6 +301,7 @@ def test_main_writes_json_and_markdown(backend, tmp_path, questions, capsys):
     assert s["definition_hit"] == {"hit": 1, "of": 2, "rate": 0.5}
     assert s["simplified_answers"] == 1
     assert s["no_answer_refused"] == {"hit": 1, "of": 1, "rate": 1.0}
+    assert s["false_refusals"] == {"hit": 0, "of": 2, "rate": 0.0}
     assert set(s["keyword_rate_by_type"]) == {"定位設定", "陷阱題"}
 
     md = (tmp_path / files[1]).read_text()
@@ -359,7 +360,7 @@ def test_compare_summary_and_per_question(tmp_path):
     assert "| Code file retrieved / 程式碼檔命中 | 25% | 75% | +50 pt ▲ |" in text
     assert "| Answers with Simplified / 混入簡體字的回答 | 1 | 0 | -1 ▲ |" in text
     assert "| Keyword hit rate / 關鍵字命中率 | 60% | 60% | 0 |" in text
-    assert "| Trick question refused / 陷阱題正確拒答 | — | — | — |" in text
+    assert "| Refusal rate, trick questions / 拒答率 | — | — | — |" in text
     assert "| 1 | 定位設定 | 30.4 s → 55.0 s | 40.4 s → 65.0 s | 0/2 → 2/2 | 0/2 → 2/2 | 0/2 → 2/2 | 3/5 → 3/5 | 体 / — | 2 / 2 |" in text
     assert "Not in both runs (not compared): 2, 9" in text
 
@@ -593,3 +594,125 @@ def test_calibrate_main_writes_markdown(tmp_path, capsys):
     assert cal.main([str(path), "--out", str(out)]) == 0
     text = out.read_text()
     assert "nomic-embed-text" in text and "SCORE_THRESHOLD=0.60" in text
+
+
+# ── questions-out-of-scope.yaml, 拒答率 / 誤拒率 (ADR 0016) ──────────────────
+
+OUT_OF_SCOPE = ROOT / "docs" / "evaluation" / "questions-out-of-scope.yaml"
+
+
+def test_out_of_scope_set_has_five_trick_and_some_control_questions():
+    oos = ev.load_questions(OUT_OF_SCOPE)
+    other_ids = {q.id for q in ev.load_questions(QUESTIONS)} | {
+        q.id for q in ev.load_questions(ROOT / "docs" / "evaluation" / "questions-identifiers.yaml")
+    }
+    assert not ({q.id for q in oos} & other_ids)
+    tricks = [q for q in oos if q.type == "陷阱題"]
+    controls = [q for q in oos if q.type == "對照題"]
+    assert len(tricks) == 5 and 2 <= len(controls) <= 3 and len(oos) == len(tricks) + len(controls)
+    for q in oos:
+        assert q.question and q.question_en and q.key_facts and q.keywords
+    for q in tricks:
+        assert q.expect_no_answer and q.expected_files == [] and q.forbidden_keywords
+        # A refusal must be countable: 「找不到」 is the phrase prompt v3 asks for.
+        assert "找不到" in q.keywords[0]
+    for q in controls:
+        assert not q.expect_no_answer and q.expected_files and not q.forbidden_keywords
+        code = "".join((SAMPLE / f).read_text() for f in q.expected_files)
+        for path in q.expected_files + q.definition_files:
+            assert (SAMPLE / path).is_file(), f"question {q.id}: {path} not in the sample project"
+        for alternatives in q.keywords:
+            for kw in alternatives:
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*[A-Z_][A-Za-z0-9_]*", kw) or kw in ("blur", "localStorage"):
+                    assert kw in code, f"question {q.id}: keyword {kw} not found in its expected files"
+
+
+def test_out_of_scope_trick_features_really_do_not_exist():
+    """The forbidden keywords are signs of invented code: none may appear in the sample project."""
+    source = "".join(p.read_text() for p in SAMPLE.rglob("*") if p.is_file() and p.suffix in {".ts", ".tsx", ".js"})
+    for q in ev.load_questions(OUT_OF_SCOPE):
+        if q.expect_no_answer:
+            for kw in q.forbidden_keywords:
+                assert kw.casefold() not in source.casefold(), f"question {q.id}: {kw} exists in the sample project"
+
+
+def test_refusal_phrases_are_found_case_insensitively():
+    from app.rag import NO_MATCH_ANSWER, NO_RELEVANT_ANSWER, REFUSAL_SENTENCE
+
+    assert ev.refusal_phrases("Not Found in the excerpts") == ["not found"]
+    # Prompt v3's sentence and the backend's canned answers all count.
+    for text in (REFUSAL_SENTENCE, NO_MATCH_ANSWER, NO_RELEVANT_ANSWER):
+        assert ev.refusal_phrases(text), text
+    # A bare 沒有 is not a refusal phrase (common in correct answers).
+    assert ev.refusal_phrases("超過 COMBO_WINDOW_MS 沒有收集到包裹，連擊歸零。") == []
+
+
+def test_false_refusal_needs_a_refusal_phrase_and_no_keyword():
+    q = ev.Question(id=27, type="對照題", question="?", keywords=[["SoundManager"], ["AudioContext", "合成"]],
+                    expected_files=["src/audio/SoundManager.ts"])
+    refused = ev.score(q, ev.StreamResult(answer="在索引的專案中找不到相關內容。", server={}))
+    assert refused["falsely_refused"] is True and refused["refusal_phrases"] == ["找不到"]
+    assert "refused" not in refused  # 拒答 is only scored for trick questions
+    # Says something is missing but gives the facts: an answer, not a refusal.
+    partial = ev.score(q, ev.StreamResult(answer="找不到音效檔；音效由 SoundManager 用 AudioContext 合成。", server={}))
+    assert partial["falsely_refused"] is False
+    answered = ev.score(q, ev.StreamResult(answer="[1] SoundManager 沒有音效檔，即時合成。", server={}))
+    assert answered["falsely_refused"] is False and answered["refusal_phrases"] == []
+    # Trick questions are scored as 拒答, never as 誤拒.
+    trick = ev.Question(id=21, type="陷阱題", question="?", expect_no_answer=True, keywords=[["找不到"]])
+    assert "falsely_refused" not in ev.score(trick, ev.StreamResult(answer="找不到。", server={}))
+
+
+def _scored(qid: int, trick: bool, answer: str, error: str | None = None) -> dict:
+    keywords = [["找不到"]] if trick else [["SoundManager"]]
+    q = ev.Question(id=qid, type="陷阱題" if trick else "對照題", question="?", expect_no_answer=trick, keywords=keywords)
+    r = ev.StreamResult(answer=answer, server={}, error=error)
+    return {"id": qid, "type": q.type, "expect_no_answer": trick, "error": error, "metrics": ev.score(q, r)}
+
+
+def test_summary_reports_refusal_and_false_refusal_rates():
+    results = [
+        _scored(21, True, "在索引的專案中找不到相關內容。"),
+        _scored(22, True, "付款用 Stripe 處理。"),
+        _scored(26, False, "在索引的專案中找不到相關內容。"),
+        _scored(27, False, "[1] SoundManager 合成音效。"),
+        _scored(28, False, "", error="HTTP 502"),  # errors are left out of both rates
+    ]
+    s = ev.summarize(results)
+    assert s["no_answer_refused"] == {"hit": 1, "of": 2, "rate": 0.5}
+    assert s["false_refusals"] == {"hit": 1, "of": 2, "rate": 0.5}
+
+
+def test_report_shows_refusal_and_false_refusal_rates(backend, tmp_path):
+    oos = {q.id: q for q in ev.load_questions(OUT_OF_SCOPE)}
+    MockBackend.answers[oos[21].question] = {"sources": [], "tokens": ["在索引的專案中找不到相關內容。"]}
+    MockBackend.answers[oos[22].question] = {"sources": [], "tokens": ["付款流程使用 ", "Stripe。"]}
+    MockBackend.answers[oos[27].question] = {"sources": [], "tokens": ["在索引的專案中找不到相關內容。"]}
+    MockBackend.answers[oos[28].question] = {"sources": [], "tokens": ["InputManager 在 blur 時清空 held。"]}
+    code = ev.main(["--base-url", backend, "--label", "oos", "--questions", str(OUT_OF_SCOPE),
+                    "--only", "21,22,27,28", "--no-warmup", "--out-dir", str(tmp_path)])
+    assert code == 0
+    report = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert report["summary"]["no_answer_refused"] == {"hit": 1, "of": 2, "rate": 0.5}
+    assert report["summary"]["false_refusals"] == {"hit": 1, "of": 2, "rate": 0.5}
+    md = next(tmp_path.glob("*.md")).read_text()
+    assert "| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 1/2 (50%) |" in md
+    assert "| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 1/2 (50%) |" in md
+    assert "(**not refused**)" in md and "(**falsely refused**)" in md
+    assert "- **False refusal**: says 找不到 and hits no keyword" in md
+
+
+def test_report_from_an_older_summary_without_false_refusals_still_renders():
+    report = {"summary": {**ev.summarize([]), "false_refusals": None}, "config": {
+        "label": "old", "base_url": "x", "top_k": 4, "lang": "zh", "warmup": True},
+        "health": {}, "results": [], "date": "2026-11-03", "started_at": "t"}
+    del report["summary"]["false_refusals"]
+    assert "誤拒率（可回答的題目答「找不到」） | — |" in ev.render_markdown(report)
+
+
+def test_compare_false_refusal_rate_lower_is_better():
+    a = {"summary": {"no_answer_refused": {"rate": 0.0}, "false_refusals": {"rate": 0.0}}, "results": []}
+    b = {"summary": {"no_answer_refused": {"rate": 0.8}, "false_refusals": {"rate": 1 / 3}}, "results": []}
+    text = compare.compare(a, b)
+    assert "| Refusal rate, trick questions / 拒答率 | 0% | 80% | +80 pt ▲ |" in text
+    assert "| False refusal rate / 誤拒率 | 0% | 33% | +33 pt ▼ |" in text

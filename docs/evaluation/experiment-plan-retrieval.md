@@ -1,8 +1,8 @@
-# Experiment plan: hybrid retrieval, split retrieval, chunk metadata, prompt v2, threshold, rerank
+# Experiment plan: hybrid retrieval, split retrieval, chunk metadata, prompt v2, threshold, rerank, prompt v3
 
 > English first; 繁體中文版本在下方.
 > Privacy: only the sample project (`examples/sample-game-frontend/`) is indexed and evaluated.
-> Design: [ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md), [ADR 0014](../decisions/0014-similarity-threshold.md) (threshold), [ADR 0015](../decisions/0015-rerank.md) (rerank). Metrics: [ADR 0012](../decisions/0012-automated-evaluation-metrics.md).
+> Design: [ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md), [ADR 0014](../decisions/0014-similarity-threshold.md) (threshold), [ADR 0015](../decisions/0015-rerank.md) (rerank), [ADR 0016](../decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md) (prompt v3, refusing out-of-scope questions). Metrics: [ADR 0012](../decisions/0012-automated-evaluation-metrics.md).
 
 ## Goal
 
@@ -17,7 +17,7 @@ Everything except the switch under test stays the same in every run:
 | Environment | GitHub Codespaces, 4 cores / 16 GB, CPU only (`.env.codespaces`) |
 | Models | `qwen2.5-coder:3b`, `nomic-embed-text` |
 | `TOP_K` / `LLM_NUM_CTX` | 4 / 8192 |
-| Questions | `questions.yaml` (10, Chinese) **and** `questions-identifiers.yaml` (5, name an identifier) |
+| Questions | `questions.yaml` (10, Chinese) **and** `questions-identifiers.yaml` (5, name an identifier); group J also `questions-out-of-scope.yaml` (8: 5 trick, 3 control) |
 | Warm-up | on (default) |
 
 Why two question sets: the main set is phrased the way the team asks and mostly contains **no identifier** (question 1 does not say `INVINCIBLE_MS`). BM25 indexes only ASCII words (ADR 0013), so on those questions the keyword and identifier channels have little to work with; the effect of hybrid search shows mainly on `questions-identifiers.yaml` (ids 11–15).
@@ -49,6 +49,7 @@ Run them in this order: groups A–D, then G and H, share one index; E, F and I 
 | G. + threshold | `SCORE_THRESHOLD=<calibrated>` (ADR 0014) | Does the trick question (Q10) get refused without the LLM, and at what cost to correct answers? |
 | H. + rerank | `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4` (ADR 0015; image built with `INSTALL_RERANK=true`) | Does a cross-encoder put the defining code into the top 4, and how many seconds does it cost on CPU? |
 | I. hybrid + split + rerank | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 RERANK=true RERANK_TOP_N=4` (`RERANK_CANDIDATES` default 10). **Redefined on 2026-11-03**, see [I](#i-hybrid--split--rerank-redefined-2026-11-03) | Does rerank, with hybrid, improve on C (split), the best main-set retrieval so far? |
+| J. D + prompt v3 | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 PROMPT_VARIANT=v3` (ADR 0016) | Does an explicit "not found" rule make the 3B model refuse features that do not exist (Q10, ids 21–25), without refusing real questions (ids 26–28, main set)? |
 
 `RERANK_TOP_N=4` (not the default 3) in H and I keeps the number of excerpts sent to the model equal to the other groups' `TOP_K=4`, so only the choice of excerpts changes. Run H once more with `RERANK_TOP_N=3` if you want to measure the default.
 
@@ -232,6 +233,56 @@ python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-ba
 python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-split.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-rerank.json --out docs/evaluation/results/<date>-split-vs-hybrid-split-rerank.md
 ```
 
+### J. D + prompt v3 (ADR 0016)
+
+Q10 was not refused in any group A–I, the threshold could not be calibrated (G) and rerank scores do not separate it either (Q10 0.33 vs Q9 0.0165 in I). J changes **only the prompt** on top of D, so D is its reference: same retrieval, same index (A–D, no `CHUNK_METADATA`), no rerank image needed.
+
+First, the reference for the new question set: D with prompt v1 on `questions-out-of-scope.yaml` (D's main and `-ident` reports already exist):
+
+```bash
+HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 ./scripts/index.sh
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-out-of-scope.yaml --label codespace-3b-k4-hybrid-split-oos
+```
+
+Then J. `PROMPT_VARIANT` is query time only, so recreating the backend is enough:
+
+```bash
+HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 PROMPT_VARIANT=v3 docker compose up -d backend
+```
+
+Check that `/health` reports `"prompt_variant": "v3"`, then:
+
+```bash
+python3 scripts/evaluate.py --label codespace-3b-k4-hybrid-split-v3
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-identifiers.yaml --label codespace-3b-k4-hybrid-split-v3-ident
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-out-of-scope.yaml --label codespace-3b-k4-hybrid-split-v3-oos
+```
+
+Compare D → J for all three sets:
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-v3.json --out docs/evaluation/results/<date>-hybrid-split-vs-hybrid-split-v3.md
+```
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-ident.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-v3-ident.json --out docs/evaluation/results/<date>-hybrid-split-vs-hybrid-split-v3-ident.md
+```
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-oos.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-v3-oos.json --out docs/evaluation/results/<date>-hybrid-split-vs-hybrid-split-v3-oos.md
+```
+
+Read every answer flagged `(**falsely refused**)` and every trick-question answer: the automatic refusal check is a keyword screen (a 「沒有」 next to invented code would still need the forbidden-word check to catch it).
+
 ### Back to the baseline afterwards
 
 ```bash
@@ -270,6 +321,7 @@ Metric names are those in the report summary and `compare.py`. "Retrieval" metri
 | G. threshold | **Trick question refused = 1/1**, **Refused by SCORE_THRESHOLD = 1** (question 10 only) | Any other question refused, or Expected-file recall ↓ = the threshold is too high; lower it with `calibrate_threshold.py --max-drop 0` |
 | H. rerank | Defining file retrieved ↑, Expected file cited with [n] ↑, Manual correctness ↑; **Rerank time, mean** | Rerank time vs. first-token time: is the gain worth the seconds on CPU? |
 | I. hybrid + split + rerank | vs. C: Defining file retrieved (main) ↑, Code file retrieved ≥ C; `-ident`: Defining file retrieved stays 3/3; **Rerank time, mean** | Rerank time vs. first-token time; whether rerank pushes the one allowed doc excerpt out (Docs among retrieved chunks should stay ≤ 25 %) |
+| J. D + prompt v3 | vs. D: **Refusal rate** ↑ (main: Q10; `-oos`: ids 21–25), **False refusal rate = 0** (main, `-ident`, `-oos` ids 26–28), **Answers with Simplified = 0**; retrieval metrics unchanged (same retrieval) | Answers that refuse *and* explain something anyway; whether the fixed sentence is copied exactly; any real question now answered with 「找不到」; Manual correctness on the main set must not drop |
 
 Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row per group, with the report link). Never fill in numbers that were not measured.
 
@@ -279,13 +331,14 @@ Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row
 - If C alone gives most of the gain, keep hybrid optional (it then mainly helps questions that name identifiers).
 - Threshold (G): turn on only with the calibrated value, and only if no answerable question was refused. The value is tied to the embedding model; a new model needs a new calibration.
 - Rerank (H): turn on by default only if Manual correctness improves **and** the rerank time is acceptable next to the first-token time on the target machine.
+- Prompt v3 (J): make it the default only if the refusal rate rises (at least Q10 and most of 21–25), the false refusal rate stays 0 on every set, and main-set Manual correctness does not drop. A single false refusal of a real question outweighs one more refused trick question: a wrong "not found" hides code that exists. Write a new ADR for the change of default; do not edit `.env.codespaces` until then.
 
 ---
 
-# 實驗計畫：混合檢索、分類取回、切塊 metadata、提示 v2、相似度門檻、Rerank
+# 實驗計畫：混合檢索、分類取回、切塊 metadata、提示 v2、相似度門檻、Rerank、提示 v3
 
 > 隱私：只索引與評估範例專案（`examples/sample-game-frontend/`）。
-> 設計：[ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[ADR 0014](../decisions/0014-similarity-threshold.md)（門檻）、[ADR 0015](../decisions/0015-rerank.md)（Rerank）。指標：[ADR 0012](../decisions/0012-automated-evaluation-metrics.md)。
+> 設計：[ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[ADR 0014](../decisions/0014-similarity-threshold.md)（門檻）、[ADR 0015](../decisions/0015-rerank.md)（Rerank）、[ADR 0016](../decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md)（提示 v3，拒答範圍外的問題）。指標：[ADR 0012](../decisions/0012-automated-evaluation-metrics.md)。
 
 ## 目標
 
@@ -300,7 +353,7 @@ Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row
 | 環境 | GitHub Codespaces，4 核心／16GB，只有 CPU（`.env.codespaces`） |
 | 模型 | `qwen2.5-coder:3b`、`nomic-embed-text` |
 | `TOP_K`／`LLM_NUM_CTX` | 4／8192 |
-| 題目 | `questions.yaml`（10 題，中文）**以及** `questions-identifiers.yaml`（5 題，題目直接寫出識別字） |
+| 題目 | `questions.yaml`（10 題，中文）**以及** `questions-identifiers.yaml`（5 題，題目直接寫出識別字）；J 組另外加上 `questions-out-of-scope.yaml`（8 題：5 題陷阱題、3 題對照題） |
 | 暖機 | 開啟（預設） |
 
 為什麼要兩組題目：主要題組是團隊平常的問法，大多**沒有識別字**（第 1 題沒有寫 `INVINCIBLE_MS`）。BM25 只索引 ASCII 單字（ADR 0013），所以這些題目上關鍵字與識別字通道能用的線索很少；混合檢索的效果主要會出現在 `questions-identifiers.yaml`（11–15 題）。
@@ -332,6 +385,7 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 | G. + 門檻 | `SCORE_THRESHOLD=<校準值>`（ADR 0014） | 陷阱題（第 10 題）能否不呼叫 LLM 就拒答？正確回答要付出多少代價？ |
 | H. + Rerank | `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4`（ADR 0015；映像檔以 `INSTALL_RERANK=true` 建置） | 交叉編碼器能否把定義的程式碼排進前 4 段？在 CPU 上要多花幾秒？ |
 | I. 混合 + 分類 + Rerank | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 RERANK=true RERANK_TOP_N=4`（`RERANK_CANDIDATES` 用預設 10）。**2026-11-03 重新定義**，原因見下方 I 組說明 | 加上混合檢索與 Rerank，能否勝過目前主要題組檢索最好的 C（分類取回）？ |
+| J. D + 提示 v3 | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 PROMPT_VARIANT=v3`（ADR 0016） | 明確的「找不到」規則能否讓 3B 模型拒答不存在的功能（第 10 題、21–25 題），同時不拒答真實問題（26–28 題、主要題組）？ |
 
 H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片段數與其他組的 `TOP_K=4` 相同，只改變「選哪些片段」。想量測預設值時，可以再以 `RERANK_TOP_N=3` 跑一次 H 組。
 
@@ -352,6 +406,12 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
   - 混合檢索讓識別字題組的定義檔命中達到 3/3（B），分類取回讓主要題組取回程式碼（C）；在兩者之上加 Rerank，測的是交叉編碼器能否在這些候選中選得更好。
 - I 組在 A–D 索引（不開 `CHUNK_METADATA`）與 H 組建好的 rerank 映像檔上執行：`HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 RERANK=true RERANK_TOP_N=4 ./scripts/index.sh`（若 F 的 metadata 索引還在，會自動重建），再分別以主要題組與識別字題組（label 加 `-ident`）執行 `evaluate.py`。
 - 比較（主要與識別字題組各一份）：A → H（只有 Rerank）、A → I、**C → I**（混合檢索與 Rerank 在分類取回之上的效果），指令同英文版。D 組（混合 + 分類、不含 Rerank）沒有跑，所以 C → I 看到的是混合檢索與 Rerank 的合計效果；要分開兩者需要再跑 D 組。
+- **J 組：D + 提示 v3（ADR 0016）**。第 10 題在 A～I 組都沒有拒答，門檻校準不出來（G），rerank 分數也分不開（I 組第 10 題 0.33，高於第 9 題的 0.0165）。J 組在 D 之上**只改提示**，所以以 D 為參考：同樣的檢索、同一份索引（A–D，不開 `CHUNK_METADATA`），不需要 rerank 映像檔。指令（與英文版相同）：
+  1. 先補 D 組在新題組上的參考數據（D 的主要與 `-ident` 報告已經有了）：`HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 ./scripts/index.sh`，再 `python3 scripts/evaluate.py --questions docs/evaluation/questions-out-of-scope.yaml --label codespace-3b-k4-hybrid-split-oos`。
+  2. `PROMPT_VARIANT` 只影響查詢，重建 backend 即可：`HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 PROMPT_VARIANT=v3 docker compose up -d backend`，確認 `/health` 顯示 `"prompt_variant": "v3"`。
+  3. 三個題組各跑一次，label 為 `codespace-3b-k4-hybrid-split-v3`、`-v3-ident`（`--questions docs/evaluation/questions-identifiers.yaml`）、`-v3-oos`（`--questions docs/evaluation/questions-out-of-scope.yaml`）。
+  4. 三個題組各以 `compare.py` 比較 D → J（指令見英文版）。
+  5. 每一個標示 `(**falsely refused**)` 的回答與每一題陷阱題的回答都要讀過：自動拒答判定只是關鍵字篩選（編造程式碼時旁邊寫了「沒有」，要靠禁用字才抓得到）。
 - 全部跑完後，執行 `docker compose up -d backend` 與 `./scripts/index.sh` 回到基準線。
 - 每份 `.md` 報告都要填寫「人工判定正確性」並執行 `--apply-manual`，再用 `compare.py` 把每一組與 A 比較。
 
@@ -373,6 +433,7 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
 | G. 門檻 | **陷阱題正確拒答 = 1/1**、**因門檻直接拒答 = 1**（只有第 10 題） | 其他題被拒答，或預期檔案命中率下降 = 門檻太高；改用 `calibrate_threshold.py --max-drop 0` 的建議 |
 | H. Rerank | 定義檔命中 ↑、回答引用預期檔案 ↑、人工判定正確性 ↑；**rerank 耗時平均** | rerank 耗時與首字延遲相比：在 CPU 上多花的秒數值得嗎？ |
 | I. 混合 + 分類 + Rerank | 與 C 相比：定義檔命中（主要）↑、程式碼檔命中 ≥ C；識別字題組：定義檔命中維持 3/3；**rerank 耗時平均** | rerank 耗時與首字延遲相比；rerank 是否把唯一的文件名額擠掉（取回片段中文件比例應維持 ≤ 25%） |
+| J. D + 提示 v3 | 與 D 相比：**拒答率** ↑（主要：第 10 題；`-oos`：21–25 題）、**誤拒率 = 0**（主要、`-ident`、`-oos` 的 26–28 題）、**混入簡體字的回答 = 0**；取回類指標不變（檢索相同） | 拒答之後又自己補充說明的回答；固定句子是否被完整照抄；有沒有真實問題變成回答「找不到」；主要題組的人工判定正確性不能下降 |
 
 把摘要數據記到 [`docs/metrics.md`](../metrics.md) 第 4 節（每組一列，附報告連結）。沒有量測的數字不要填。
 
@@ -382,3 +443,4 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
 - 若 C 單獨就帶來大部分的改善，混合檢索維持選用（主要幫助直接寫出識別字的問題）。
 - 門檻（G）：只能用校準出的值開啟，且沒有任何可回答的題目被拒答。這個值綁定 embedding 模型，換模型就要重新校準。
 - Rerank（H）：只有在人工判定正確性提升，**而且**在目標機器上 rerank 耗時相對首字延遲可以接受時，才預設開啟。
+- 提示 v3（J）：只有在拒答率提升（至少第 10 題與 21–25 題中的大多數）、每個題組的誤拒率都維持 0，而且主要題組的人工判定正確性沒有下降時，才改為預設。誤拒一題真實問題比多拒答一題陷阱題更嚴重：錯誤的「找不到」會把存在的程式碼藏起來。改預設值時新增 ADR；在那之前不修改 `.env.codespaces`。

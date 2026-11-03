@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 NOMIC_QUERY_PREFIX = "search_query: "
 NOMIC_DOC_PREFIX = "search_document: "
 
-PROMPT_VARIANTS = {"v1", "v2"}
+PROMPT_VARIANTS = {"v1", "v2", "v3"}
 # Files treated as documentation (everything else indexed is code). Same set as
 # scripts/evaluate.py, so "code vs. docs" means the same thing in both places.
 DOC_EXTENSIONS = {".md", ".mdx", ".markdown", ".txt", ".rst"}
@@ -72,8 +72,10 @@ class Settings(BaseSettings):
     # --- Query ---
     # Total excerpts given to the LLM.
     top_k: int = 8
-    # Prompt wording: "v1" (original) or "v2" (always Traditional Chinese, code
-    # locations first, documentation only as support). ADR 0013.
+    # Prompt wording: "v1" (original), "v2" (always Traditional Chinese, code
+    # locations first, documentation only as support; ADR 0013) or "v3" (v1 +
+    # say "not found" when no excerpt mentions the topic + always Traditional
+    # Chinese; ADR 0016).
     prompt_variant: str = "v1"
     # Hybrid retrieval: vector search + BM25 keyword search + exact identifier
     # definitions, merged with Reciprocal Rank Fusion. Query time only; no
