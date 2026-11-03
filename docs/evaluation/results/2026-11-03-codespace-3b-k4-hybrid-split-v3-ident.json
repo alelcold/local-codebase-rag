@@ -1,0 +1,899 @@
+{
+  "schema": 1,
+  "date": "2026-11-03",
+  "started_at": "2026-11-03T10:03:24+00:00",
+  "config": {
+    "label": "codespace-3b-k4-hybrid-split-v3-ident",
+    "base_url": "http://localhost:8080/api",
+    "top_k": null,
+    "lang": "zh",
+    "warmup": true,
+    "only": null,
+    "questions_file": "docs/evaluation/questions-identifiers.yaml"
+  },
+  "health": {
+    "status": "ok",
+    "ollama": {
+      "ok": true,
+      "url": "http://host.docker.internal:11434",
+      "llm_model": "qwen2.5-coder:3b",
+      "embed_model": "nomic-embed-text",
+      "missing_models": []
+    },
+    "qdrant": {
+      "ok": true,
+      "url": "http://qdrant:6333",
+      "collection": "codebase_nomic_embed_text",
+      "indexed": true,
+      "points": 67,
+      "index_config": "chunker=1;embed_format=2;chunk_max_chars=3000;embed_model=nomic-embed-text;doc_prefix='search_document: ';chunk_metadata=off",
+      "reindex_needed": false
+    },
+    "top_k": 4,
+    "retrieval": {
+      "hybrid_search": true,
+      "split_retrieval": true,
+      "doc_top_k": 1,
+      "chunk_metadata": false,
+      "prompt_variant": "v3",
+      "rrf_k": 60,
+      "retrieval_candidates": 30,
+      "score_threshold": null,
+      "rerank": false,
+      "rerank_model": null,
+      "rerank_candidates": null,
+      "rerank_top_n": null
+    }
+  },
+  "summary": {
+    "questions": 5,
+    "errors": 0,
+    "first_token_seconds_mean": 26.282,
+    "first_token_seconds_median": 27.574,
+    "total_seconds_mean": 31.208,
+    "tokens_mean": 46.6,
+    "rerank_seconds_mean": null,
+    "threshold_refusals": 0,
+    "file_recall_mean": 0.9,
+    "code_hit": {
+      "hit": 5,
+      "of": 5,
+      "rate": 1.0
+    },
+    "doc_hit": {
+      "hit": 0,
+      "of": 0,
+      "rate": null
+    },
+    "definition_hit": {
+      "hit": 3,
+      "of": 3,
+      "rate": 1.0
+    },
+    "answer_cited_hit": {
+      "hit": 2,
+      "of": 5,
+      "rate": 0.4
+    },
+    "retrieved_doc_share_mean": 0.25,
+    "keyword_rate_mean": 0.483,
+    "simplified_answers": 0,
+    "no_answer_refused": {
+      "hit": 0,
+      "of": 0,
+      "rate": null
+    },
+    "false_refusals": {
+      "hit": 2,
+      "of": 5,
+      "rate": 0.4
+    },
+    "keyword_rate_by_type": {
+      "定位設定": 0.333,
+      "解釋邏輯": 0.75,
+      "跨檔案流程": 0.667
+    }
+  },
+  "results": [
+    {
+      "id": 11,
+      "type": "定位設定",
+      "question": "INVINCIBLE_MS 在哪裡定義？值是多少？在哪裡用到？",
+      "key_facts": "src/config/gameConfig.ts 的 export const INVINCIBLE_MS = 1500（毫秒）； Player.takeDamage() 把 invincibleMs 設為 INVINCIBLE_MS",
+      "expected_files": [
+        "src/config/gameConfig.ts",
+        "src/entities/Player.ts"
+      ],
+      "definition_files": [
+        "src/config/gameConfig.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "在索引的專案中找不到相關內容。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/config/gameConfig.ts",
+          "start_line": 1,
+          "end_line": 26,
+          "symbol": "",
+          "score": 0.0456,
+          "vector_score": 0.5572,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword",
+            "identifier"
+          ]
+        },
+        {
+          "ref": 2,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 1,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.0298,
+          "vector_score": 0.5694,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 3,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 16,
+          "end_line": 113,
+          "symbol": "Player",
+          "score": 0.0291,
+          "vector_score": 0.5594,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 10,
+          "end_line": 14,
+          "symbol": "玩法規則 > 生命與受傷",
+          "score": 0.0328,
+          "vector_score": 0.7587,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 51.716,
+        "total_seconds": 53.031,
+        "tokens": 11,
+        "rerank_seconds": null,
+        "no_relevant": false,
+        "server": {
+          "retrieval_seconds": 0.086,
+          "first_token_seconds": 51.713,
+          "total_seconds": 53.028,
+          "tokens": 11,
+          "answer_chars": 15,
+          "below_threshold": 0,
+          "no_relevant": false,
+          "rerank_seconds": null,
+          "rerank_load_seconds": null
+        },
+        "heartbeats": 6,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/config/gameConfig.ts",
+            "src/entities/Player.ts"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/gameConfig.ts",
+              "src/entities/Player.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 0,
+          "rate": 0.0,
+          "matched": [],
+          "missed": [
+            "INVINCIBLE_MS",
+            "1500 / 1.5 秒 / 1.5秒",
+            "gameConfig",
+            "takeDamage"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false,
+        "refusal_phrases": [
+          "找不到"
+        ],
+        "falsely_refused": true
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 12,
+      "type": "解釋邏輯",
+      "question": "ScoreSystem 的 multiplier 怎麼計算？",
+      "key_facts": "min(MAX_COMBO_MULTIPLIER, 1 + combo × COMBO_STEP)，即 1 + 連擊數 × 0.25、最高 4 倍； 超過 COMBO_WINDOW_MS 沒收集包裹或 onPlayerHit() 時 combo 歸零",
+      "expected_files": [
+        "src/systems/ScoreSystem.ts",
+        "src/config/gameConfig.ts"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "ScoreSystem 的 multiplier 是根據 combo 的值計算的。在 [1] 檔案的 12-30 行，有以下程式碼：\n\n```typescript\nget multiplier(): number {\n  return Math.min(MAX_COMBO_MULTIPLIER, 1 + this.combo * COMBO_STEP);\n}\n```\n\n這段程式碼表示 multiplier 的計算方式是：首先將 combo 的值乘以 COMBO_STEP，然後加上 1，最後取最小值，限制在 MAX_COMBO_MULTIPLIER 以內。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/systems/ScoreSystem.ts",
+          "start_line": 9,
+          "end_line": 60,
+          "symbol": "ScoreSystem",
+          "score": 0.0492,
+          "vector_score": 0.7202,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword",
+            "identifier"
+          ]
+        },
+        {
+          "ref": 2,
+          "file_path": "src/systems/ScoreSystem.ts",
+          "start_line": 1,
+          "end_line": 7,
+          "symbol": "",
+          "score": 0.032,
+          "vector_score": 0.6429,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 164,
+          "end_line": 173,
+          "symbol": "Game.syncUi",
+          "score": 0.0301,
+          "vector_score": 0.5787,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/architecture.md",
+          "start_line": 22,
+          "end_line": 29,
+          "symbol": "架構說明 > 系統",
+          "score": 0.032,
+          "vector_score": 0.6474,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 27.574,
+        "total_seconds": 38.788,
+        "tokens": 105,
+        "rerank_seconds": null,
+        "no_relevant": false,
+        "server": {
+          "retrieval_seconds": 0.084,
+          "first_token_seconds": 27.571,
+          "total_seconds": 38.785,
+          "tokens": 105,
+          "answer_chars": 280,
+          "below_threshold": 0,
+          "no_relevant": false,
+          "rerank_seconds": null,
+          "rerank_load_seconds": null
+        },
+        "heartbeats": 3,
+        "files": {
+          "retrieved_files": [
+            "docs/architecture.md",
+            "src/game/Game.ts",
+            "src/systems/ScoreSystem.ts"
+          ],
+          "answer_cited_files": [
+            "src/systems/ScoreSystem.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 3,
+          "rate": 0.75,
+          "matched": [
+            "COMBO_STEP",
+            "MAX_COMBO_MULTIPLIER",
+            "0.25"
+          ],
+          "missed": [
+            "onPlayerHit / COMBO_WINDOW_MS"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 13,
+      "type": "定位設定",
+      "question": "DASH_COOLDOWN_MS 和 DASH_DURATION_MS 在哪裡設定？各是多少？",
+      "key_facts": "src/config/gameConfig.ts：DASH_DURATION_MS = 180、DASH_COOLDOWN_MS = 900（毫秒）； Player.startDash() 使用",
+      "expected_files": [
+        "src/config/gameConfig.ts",
+        "src/entities/Player.ts"
+      ],
+      "definition_files": [
+        "src/config/gameConfig.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "在索引的專案中找不到相關內容。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/config/gameConfig.ts",
+          "start_line": 1,
+          "end_line": 26,
+          "symbol": "",
+          "score": 0.0477,
+          "vector_score": 0.6157,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword",
+            "identifier"
+          ]
+        },
+        {
+          "ref": 2,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 1,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.0328,
+          "vector_score": 0.6517,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 3,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 16,
+          "end_line": 113,
+          "symbol": "Player",
+          "score": 0.0292,
+          "vector_score": 0.5761,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 1,
+          "end_line": 8,
+          "symbol": "玩法規則 > 操作",
+          "score": 0.0304,
+          "vector_score": 0.6464,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 5.676,
+        "total_seconds": 6.894,
+        "tokens": 11,
+        "rerank_seconds": null,
+        "no_relevant": false,
+        "server": {
+          "retrieval_seconds": 0.108,
+          "first_token_seconds": 5.673,
+          "total_seconds": 6.891,
+          "tokens": 11,
+          "answer_chars": 15,
+          "below_threshold": 0,
+          "no_relevant": false,
+          "rerank_seconds": null,
+          "rerank_load_seconds": null
+        },
+        "heartbeats": 1,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/config/gameConfig.ts",
+            "src/entities/Player.ts"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/gameConfig.ts",
+              "src/entities/Player.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 0,
+          "rate": 0.0,
+          "matched": [],
+          "missed": [
+            "DASH_COOLDOWN_MS",
+            "DASH_DURATION_MS",
+            "900",
+            "180"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false,
+        "refusal_phrases": [
+          "找不到"
+        ],
+        "falsely_refused": true
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 14,
+      "type": "定位設定",
+      "question": "HIGH_SCORE_KEY 定義在哪裡？最高分怎麼存？",
+      "key_facts": "src/game/GameState.ts 的 HIGH_SCORE_KEY = \"starlight-courier.highScore\"； Game.gameOver() 以 localStorage.setItem 寫入",
+      "expected_files": [
+        "src/game/GameState.ts",
+        "src/game/Game.ts"
+      ],
+      "definition_files": [
+        "src/game/GameState.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "HIGH_SCORE_KEY 定義在 [1] src/game/GameState.ts:14-14。\n\n最高分存放在 [2] src/game/Game.ts:145-151 的 `gameOver` 方法中，使用 `localStorage.setItem(HIGH_SCORE_KEY, String(best));` 存儲，並更新 UI 中的最高分。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 14,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.0492,
+          "vector_score": 0.6793,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword",
+            "identifier"
+          ]
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/Game.ts",
+          "start_line": 145,
+          "end_line": 151,
+          "symbol": "Game.gameOver",
+          "score": 0.0313,
+          "vector_score": 0.5949,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 37,
+          "end_line": 49,
+          "symbol": "Game.constructor",
+          "score": 0.029,
+          "vector_score": 0.553,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 16,
+          "end_line": 21,
+          "symbol": "玩法規則 > 計分",
+          "score": 0.0293,
+          "vector_score": 0.6495,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 14.141,
+        "total_seconds": 21.325,
+        "tokens": 72,
+        "rerank_seconds": null,
+        "no_relevant": false,
+        "server": {
+          "retrieval_seconds": 0.08,
+          "first_token_seconds": 14.138,
+          "total_seconds": 21.322,
+          "tokens": 72,
+          "answer_chars": 179,
+          "below_threshold": 0,
+          "no_relevant": false,
+          "rerank_seconds": null,
+          "rerank_load_seconds": null
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/game/Game.ts",
+            "src/game/GameState.ts"
+          ],
+          "answer_cited_files": [
+            "src/game/Game.ts",
+            "src/game/GameState.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 3,
+          "hit": 3,
+          "rate": 1.0,
+          "matched": [
+            "HIGH_SCORE_KEY",
+            "localStorage",
+            "gameOver"
+          ],
+          "missed": [],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 15,
+      "type": "跨檔案流程",
+      "question": "getLevel 在哪裡定義？Spawner 怎麼用它？",
+      "key_facts": "src/config/levels.js 的 getLevel(index)；超過最後一關時間隔每關乘 0.9、最低 0.15 秒； Spawner.update 依目前關卡取得設定",
+      "expected_files": [
+        "src/config/levels.js",
+        "src/systems/Spawner.ts"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "getLevel 在 src/config/levels.js:12-27 定義。\n\nSpawner 在 src/systems/Spawner.ts:1-5 使用它。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/config/levels.js",
+          "start_line": 12,
+          "end_line": 27,
+          "symbol": "getLevel",
+          "score": 0.0489,
+          "vector_score": 0.6968,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword",
+            "identifier"
+          ]
+        },
+        {
+          "ref": 2,
+          "file_path": "src/systems/Spawner.ts",
+          "start_line": 1,
+          "end_line": 5,
+          "symbol": "",
+          "score": 0.0325,
+          "vector_score": 0.6944,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 3,
+          "file_path": "src/systems/Spawner.ts",
+          "start_line": 7,
+          "end_line": 44,
+          "symbol": "Spawner",
+          "score": 0.0308,
+          "vector_score": 0.6749,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/architecture.md",
+          "start_line": 22,
+          "end_line": 29,
+          "symbol": "架構說明 > 系統",
+          "score": 0.0294,
+          "vector_score": 0.6133,
+          "rerank_score": null,
+          "matched_by": [
+            "vector",
+            "keyword"
+          ]
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 32.305,
+        "total_seconds": 36.0,
+        "tokens": 34,
+        "rerank_seconds": null,
+        "no_relevant": false,
+        "server": {
+          "retrieval_seconds": 0.072,
+          "first_token_seconds": 32.302,
+          "total_seconds": 35.997,
+          "tokens": 34,
+          "answer_chars": 84,
+          "below_threshold": 0,
+          "no_relevant": false,
+          "rerank_seconds": null,
+          "rerank_load_seconds": null
+        },
+        "heartbeats": 4,
+        "files": {
+          "retrieved_files": [
+            "docs/architecture.md",
+            "src/config/levels.js",
+            "src/systems/Spawner.ts"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/levels.js",
+              "src/systems/Spawner.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 3,
+          "hit": 2,
+          "rate": 0.667,
+          "matched": [
+            "getLevel",
+            "Spawner"
+          ],
+          "missed": [
+            "asteroidInterval"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
+      },
+      "manual_correctness": null
+    }
+  ]
+}

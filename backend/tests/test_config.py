@@ -102,6 +102,8 @@ def test_retrieval_toggles_default_off_and_prompt_variant_is_validated(monkeypat
     }
     monkeypatch.setenv("PROMPT_VARIANT", "")  # docker compose passes unset as ""
     assert Settings().prompt_variant == "v1"
+    monkeypatch.setenv("PROMPT_VARIANT", "v3")  # ADR 0016
+    assert Settings().prompt_variant == "v3"
     monkeypatch.setenv("PROMPT_VARIANT", "v9")
     with pytest.raises(ValueError):
         Settings()

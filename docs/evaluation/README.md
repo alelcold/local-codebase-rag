@@ -8,6 +8,7 @@
 | [`questions.md`](questions.md) | The 10 questions for people: expected answers, citations, manual score sheet |
 | [`questions.yaml`](questions.yaml) | The same questions for the script: type, keywords, expected files, defining files |
 | [`questions-identifiers.yaml`](questions-identifiers.yaml) | 5 supplementary questions (ids 11–15) that name a code identifier, for hybrid retrieval (ADR 0013) |
+| [`questions-out-of-scope.yaml`](questions-out-of-scope.yaml) | 8 supplementary questions (ids 21–28): 5 trick questions about features the sample project does not have, and 3 control questions about features that exist but are easy to mistake for missing (ADR 0016) |
 | [`experiment-plan-retrieval.md`](experiment-plan-retrieval.md) | Runs, commands and expected metrics for the retrieval switches of ADR 0013–0015 (groups A–I) |
 | [`../../scripts/calibrate_threshold.py`](../../scripts/calibrate_threshold.py) | Suggests `SCORE_THRESHOLD` from the results in `results/` (ADR 0014) |
 | `results/` | Output of `scripts/evaluate.py`: `<date>-<label>.json` and `.md` |
@@ -61,7 +62,8 @@ On CPU with 3B, 10 questions take about 5–10 minutes (estimate from the single
 - **Code / Doc / Def.**: expected code files, documentation files, and (for 定位設定) the file that defines the setting, found among the **retrieved** sources. Low code hits with high doc share means docs crowd out code.
 - **Keywords**: key identifiers and values found in the answer. Screening only.
 - **Simplified**: Simplified-only characters in the answer (e.g. 体, 来, 说).
-- **Refused** (question 10): the answer says it cannot find multiplayer and does not mention `WebSocket` etc.
+- **Refused** / **Refusal rate** (trick questions, e.g. question 10): the answer says it cannot find the feature (a refusal keyword) and mentions none of the forbidden words (`WebSocket` etc.).
+- **Falsely refused** / **False refusal rate** (every answerable question): the answer contains a "not found" phrase (`REFUSAL_PHRASES` in `evaluate.py`, e.g. 找不到, 不存在, not found) **and** hits none of the question's keywords. A bare 沒有 does not count: it is common in correct answers. Read the flagged answers; it is a screen, like the keywords (ADR 0016).
 - Do not repeat the same question right after itself to measure latency: Ollama's prompt cache makes the second time look much faster.
 
 ---
@@ -75,6 +77,7 @@ On CPU with 3B, 10 questions take about 5–10 minutes (estimate from the single
 | [`questions.md`](questions.md) | 給人看的 10 題：預期答案、引用、人工計分表 |
 | [`questions.yaml`](questions.yaml) | 給腳本用的同一組題目：題型、關鍵字、預期檔案、定義檔 |
 | [`questions-identifiers.yaml`](questions-identifiers.yaml) | 5 題補充題組（11–15 題），題目直接寫出程式碼識別字，用來評估混合檢索（ADR 0013） |
+| [`questions-out-of-scope.yaml`](questions-out-of-scope.yaml) | 8 題補充題組（21–28 題）：5 題範例專案中不存在的功能（陷阱題），3 題存在但容易被誤判為不存在的功能（對照題）（ADR 0016） |
 | [`experiment-plan-retrieval.md`](experiment-plan-retrieval.md) | ADR 0013–0015 檢索開關的實驗組合、指令與預期指標（A～I 組） |
 | [`../../scripts/calibrate_threshold.py`](../../scripts/calibrate_threshold.py) | 從 `results/` 的結果建議 `SCORE_THRESHOLD`（ADR 0014） |
 | `results/` | `scripts/evaluate.py` 的輸出：`<日期>-<label>.json` 與 `.md` |
@@ -128,5 +131,6 @@ python3 scripts/evaluate.py --label codespace-3b-k4
 - **Code／Doc／Def.**：在**取回**的來源中，找到的預期程式碼檔、文件檔，以及（定位設定題）定義該設定的檔案。程式碼命中低、文件比例高，代表文件把程式碼擠掉了。
 - **Keywords**：回答中出現的關鍵識別字與數值，只用來初步篩選。
 - **Simplified**：回答中只存在於簡體的字。
-- **Refused**（第 10 題）：回答說找不到多人模式，而且沒有提到 `WebSocket` 等字。
+- **Refused**／**拒答率**（陷阱題，例如第 10 題）：回答說找不到該功能（命中拒答關鍵字），而且沒有提到任何禁用字（`WebSocket` 等）。
+- **Falsely refused**／**誤拒率**（所有可回答的題目）：回答含有「找不到」類的字句（`evaluate.py` 的 `REFUSAL_PHRASES`，例如找不到、不存在、not found），**而且**沒有命中任何關鍵字。單獨的「沒有」不算：正確的回答也常出現。被標記的回答要人工讀過；它和關鍵字一樣只是初步篩選（ADR 0016）。
 - 量延遲時，不要緊接著重複問同一題：Ollama 的提示詞快取會讓第二次看起來快很多。

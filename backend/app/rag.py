@@ -35,7 +35,32 @@ SYSTEM_PROMPT_V2 = """你是資深工程師，協助團隊理解一個遊戲前�
 - 每個論點都要附上片段編號與位置。片段中沒有答案時，直接說明找不到，並建議改用哪些關鍵字查詢；絕對不要編造檔案、函式或行號。
 - 需要時用程式碼區塊引用簡短的程式碼。"""
 
-PROMPTS = {"v1": SYSTEM_PROMPT, "v2": SYSTEM_PROMPT_V2}
+# PROMPT_VARIANT=v3 (ADR 0016): v1 plus an explicit "not found" rule for
+# features the project does not have (questions.yaml Q10 was answered with
+# invented code in every group A-I; no similarity or rerank threshold
+# separates it from real questions). Built on v1, not v2: group F showed no
+# gain from v2's other changes. Kept short for qwen2.5-coder:3b, which drops
+# rules from long instructions:
+# - one rule per line, numbered, the refusal rule right after "use only the excerpts";
+# - the refusal is one fixed sentence to copy, not a description of what to say;
+# - it names the two failure modes seen in Q10's answers: general knowledge
+#   ("usually WebSockets") and a similar word in an unrelated function name;
+# - the rule is repeated right after the question (REFUSAL_REMINDER): after
+#   four code excerpts, the top of the prompt is far away for a small model;
+# - v1's "suggest what to search for instead" is dropped: it invited the model
+#   to talk about related code instead of saying "not found".
+REFUSAL_SENTENCE = "在索引的專案中找不到相關內容。"
+SYSTEM_PROMPT_V3 = f"""You are a senior engineer helping a team understand a game front-end codebase.
+Rules:
+1. Answer ONLY from the code excerpts below. Do not guess. Do not use general knowledge.
+2. If no excerpt directly mentions the topic of the question, reply with exactly: {REFUSAL_SENTENCE}
+   A similar word in a function or variable name is not enough.
+3. Cite every claim with the excerpt number and location, e.g. [2] src/game/Player.ts:12-30. Never invent files, functions or line numbers.
+4. Quote short code snippets in fenced code blocks when they help.
+5. Always answer in Traditional Chinese (繁體中文), even if the question is in English."""
+REFUSAL_REMINDER = f"(If no excerpt directly mentions this topic, reply only: {REFUSAL_SENTENCE})"
+
+PROMPTS = {"v1": SYSTEM_PROMPT, "v2": SYSTEM_PROMPT_V2, "v3": SYSTEM_PROMPT_V3}
 
 NO_INDEX_ANSWER = "目前還沒有任何索引資料。請先執行索引（介面上的「更新索引」按鈕，或 scripts/index.sh）。"
 NO_MATCH_ANSWER = "在目前的索引中找不到與這個問題相關的程式碼。"
@@ -122,6 +147,11 @@ def build_prompt(question: str, sources: list[Source], variant: str = "v1") -> s
     context = "\n\n".join(blocks)
     if variant == "v2":
         return f"{SYSTEM_PROMPT_V2}\n\n## 程式碼片段\n\n{context}\n\n## 問題\n\n{question}\n\n## 回答\n"
+    if variant == "v3":
+        return (
+            f"{SYSTEM_PROMPT_V3}\n\n## Code excerpts\n\n{context}\n\n## Question\n\n{question}\n"
+            f"{REFUSAL_REMINDER}\n\n## Answer\n"
+        )
     return f"{PROMPTS['v1']}\n\n## Code excerpts\n\n{context}\n\n## Question\n\n{question}\n\n## Answer\n"
 
 

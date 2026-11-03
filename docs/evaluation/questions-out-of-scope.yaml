@@ -1,0 +1,170 @@
+# Supplementary evaluation set for ADR 0016: refusing questions about features
+# the project does not have. questions.yaml has a single trick question (Q10),
+# too few to measure a refusal rate, and nothing that checks the other side:
+# a prompt that refuses more easily may also refuse real questions. Run it with:
+#
+#   python3 scripts/evaluate.py --questions docs/evaluation/questions-out-of-scope.yaml --label <run>-oos
+#
+# 補充評估題組（ADR 0016）：專案中不存在的功能要拒答。questions.yaml 只有一題陷阱題
+# （第 10 題），算不出拒答率；也沒有題目檢查另一面：比較容易拒答的提示，可能連真實
+# 問題也拒答。
+#
+# Two kinds of questions / 兩種題目:
+#   陷阱題 (21–25)  the feature does not exist in the sample project. Scored as
+#                   「拒答率」: refused = a refusal phrase (keywords) and no
+#                   forbidden keyword (a sign of invented code).
+#   對照題 (26–28)  the feature exists, but is easy to mistake for missing: it
+#                   sits next to a trick topic (save / cloud save), has no file
+#                   of its own (sounds are synthesized, no audio files), or is
+#                   a few lines inside another class (focus loss). Scored as
+#                   「誤拒率」: an answer that says "not found" and hits none of
+#                   the keywords is a false refusal.
+#
+# Same format as questions.yaml (see the field list there). Ids start at 21 so
+# results never mix with the main set (1–10) or the identifier set (11–15).
+# A unit test checks the trick questions have no expected files and the control
+# questions' expected files and identifier keywords exist in the sample project.
+# Paths and facts come from the sample project only (CLAUDE.md, privacy).
+
+version: 1
+project: examples/sample-game-frontend
+
+questions:
+  # ── 陷阱題: features that do not exist ──────────────────────────────────
+
+  - id: 21
+    type: 陷阱題
+    question: 玩家要怎麼建立或加入線上多人連線的房間？
+    question_en: How does a player create or join an online multiplayer room?
+    key_facts: >-
+      陷阱題：專案中沒有多人連線、房間或任何網路程式碼。正確的回答應該說找不到。
+    expect_no_answer: true
+    keywords:
+      - ["找不到", "沒有", "没有", "不存在", "未包含", "無法", "沒找到", "not found", "does not", "doesn't", "cannot find", "can't find"]
+    forbidden_keywords:
+      - WebSocket
+      - socket.io
+      - WebRTC
+      - RTCPeerConnection
+      - joinRoom
+      - createRoom
+    expected_files: []
+
+  - id: 22
+    type: 陷阱題
+    question: 遊戲內購買金幣（內購）的付款流程是怎麼處理的？
+    question_en: How is the payment flow for in-app purchases (buying coins) handled?
+    key_facts: >-
+      陷阱題：專案中沒有商店、貨幣或付款功能。正確的回答應該說找不到。
+    expect_no_answer: true
+    keywords:
+      - ["找不到", "沒有", "没有", "不存在", "未包含", "無法", "沒找到", "not found", "does not", "doesn't", "cannot find", "can't find"]
+    forbidden_keywords:
+      - Stripe
+      - PaymentRequest
+      - purchase(
+      - receipt
+      - IAP
+    expected_files: []
+
+  - id: 23
+    type: 陷阱題
+    question: 存檔是怎麼同步到雲端的？換一台裝置能接著玩嗎？
+    question_en: How are saves synchronized to the cloud, so a player can continue on another device?
+    key_facts: >-
+      陷阱題：專案中沒有雲端同步，也沒有存檔進度。唯一保存的是最高分，用 localStorage
+      存在本機瀏覽器（GameState.ts 定義 HIGH_SCORE_KEY，Game.ts 讀寫）。正確的回答應該說找不到雲端同步；
+      附帶說明最高分只存在本機是加分。
+    expect_no_answer: true
+    keywords:
+      - ["找不到", "沒有", "没有", "不存在", "未包含", "無法", "沒找到", "not found", "does not", "doesn't", "cannot find", "can't find"]
+    # localStorage is deliberately not forbidden: it is real and a good answer may mention it.
+    forbidden_keywords:
+      - firebase
+      - fetch(
+      - axios
+      - IndexedDB
+      - syncToCloud
+    expected_files: []
+
+  - id: 24
+    type: 陷阱題
+    question: 全球排行榜的分數是怎麼上傳到伺服器的？
+    question_en: How are scores uploaded to the server for the global leaderboard?
+    key_facts: >-
+      陷阱題：專案中沒有排行榜或伺服器；分數只在本機計算，最高分存在 localStorage。
+      正確的回答應該說找不到。
+    expect_no_answer: true
+    keywords:
+      - ["找不到", "沒有", "没有", "不存在", "未包含", "無法", "沒找到", "not found", "does not", "doesn't", "cannot find", "can't find"]
+    forbidden_keywords:
+      - fetch(
+      - axios
+      - XMLHttpRequest
+      - submitScore
+      - /api/
+    expected_files: []
+
+  - id: 25
+    type: 陷阱題
+    question: 遊戲手把（gamepad）的按鍵是怎麼對應到動作的？
+    question_en: How are gamepad buttons mapped to actions?
+    key_facts: >-
+      陷阱題：專案只支援鍵盤（InputManager 的 KEY_BINDINGS），沒有手把支援。
+      正確的回答應該說找不到手把相關程式碼；附帶說明只有鍵盤對應是加分。
+      這題的相關程式碼（按鍵對應）確實存在，用來檢查模型會不會把鍵盤當成手把。
+    expect_no_answer: true
+    keywords:
+      - ["找不到", "沒有", "没有", "不存在", "未包含", "無法", "沒找到", "只支援鍵盤", "not found", "does not", "doesn't", "cannot find", "can't find"]
+    forbidden_keywords:
+      - getGamepads
+      - gamepadconnected
+      - buttons[
+    expected_files: []
+
+  # ── 對照題: features that exist but are easy to mistake for missing ──────
+
+  - id: 26
+    type: 對照題
+    question: 遊戲有存檔功能嗎？最高分會保存下來嗎？存在哪裡？
+    question_en: Does the game save anything? Is the high score kept, and where?
+    key_facts: >-
+      有：最高分用 localStorage 存在本機，key 是 GameState.ts 的 HIGH_SCORE_KEY；
+      Game.ts 啟動時讀取、遊戲結束時寫入。沒有其他存檔（進度、雲端）。內容和主要題組
+      第 9 題相同，但用「存檔」來問，和第 23 題（雲端存檔）相鄰：回答「找不到」就是誤拒。
+    keywords:
+      - localStorage
+      - HIGH_SCORE_KEY
+    expected_files:
+      - src/game/GameState.ts
+      - src/game/Game.ts
+    definition_files:
+      - src/game/GameState.ts
+
+  - id: 27
+    type: 對照題
+    question: 遊戲有音效嗎？音效檔放在哪裡？
+    question_en: Does the game have sound effects? Where are the sound files?
+    key_facts: >-
+      有音效，但沒有音效檔：SoundManager 用 Web Audio API（AudioContext、
+      OscillatorNode）即時合成 pickup、hit、dash、levelUp、gameOver 五種音效。
+      找不到音效檔容易被說成「沒有音效」，那是誤拒。
+    keywords:
+      - SoundManager
+      - ["AudioContext", "Web Audio", "createOscillator", "Oscillator", "合成"]
+    expected_files:
+      - src/audio/SoundManager.ts
+
+  - id: 28
+    type: 對照題
+    question: 視窗失去焦點的時候，按住的按鍵會怎麼處理？
+    question_en: What happens to held keys when the window loses focus?
+    key_facts: >-
+      InputManager 監聽 window 的 blur 事件，onBlur 會清空 held（所有按住的動作），
+      避免切換視窗後按鍵卡住。只是 InputManager 裡的幾行，沒有獨立的檔案或文件段落。
+    keywords:
+      - blur
+      - ["held", "清空", "clear"]
+      - InputManager
+    expected_files:
+      - src/systems/InputManager.ts
