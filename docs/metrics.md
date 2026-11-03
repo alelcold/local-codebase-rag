@@ -67,9 +67,9 @@ Runs from [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan
 | 2026-11-03 | B. + hybrid | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | No (0/1) | 6.7 / 10.7 ¹ | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
 | 2026-11-03 | C. + split | `SPLIT_RETRIEVAL`, `DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | No (0/1) | 15.9 / 17.8 | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
 | 2026-11-03 | F. all on | + `CHUNK_METADATA`, `PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | No (0/1) | 19.6 / 23.8 | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
-| {待填} | G. + threshold | `SCORE_THRESHOLD={待填}` (from `calibrate_threshold.py`) | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
+| 2026-11-03 | G. + threshold | **Not adopted after calibration**: no `SCORE_THRESHOLD` value suggested, group not run | — | — | — | — | — | — | — | — | — | [calibration](evaluation/results/2026-11-03-threshold-calibration.md) |
 | {待填} | H. + rerank | `RERANK`, 10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | I. F + threshold + rerank | F + `SCORE_THRESHOLD={待填}` + `RERANK`, 10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | I. hybrid + split + rerank | `HYBRID_SEARCH`, `SPLIT_RETRIEVAL`, `DOC_TOP_K=1`, `RERANK`, 10 → 4 (redefined, see the experiment plan) | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
 "Answers with Simplified" and "First token, mean (s)" are given as main / ident.; "Q10 refused" is from the main set. Manual correctness is not judged yet. Comparisons with A: `evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`.
 
@@ -210,9 +210,9 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-03 | B. + 混合檢索 | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | 否（0/1） | 6.7 / 10.7 ¹ | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
 | 2026-11-03 | C. + 分類取回 | `SPLIT_RETRIEVAL`、`DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | 否（0/1） | 15.9 / 17.8 | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
 | 2026-11-03 | F. 全部開啟 | + `CHUNK_METADATA`、`PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | 否（0/1） | 19.6 / 23.8 | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
-| {待填} | G. + 門檻 | `SCORE_THRESHOLD={待填}`（由 `calibrate_threshold.py` 決定） | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
+| 2026-11-03 | G. + 門檻 | **校準後不採用**：`calibrate_threshold.py` 沒有建議值，未執行 | — | — | — | — | — | — | — | — | — | [校準輸出](evaluation/results/2026-11-03-threshold-calibration.md) |
 | {待填} | H. + Rerank | `RERANK`，10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | I. F + 門檻 + Rerank | F + `SCORE_THRESHOLD={待填}` + `RERANK`，10 → 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| {待填} | I. 混合 + 分類 + Rerank | `HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K=1`、`RERANK`，10 → 4（重新定義，見實驗計畫） | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
 「混入簡體字的回答」與「首字延遲平均」的格式為 主要 / 識別字；「Q10 拒答」來自主要題組。人工判定正確性尚未評分。與 A 的比較：`evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`。
 
