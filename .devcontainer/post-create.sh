@@ -39,7 +39,7 @@ else
 fi
 
 # --skip-repo: only the global filter config. Plain `git lfs install` exits 2
-# when the repo already has these hooks, which would stop this script (set -e).
+# when .git/hooks already has the LFS hooks, which would stop this script (set -e).
 step "Setting up Git LFS"
 git lfs install --skip-repo
 
