@@ -63,10 +63,14 @@ Runs from [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan
 
 | Date | Group | Switches | Manual correctness, main (/20) | Defining file retrieved, main | Defining file retrieved, ident. | Code file retrieved, main | Docs among retrieved chunks, main | Answers with Simplified | First token, mean (s) | Report |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| {待填} | A. baseline | all off | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | B. + hybrid | `HYBRID_SEARCH` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | C. + split | `SPLIT_RETRIEVAL`, `DOC_TOP_K=1` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | F. all on | + `CHUNK_METADATA`, `PROMPT_VARIANT=v2` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| 2026-11-03 | A. baseline | all off | {待填} | 0/3 (0%) | 1/3 (33%) | 1/9 (11%) | 95% | 1 / 0 | 13.0 / 21.2 | [main](evaluation/results/2026-11-03-codespace-3b-k4-baseline.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-baseline-ident.md) |
+| 2026-11-03 | B. + hybrid | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | 6.7 / 10.7 ¹ | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
+| 2026-11-03 | C. + split | `SPLIT_RETRIEVAL`, `DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | 15.9 / 17.8 | [main](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
+| 2026-11-03 | F. all on | + `CHUNK_METADATA`, `PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | 19.6 / 23.8 | [main](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
+
+"Answers with Simplified" and "First token, mean (s)" are given as main / ident. Manual correctness is not judged yet. Comparisons with A: `evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`.
+
+¹ Not caused by hybrid search: retrieval took 0.07–0.21 s in every group. In B, 7 of the 10 main questions retrieved exactly the same excerpts as in A, and three of them (2, 4, 9) got their first token in about 0.2 s, which points to Ollama reusing a cached prompt. The questions whose excerpts changed (5, 8) were not faster than in A (11.7 → 13.9 s, 16.2 → 15.0 s). Run order and caching affect these means, so do not read B's latency as a gain. First-token time follows prompt length: C and F put longer code excerpts in the prompt (e.g. 146 lines for question 3 in C → 47 s).
 
 ## 5. Model comparison (3B / 14B / 32B)
 
@@ -183,10 +187,14 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 | 日期 | 組別 | 開關 | 人工判定正確性，主要（/20） | 定義檔命中，主要 | 定義檔命中，識別字 | 程式碼檔命中，主要 | 取回片段中文件比例，主要 | 混入簡體字的回答 | 首字延遲平均（秒） | 報告 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| {待填} | A. 基準線 | 全部關閉 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | B. + 混合檢索 | `HYBRID_SEARCH` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | C. + 分類取回 | `SPLIT_RETRIEVAL`、`DOC_TOP_K=1` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | F. 全部開啟 | + `CHUNK_METADATA`、`PROMPT_VARIANT=v2` | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| 2026-11-03 | A. 基準線 | 全部關閉 | {待填} | 0/3 (0%) | 1/3 (33%) | 1/9 (11%) | 95% | 1 / 0 | 13.0 / 21.2 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-baseline.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-baseline-ident.md) |
+| 2026-11-03 | B. + 混合檢索 | `HYBRID_SEARCH` | {待填} | 0/3 (0%) | 3/3 (100%) | 3/9 (33%) | 88% | 0 / 0 | 6.7 / 10.7 ¹ | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-ident.md) |
+| 2026-11-03 | C. + 分類取回 | `SPLIT_RETRIEVAL`、`DOC_TOP_K=1` | {待填} | 1/3 (33%) | 3/3 (100%) | 6/9 (67%) | 25% | 3 / 0 | 15.9 / 17.8 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-split.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-split-ident.md) |
+| 2026-11-03 | F. 全部開啟 | + `CHUNK_METADATA`、`PROMPT_VARIANT=v2` | {待填} | 0/3 (0%) | 3/3 (100%) | 5/9 (56%) | 25% | 2 / 0 | 19.6 / 23.8 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-all.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-all-ident.md) |
+
+「混入簡體字的回答」與「首字延遲平均」的格式為 主要 / 識別字。人工判定正確性尚未評分。與 A 的比較：`evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all}[-ident].md`。
+
+¹ 不是混合檢索造成的：每一組的檢索都只花 0.07–0.21 秒。B 組主要題組 10 題中有 7 題取回的片段與 A 組完全相同，其中第 2、4、9 題的首字只要約 0.2 秒，看起來是 Ollama 重用了快取的提示。片段有改變的題目（5、8）沒有比 A 快（11.7 → 13.9 秒、16.2 → 15.0 秒）。執行順序與快取都會影響這些平均值，不要把 B 的延遲看成改善。首字延遲取決於提示長度：C、F 會把較長的程式碼片段放進提示（例如 C 組第 3 題 146 行 → 47 秒）。
 
 ## 5. 模型比較（3B／14B／32B）
 

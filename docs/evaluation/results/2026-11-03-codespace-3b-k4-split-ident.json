@@ -1,0 +1,721 @@
+{
+  "schema": 1,
+  "date": "2026-11-03",
+  "started_at": "2026-11-03T05:21:11+00:00",
+  "config": {
+    "label": "codespace-3b-k4-split-ident",
+    "base_url": "http://localhost:8080/api",
+    "top_k": null,
+    "lang": "zh",
+    "warmup": true,
+    "only": null,
+    "questions_file": "docs/evaluation/questions-identifiers.yaml"
+  },
+  "health": {
+    "status": "ok",
+    "ollama": {
+      "ok": true,
+      "url": "http://host.docker.internal:11434",
+      "llm_model": "qwen2.5-coder:3b",
+      "embed_model": "nomic-embed-text",
+      "missing_models": []
+    },
+    "qdrant": {
+      "ok": true,
+      "url": "http://qdrant:6333",
+      "collection": "codebase_nomic_embed_text",
+      "indexed": true,
+      "points": 67,
+      "index_config": "chunker=1;embed_format=2;chunk_max_chars=3000;embed_model=nomic-embed-text;doc_prefix='search_document: ';chunk_metadata=off",
+      "reindex_needed": false
+    },
+    "top_k": 4,
+    "retrieval": {
+      "hybrid_search": false,
+      "split_retrieval": true,
+      "doc_top_k": 1,
+      "chunk_metadata": false,
+      "prompt_variant": "v1",
+      "rrf_k": null,
+      "retrieval_candidates": 30
+    }
+  },
+  "summary": {
+    "questions": 5,
+    "errors": 0,
+    "first_token_seconds_mean": 17.831,
+    "first_token_seconds_median": 11.195,
+    "total_seconds_mean": 27.083,
+    "tokens_mean": 99.2,
+    "file_recall_mean": 0.9,
+    "code_hit": {
+      "hit": 5,
+      "of": 5,
+      "rate": 1.0
+    },
+    "doc_hit": {
+      "hit": 0,
+      "of": 0,
+      "rate": null
+    },
+    "definition_hit": {
+      "hit": 3,
+      "of": 3,
+      "rate": 1.0
+    },
+    "answer_cited_hit": {
+      "hit": 5,
+      "of": 5,
+      "rate": 1.0
+    },
+    "retrieved_doc_share_mean": 0.25,
+    "keyword_rate_mean": 0.833,
+    "simplified_answers": 0,
+    "no_answer_refused": {
+      "hit": 0,
+      "of": 0,
+      "rate": null
+    },
+    "keyword_rate_by_type": {
+      "定位設定": 0.917,
+      "解釋邏輯": 0.75,
+      "跨檔案流程": 0.667
+    }
+  },
+  "results": [
+    {
+      "id": 11,
+      "type": "定位設定",
+      "question": "INVINCIBLE_MS 在哪裡定義？值是多少？在哪裡用到？",
+      "key_facts": "src/config/gameConfig.ts 的 export const INVINCIBLE_MS = 1500（毫秒）； Player.takeDamage() 把 invincibleMs 設為 INVINCIBLE_MS",
+      "expected_files": [
+        "src/config/gameConfig.ts",
+        "src/entities/Player.ts"
+      ],
+      "definition_files": [
+        "src/config/gameConfig.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "INVINCIBLE_MS 在 [3] src/config/gameConfig.ts:1-26 被定義，值為 1500 毫秒。在 [2] src/entities/Player.ts:16-113 中，Player 類別使用了這個值來控制無敵狀態的持續時間。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 1,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.5694
+        },
+        {
+          "ref": 2,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 16,
+          "end_line": 113,
+          "symbol": "Player",
+          "score": 0.5594
+        },
+        {
+          "ref": 3,
+          "file_path": "src/config/gameConfig.ts",
+          "start_line": 1,
+          "end_line": 26,
+          "symbol": "",
+          "score": 0.5572
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 10,
+          "end_line": 14,
+          "symbol": "玩法規則 > 生命與受傷",
+          "score": 0.7587
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 42.915,
+        "total_seconds": 49.787,
+        "tokens": 67,
+        "server": {
+          "retrieval_seconds": 0.066,
+          "first_token_seconds": 42.912,
+          "total_seconds": 49.785,
+          "tokens": 67,
+          "answer_chars": 131
+        },
+        "heartbeats": 5,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/config/gameConfig.ts",
+            "src/entities/Player.ts"
+          ],
+          "answer_cited_files": [
+            "src/config/gameConfig.ts",
+            "src/entities/Player.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 3,
+          "rate": 0.75,
+          "matched": [
+            "INVINCIBLE_MS",
+            "1500",
+            "gameConfig"
+          ],
+          "missed": [
+            "takeDamage"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 12,
+      "type": "解釋邏輯",
+      "question": "ScoreSystem 的 multiplier 怎麼計算？",
+      "key_facts": "min(MAX_COMBO_MULTIPLIER, 1 + combo × COMBO_STEP)，即 1 + 連擊數 × 0.25、最高 4 倍； 超過 COMBO_WINDOW_MS 沒收集包裹或 onPlayerHit() 時 combo 歸零",
+      "expected_files": [
+        "src/systems/ScoreSystem.ts",
+        "src/config/gameConfig.ts"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "ScoreSystem 的 multiplier 是根據 combo 的值計算的。Multiplier 的計算公式如下：\n\n```typescript\nmultiplier = Math.min(MAX_COMBO_MULTIPLIER, 1 + this.combo * COMBO_STEP);\n```\n\n其中：\n- `MAX_COMBO_MULTIPLIER` 是最大連擊倍率的上限。\n- `COMBO_STEP` 是連擊倍率的步長。\n- `this.combo` 是當前的連擊數。\n\nMultiplier 的計算過程如下：\n1. 首先，計算連擊倍率的基礎值 `1 + this.combo * COMBO_STEP`。\n2. 然後，使用 `Math.min` 函數將計算得到的值限制在 `MAX_COMBO_MULTIPLIER` 以下，以防止 multiplier 大於最大連擊倍率。\n\n因此，Multiplier 的計算公式是 [1] src/systems/ScoreSystem.ts:9-60 中的 `multiplier = Math.min(MAX_COMBO_MULTIPLIER, 1 + this.combo * COMBO_STEP);`。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/systems/ScoreSystem.ts",
+          "start_line": 9,
+          "end_line": 60,
+          "symbol": "ScoreSystem",
+          "score": 0.7202
+        },
+        {
+          "ref": 2,
+          "file_path": "src/systems/ScoreSystem.ts",
+          "start_line": 1,
+          "end_line": 7,
+          "symbol": "",
+          "score": 0.6429
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 14,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.581
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/architecture.md",
+          "start_line": 22,
+          "end_line": 29,
+          "symbol": "架構說明 > 系統",
+          "score": 0.6474
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 8.72,
+        "total_seconds": 27.637,
+        "tokens": 209,
+        "server": {
+          "retrieval_seconds": 0.053,
+          "first_token_seconds": 8.718,
+          "total_seconds": 27.635,
+          "tokens": 209,
+          "answer_chars": 535
+        },
+        "heartbeats": 1,
+        "files": {
+          "retrieved_files": [
+            "docs/architecture.md",
+            "src/game/GameState.ts",
+            "src/systems/ScoreSystem.ts"
+          ],
+          "answer_cited_files": [
+            "src/systems/ScoreSystem.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 3,
+          "rate": 0.75,
+          "matched": [
+            "COMBO_STEP",
+            "MAX_COMBO_MULTIPLIER",
+            "0.25"
+          ],
+          "missed": [
+            "onPlayerHit / COMBO_WINDOW_MS"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 13,
+      "type": "定位設定",
+      "question": "DASH_COOLDOWN_MS 和 DASH_DURATION_MS 在哪裡設定？各是多少？",
+      "key_facts": "src/config/gameConfig.ts：DASH_DURATION_MS = 180、DASH_COOLDOWN_MS = 900（毫秒）； Player.startDash() 使用",
+      "expected_files": [
+        "src/config/gameConfig.ts",
+        "src/entities/Player.ts"
+      ],
+      "definition_files": [
+        "src/config/gameConfig.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "DASH_COOLDOWN_MS 和 DASH_DURATION_MS 在 [2] src/config/gameConfig.ts:1-26 設定。DASH_COOLDOWN_MS 設定為 900 毫秒，DASH_DURATION_MS 設定為 180 毫秒。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 1,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.6517
+        },
+        {
+          "ref": 2,
+          "file_path": "src/config/gameConfig.ts",
+          "start_line": 1,
+          "end_line": 26,
+          "symbol": "",
+          "score": 0.6157
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 86,
+          "end_line": 100,
+          "symbol": "Game.handleGlobalInput",
+          "score": 0.5991
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 1,
+          "end_line": 8,
+          "symbol": "玩法規則 > 操作",
+          "score": 0.6464
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 22.344,
+        "total_seconds": 28.267,
+        "tokens": 58,
+        "server": {
+          "retrieval_seconds": 0.104,
+          "first_token_seconds": 22.342,
+          "total_seconds": 28.264,
+          "tokens": 58,
+          "answer_chars": 131
+        },
+        "heartbeats": 3,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/config/gameConfig.ts",
+            "src/entities/Player.ts",
+            "src/game/Game.ts"
+          ],
+          "answer_cited_files": [
+            "src/config/gameConfig.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/entities/Player.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 4,
+          "rate": 1.0,
+          "matched": [
+            "DASH_COOLDOWN_MS",
+            "DASH_DURATION_MS",
+            "900",
+            "180"
+          ],
+          "missed": [],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 14,
+      "type": "定位設定",
+      "question": "HIGH_SCORE_KEY 定義在哪裡？最高分怎麼存？",
+      "key_facts": "src/game/GameState.ts 的 HIGH_SCORE_KEY = \"starlight-courier.highScore\"； Game.gameOver() 以 localStorage.setItem 寫入",
+      "expected_files": [
+        "src/game/GameState.ts",
+        "src/game/Game.ts"
+      ],
+      "definition_files": [
+        "src/game/GameState.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "HIGH_SCORE_KEY 定義在 [1] src/game/GameState.ts:14-14。\n\n最高分存儲在 [2] src/game/Game.ts:145-151 的 `gameOver` 方法中，使用 `localStorage.setItem(HIGH_SCORE_KEY, String(best));` 將最高分存儲在本地存儲中。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 14,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.6793
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/Game.ts",
+          "start_line": 145,
+          "end_line": 151,
+          "symbol": "Game.gameOver",
+          "score": 0.5949
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 164,
+          "end_line": 173,
+          "symbol": "Game.syncUi",
+          "score": 0.5717
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 16,
+          "end_line": 21,
+          "symbol": "玩法規則 > 計分",
+          "score": 0.6495
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 11.195,
+        "total_seconds": 17.531,
+        "tokens": 73,
+        "server": {
+          "retrieval_seconds": 0.07,
+          "first_token_seconds": 11.193,
+          "total_seconds": 17.529,
+          "tokens": 73,
+          "answer_chars": 176
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/game/Game.ts",
+            "src/game/GameState.ts"
+          ],
+          "answer_cited_files": [
+            "src/game/Game.ts",
+            "src/game/GameState.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 3,
+          "hit": 3,
+          "rate": 1.0,
+          "matched": [
+            "HIGH_SCORE_KEY",
+            "localStorage",
+            "gameOver"
+          ],
+          "missed": [],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 15,
+      "type": "跨檔案流程",
+      "question": "getLevel 在哪裡定義？Spawner 怎麼用它？",
+      "key_facts": "src/config/levels.js 的 getLevel(index)；超過最後一關時間隔每關乘 0.9、最低 0.15 秒； Spawner.update 依目前關卡取得設定",
+      "expected_files": [
+        "src/config/levels.js",
+        "src/systems/Spawner.ts"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "getLevel 在 [1] src/config/levels.js:12-27 定義。\n\nSpawner 在 [2] src/systems/Spawner.ts:1-5 實現，並在 [3] src/systems/Spawner.ts:7-44 定義。Spawner 使用 getLevel 函數來獲取當前關卡的配置，並根據配置來控制小行星和包裹的生成。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/config/levels.js",
+          "start_line": 12,
+          "end_line": 27,
+          "symbol": "getLevel",
+          "score": 0.6968
+        },
+        {
+          "ref": 2,
+          "file_path": "src/systems/Spawner.ts",
+          "start_line": 1,
+          "end_line": 5,
+          "symbol": "",
+          "score": 0.6944
+        },
+        {
+          "ref": 3,
+          "file_path": "src/systems/Spawner.ts",
+          "start_line": 7,
+          "end_line": 44,
+          "symbol": "Spawner",
+          "score": 0.6749
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 23,
+          "end_line": 26,
+          "symbol": "玩法規則 > 關卡",
+          "score": 0.6217
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 3.983,
+        "total_seconds": 12.191,
+        "tokens": 89,
+        "server": {
+          "retrieval_seconds": 0.062,
+          "first_token_seconds": 3.981,
+          "total_seconds": 12.188,
+          "tokens": 89,
+          "answer_chars": 180
+        },
+        "heartbeats": 1,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/config/levels.js",
+            "src/systems/Spawner.ts"
+          ],
+          "answer_cited_files": [
+            "src/config/levels.js",
+            "src/systems/Spawner.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 3,
+          "hit": 2,
+          "rate": 0.667,
+          "matched": [
+            "getLevel",
+            "Spawner"
+          ],
+          "missed": [
+            "asteroidInterval"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    }
+  ]
+}
