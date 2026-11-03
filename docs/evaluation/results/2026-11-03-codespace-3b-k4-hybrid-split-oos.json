@@ -91,6 +91,12 @@
     "keyword_rate_by_type": {
       "陷阱題": 0.2,
       "對照題": 0.0
+    },
+    "manual_correctness": {
+      "judged": 8,
+      "of": 8,
+      "total": 4,
+      "max": 16
     }
   },
   "results": [
@@ -236,7 +242,7 @@
         "has_simplified": true,
         "refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 22,
@@ -397,7 +403,7 @@
         "has_simplified": true,
         "refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     },
     {
       "id": 23,
@@ -541,7 +547,7 @@
         "has_simplified": true,
         "refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 24,
@@ -692,7 +698,7 @@
         "has_simplified": true,
         "refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 2
     },
     {
       "id": 25,
@@ -834,7 +840,7 @@
         "has_simplified": false,
         "refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 26,
@@ -997,7 +1003,7 @@
         "refusal_phrases": [],
         "falsely_refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     },
     {
       "id": 27,
@@ -1153,7 +1159,7 @@
         "refusal_phrases": [],
         "falsely_refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 28,
@@ -1323,7 +1329,7 @@
         "refusal_phrases": [],
         "falsely_refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     }
   ]
 }

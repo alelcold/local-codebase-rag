@@ -92,6 +92,12 @@
       "定位設定": 0.333,
       "解釋邏輯": 0.75,
       "跨檔案流程": 0.667
+    },
+    "manual_correctness": {
+      "judged": 5,
+      "of": 5,
+      "total": 5,
+      "max": 10
     }
   },
   "results": [
@@ -254,7 +260,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 12,
@@ -417,7 +423,7 @@
         "refusal_phrases": [],
         "falsely_refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 2
     },
     {
       "id": 13,
@@ -578,7 +584,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 14,
@@ -736,7 +742,7 @@
         "refusal_phrases": [],
         "falsely_refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 2
     },
     {
       "id": 15,
@@ -893,7 +899,7 @@
         "refusal_phrases": [],
         "falsely_refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     }
   ]
 }
