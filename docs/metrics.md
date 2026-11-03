@@ -71,7 +71,7 @@ Runs from [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan
 | 2026-11-03 | G. + threshold | **Not adopted after calibration**: no `SCORE_THRESHOLD` value suggested, group not run | — | — | — | — | — | — | — | — | — | [calibration](evaluation/results/2026-11-03-threshold-calibration.md) |
 | 2026-11-03 | H. + rerank | `RERANK`, 10 → 4 | {待填} | 0/3 (0%) | 2/3 (67%) | 2/9 (22%) | 85% | 1 / 1 | No (0/1) | 21.2 / 27.4 | 2.9 / 4.4 | [main](evaluation/results/2026-11-03-codespace-3b-k4-rerank.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-rerank-ident.md) |
 | 2026-11-03 | I. hybrid + split + rerank | `HYBRID_SEARCH`, `SPLIT_RETRIEVAL`, `DOC_TOP_K=1`, `RERANK`, 10 → 4 (redefined, see the experiment plan) | {待填} | 3/3 (100%) | 3/3 (100%) | 7/9 (78%) | 23% | 0 / 0 | No (0/1) | 26.8 / 26.3 | 4.8 / 6.4 | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank-ident.md) |
-| {待填} | J. D + prompt v3 | `HYBRID_SEARCH`, `SPLIT_RETRIEVAL`, `DOC_TOP_K=1`, `PROMPT_VARIANT=v3` (ADR 0016) | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
+| 2026-11-03 | J. D + prompt v3 | `HYBRID_SEARCH`, `SPLIT_RETRIEVAL`, `DOC_TOP_K=1`, `PROMPT_VARIANT=v3` (ADR 0016) | {待填} | 0/3 (0%) | 3/3 (100%) | 6/9 (67%) | 25% | 0 / 0 ³ | Yes (1/1), but 8 of 9 real questions refused too (§4c) | 20.3 / 26.3 | — | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-ident.md) |
 
 "Answers with Simplified", "First token, mean (s)" and "Rerank time, mean (s)" are given as main / ident.; "Q10 refused" is from the main set. Manual correctness is not judged yet. Comparisons: `evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all,rerank,hybrid-split-rerank}[-ident].md` `2026-11-03-split-vs-hybrid-split-rerank[-ident].md`, and for D: `2026-11-03-split-vs-hybrid-split[-ident].md` (C → D) and `2026-11-03-hybrid-split-vs-hybrid-split-rerank[-ident].md` (D → I, the effect of rerank alone). First-token time is measured from the request, so in H and I it includes the rerank time. Rerank time grows with excerpt length: in I most candidates are code chunks (longer than doc sections), hence 4.8–6.4 s vs 2.9 s in H. Prompt caching (footnote ¹) shows up once: in I's ident. set, question 15 retrieved the same excerpts as in H, and its first token minus rerank time was 0.2 s, so I's ident. first-token mean is too low. Even after subtracting rerank, H's main-set first-token mean (18.3 s) is higher than A's (13.0 s), with similar excerpts. Compare latency between groups with care.
 
@@ -97,8 +97,14 @@ Group J of the [experiment plan](evaluation/experiment-plan-retrieval.md) agains
 
 | Date | Group | Prompt | Refusal rate, out-of-scope (/5) | False refusal rate, out-of-scope (/3) | Q10 refused, main | False refusal rate, main (/9) | False refusal rate, ident. (/5) | Answers with Simplified, main / out-of-scope | Manual correctness, main (/20) | Report |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-03 (main, ident.) · {待填} (out-of-scope) | D. hybrid + split | v1 | {待填} | {待填} | No (0/1) | 0/9 (0%) ² | 0/5 (0%) ² | 4 / {待填} | {待填} | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · out-of-scope {待填} |
-| {待填} | J. D + prompt v3 | v3 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| 2026-11-03 | D. hybrid + split | v1 | 1/5 (20%) ⁴ | 0/3 (0%) | No (0/1) | 0/9 (0%) ² | 0/5 (0%) ² | 4 / 7 | {待填} | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · [out-of-scope](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-oos.md) |
+| 2026-11-03 | J. D + prompt v3 | v3 | 5/5 (100%) | **3/3 (100%)** | Yes (1/1) | **8/9 (89%)** | **2/5 (40%)** | 0 / 0 ³ | {待填} | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-ident.md) · [out-of-scope](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-oos.md) |
+
+J retrieved exactly the same excerpts as D on all 23 questions, so every difference is the prompt. Of J's 23 answers, 19 are the fixed sentence 「在索引的專案中找不到相關內容。」 and nothing else (11 tokens); only main Q3 and ident. Q12, Q14, Q15 were answered. Refused real questions include main Q5, Q6 and ident. Q11, Q13, where every expected file was retrieved. **Prompt v3 is not adopted** (decision rule of the experiment plan: false refusal rate must stay 0). Comparisons: `evaluation/results/2026-11-03-hybrid-split-vs-hybrid-split-v3[-ident|-oos].md`.
+
+³ Not a fix for Simplified characters: 19 of 23 J answers are the fixed sentence. The 4 real answers had none, too few to judge.
+
+⁴ Keyword screen. By reading the answers, D refused 2 of 5: Q22 is a refusal written in Simplified Chinese, and the keyword list has 無法 only in its Traditional form (quoted in the 2026-11-03 devlog). Q23 (cloud sync “via `syncUi`”) and Q25 (gamepad mapped to the keyboard handler) are invented answers.
 
 ² Re-scored, not re-run: the false-refusal check applied to D's existing 2026-11-03 answers. The same re-scoring of every A–I report (main and ident.) also gives 0: none of the 14 answerable questions' answers contained a refusal phrase in any group, so the v1 / v2 baseline is 0 and any false refusal in J comes from prompt v3. Reports written before ADR 0016 have no `false_refusals` in their summary, so `compare.py` shows "—" for them.
 
@@ -236,7 +242,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-03 | G. + 門檻 | **校準後不採用**：`calibrate_threshold.py` 沒有建議值，未執行 | — | — | — | — | — | — | — | — | — | [校準輸出](evaluation/results/2026-11-03-threshold-calibration.md) |
 | 2026-11-03 | H. + Rerank | `RERANK`，10 → 4 | {待填} | 0/3 (0%) | 2/3 (67%) | 2/9 (22%) | 85% | 1 / 1 | 否（0/1） | 21.2 / 27.4 | 2.9 / 4.4 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-rerank.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-rerank-ident.md) |
 | 2026-11-03 | I. 混合 + 分類 + Rerank | `HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K=1`、`RERANK`，10 → 4（重新定義，見實驗計畫） | {待填} | 3/3 (100%) | 3/3 (100%) | 7/9 (78%) | 23% | 0 / 0 | 否（0/1） | 26.8 / 26.3 | 4.8 / 6.4 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank-ident.md) |
-| {待填} | J. D + 提示 v3 | `HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K=1`、`PROMPT_VARIANT=v3`（ADR 0016） | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
+| 2026-11-03 | J. D + 提示 v3 | `HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K=1`、`PROMPT_VARIANT=v3`（ADR 0016） | {待填} | 0/3 (0%) | 3/3 (100%) | 6/9 (67%) | 25% | 0 / 0 ³ | 是（1/1），但 9 題真實問題有 8 題也被拒答（§4c） | 20.3 / 26.3 | — | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-ident.md) |
 
 「混入簡體字的回答」、「首字延遲平均」與「rerank 耗時平均」的格式為 主要 / 識別字；「Q10 拒答」來自主要題組。人工判定正確性尚未評分。比較報告：`evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all,rerank,hybrid-split-rerank}[-ident].md` 、`2026-11-03-split-vs-hybrid-split-rerank[-ident].md`，以及 D 組的 `2026-11-03-split-vs-hybrid-split[-ident].md`（C → D）與 `2026-11-03-hybrid-split-vs-hybrid-split-rerank[-ident].md`（D → I，只有 rerank 的差別）。首字延遲從送出請求開始計算，所以 H、I 組包含 rerank 耗時。rerank 耗時隨片段長度增加：I 組的候選多半是程式碼片段（比文件段落長），所以是 4.8–6.4 秒，H 組是 2.9 秒。提示快取（註 ¹）出現了一次：I 組識別字題組第 15 題取回的片段與 H 組相同，首字延遲扣掉 rerank 只有 0.2 秒，所以 I 組識別字題組的首字平均偏低。H 組主要題組扣掉 rerank 後的首字平均（18.3 秒）仍高於 A 組（13.0 秒），而兩組取回的片段相近。各組之間的延遲比較要小心解讀。
 
@@ -262,8 +268,14 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 | 日期 | 組別 | 提示 | 拒答率，範圍外（/5） | 誤拒率，範圍外（/3） | Q10 拒答，主要 | 誤拒率，主要（/9） | 誤拒率，識別字（/5） | 混入簡體字的回答，主要 / 範圍外 | 人工判定正確性，主要（/20） | 報告 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-03（主要、識別字）· {待填}（範圍外） | D. 混合 + 分類 | v1 | {待填} | {待填} | 否（0/1） | 0/9 (0%) ² | 0/5 (0%) ² | 4 / {待填} | {待填} | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · 範圍外 {待填} |
-| {待填} | J. D + 提示 v3 | v3 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| 2026-11-03 | D. 混合 + 分類 | v1 | 1/5 (20%) ⁴ | 0/3 (0%) | 否（0/1） | 0/9 (0%) ² | 0/5 (0%) ² | 4 / 7 | {待填} | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · [範圍外](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-oos.md) |
+| 2026-11-03 | J. D + 提示 v3 | v3 | 5/5 (100%) | **3/3 (100%)** | 是（1/1） | **8/9 (89%)** | **2/5 (40%)** | 0 / 0 ³ | {待填} | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-ident.md) · [範圍外](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-oos.md) |
+
+J 組在全部 23 題取回的片段都與 D 組完全相同，所以所有差異都來自提示。J 組 23 個回答中，有 19 個只有固定句「在索引的專案中找不到相關內容。」（11 個 token）；只有主要題組第 3 題、識別字題組第 12、14、15 題有回答。被拒答的真實問題包括主要題組第 5、6 題與識別字題組第 11、13 題，這幾題的預期檔案全部都有取回。**不採用提示 v3**（實驗計畫的決策規則：誤拒率必須維持 0）。比較報告：`evaluation/results/2026-11-03-hybrid-split-vs-hybrid-split-v3[-ident|-oos].md`。
+
+³ 這不代表簡體字問題解決了：J 組 23 個回答有 19 個是固定句。另外 4 個真正的回答沒有簡體字，但數量太少，無法下結論。
+
+⁴ 這是關鍵字篩選的結果。實際讀過回答，D 組 5 題拒答了 2 題：第 22 題是用簡體字寫的拒答，關鍵字清單的「無法」只有繁體寫法（原文引用在 2026-11-03 的 devlog）。第 23 題（「透過 `syncUi`」同步到雲端）與第 25 題（把手把對應到鍵盤處理函式）都是編造的回答。
 
 ² 重新計分，不是重新執行：用誤拒判定檢查 D 組 2026-11-03 既有的回答。對 A～I 組所有報告（主要與識別字題組）做同樣的重新計分，結果也都是 0：14 題可回答的題目在任何一組的回答都沒有出現拒答字句，所以 v1／v2 的基準是 0，J 組若有誤拒，就是提示 v3 造成的。ADR 0016 之前產生的報告摘要中沒有 `false_refusals`，`compare.py` 會顯示「—」。
 
