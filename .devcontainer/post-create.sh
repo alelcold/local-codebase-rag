@@ -38,5 +38,10 @@ else
   echo "created .env from .env.codespaces (qwen2.5-coder:3b, TOP_K=4, sample project)"
 fi
 
+# --skip-repo: only the global filter config. Plain `git lfs install` exits 2
+# when the repo already has these hooks, which would stop this script (set -e).
+step "Setting up Git LFS"
+git lfs install --skip-repo
+
 echo
 echo "post-create done. post-start.sh starts Ollama and the stack (every time the codespace starts)."
