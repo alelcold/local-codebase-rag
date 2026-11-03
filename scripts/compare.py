@@ -22,7 +22,8 @@ from typing import Any, Callable
 from evaluate import retrieval_label  # same directory; run as python3 scripts/compare.py
 
 # (label, getter, kind) — kind decides formatting and which direction is "better".
-#   seconds: lower is better · rate: higher is better · count-lower: lower is better
+#   seconds: lower is better · rate: higher is better · rate-lower: a rate, lower is better
+#   count-lower: lower is better
 SUMMARY_ROWS: list[tuple[str, Callable[[dict], Any], str]] = [
     ("Time to first token, mean / 首字延遲平均", lambda s: s.get("first_token_seconds_mean"), "seconds"),
     ("Time to first token, median / 首字延遲中位數", lambda s: s.get("first_token_seconds_median"), "seconds"),
@@ -37,7 +38,8 @@ SUMMARY_ROWS: list[tuple[str, Callable[[dict], Any], str]] = [
     ("Docs among retrieved chunks / 取回片段中文件比例", lambda s: s.get("retrieved_doc_share_mean"), "share"),
     ("Keyword hit rate / 關鍵字命中率", lambda s: s.get("keyword_rate_mean"), "rate"),
     ("Answers with Simplified / 混入簡體字的回答", lambda s: s.get("simplified_answers"), "count-lower"),
-    ("Trick question refused / 陷阱題正確拒答", lambda s: (s.get("no_answer_refused") or {}).get("rate"), "rate"),
+    ("Refusal rate, trick questions / 拒答率", lambda s: (s.get("no_answer_refused") or {}).get("rate"), "rate"),
+    ("False refusal rate / 誤拒率", lambda s: (s.get("false_refusals") or {}).get("rate"), "rate-lower"),
     ("Refused by SCORE_THRESHOLD / 因門檻直接拒答", lambda s: s.get("threshold_refusals"), "number"),
     ("Manual correctness / 人工判定正確性", lambda s: (s.get("manual_correctness") or {}).get("total"), "number"),
     ("Errors / 失敗題數", lambda s: s.get("errors"), "count-lower"),
@@ -56,7 +58,7 @@ def fmt(v: Any, kind: str) -> str:
         return "—"
     if kind == "seconds":
         return f"{v:.1f} s"
-    if kind in ("rate", "share"):
+    if kind in ("rate", "rate-lower", "share"):
         return f"{v * 100:.0f}%"
     if isinstance(v, float):
         return f"{v:.1f}"
@@ -69,18 +71,18 @@ def delta(a: Any, b: Any, kind: str) -> str:
         return "—"
     d = b - a
     # Below the displayed precision counts as no change (avoids "-0.0 s ▲").
-    precision = {"seconds": 0.05, "rate": 0.005, "share": 0.005}.get(kind, 0.05 if isinstance(d, float) else 0.5)
+    precision = {"seconds": 0.05, "rate": 0.005, "rate-lower": 0.005, "share": 0.005}.get(kind, 0.05 if isinstance(d, float) else 0.5)
     if abs(d) < precision:
         return "0"
     if kind == "seconds":
         text = f"{d:+.1f} s"
-    elif kind in ("rate", "share"):
+    elif kind in ("rate", "rate-lower", "share"):
         text = f"{d * 100:+.0f} pt"
     elif isinstance(d, float):
         text = f"{d:+.1f}"
     else:
         text = f"{d:+d}"
-    better = {"seconds": d < 0, "rate": d > 0, "count-lower": d < 0}.get(kind)
+    better = {"seconds": d < 0, "rate": d > 0, "rate-lower": d < 0, "count-lower": d < 0}.get(kind)
     if better is None:
         return text
     return f"{text} {'▲' if better else '▼'}"

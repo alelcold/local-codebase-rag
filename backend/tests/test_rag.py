@@ -196,3 +196,76 @@ def test_prompt_v2_asks_for_traditional_chinese_and_code_locations_first():
     v1 = build_prompt("q", sources)
     assert "Reply in the same language as the question" in v1
     assert "— 程式碼" not in v1
+
+
+# ── Prompt v3: say "not found" for topics the excerpts do not mention (ADR 0016) ──
+
+
+def _two_sources():
+    from app.rag import Source
+
+    return [
+        Source(1, "src/config/gameConfig.ts", 1, 10, "", "module", "typescript", 0.5, "export const A = 1;"),
+        Source(2, "docs/gameplay.md", 3, 8, "Rules", "section", "markdown", 0.4, "text"),
+    ]
+
+
+def test_prompt_v3_is_v1_plus_a_refusal_rule_and_traditional_chinese():
+    from app.rag import REFUSAL_SENTENCE, SYSTEM_PROMPT, SYSTEM_PROMPT_V3
+
+    v3 = build_prompt("線上多人模式怎麼同步玩家位置？", _two_sources(), "v3")
+    assert v3.startswith(SYSTEM_PROMPT_V3)
+    # The refusal is one fixed sentence the model can copy; it must contain 「找不到」,
+    # which scripts/evaluate.py counts as a refusal.
+    assert "找不到" in REFUSAL_SENTENCE and "索引的專案" in REFUSAL_SENTENCE
+    assert f"reply with exactly: {REFUSAL_SENTENCE}" in SYSTEM_PROMPT_V3
+    assert "directly mentions the topic" in SYSTEM_PROMPT_V3
+    assert "Do not guess" in SYSTEM_PROMPT_V3 and "general knowledge" in SYSTEM_PROMPT_V3
+    assert "Always answer in Traditional Chinese" in SYSTEM_PROMPT_V3
+    # Kept from v1: citations and no invented files.
+    assert "Cite every claim" in SYSTEM_PROMPT and "Cite every claim" in SYSTEM_PROMPT_V3
+    assert "Never invent files, functions or line numbers" in SYSTEM_PROMPT_V3
+    # Dropped from v1: it invited talking about related code instead of refusing.
+    assert "suggest what to search for" in SYSTEM_PROMPT and "suggest what to search" not in SYSTEM_PROMPT_V3
+    assert "Reply in the same language" not in SYSTEM_PROMPT_V3
+
+
+def test_prompt_v3_keeps_v1_layout_and_repeats_the_rule_after_the_question():
+    from app.rag import REFUSAL_REMINDER
+
+    v1 = build_prompt("q?", _two_sources(), "v1")
+    v3 = build_prompt("q?", _two_sources(), "v3")
+    # Same excerpt headers as v1: no v2 「程式碼／文件」 labels, no v2 Chinese headings.
+    for header in ("[1] src/config/gameConfig.ts:1-10\n", "[2] docs/gameplay.md:3-8 (section Rules)\n"):
+        assert header in v1 and header in v3
+    assert "— 程式碼" not in v3 and "— 文件" not in v3 and "## 程式碼片段" not in v3
+    assert "## Code excerpts" in v3
+    # The reminder sits between the question and the answer slot, where a small model still sees it.
+    assert v3.rstrip().endswith(f"## Question\n\nq?\n{REFUSAL_REMINDER}\n\n## Answer")
+    assert REFUSAL_REMINDER not in v1
+
+
+def test_prompt_v3_rules_stay_short_for_small_models():
+    """qwen2.5-coder:3b drops rules from long instructions (ADR 0016): keep v3 within
+    a few lines more than v1 and shorter than v2."""
+    from app.rag import SYSTEM_PROMPT, SYSTEM_PROMPT_V2, SYSTEM_PROMPT_V3
+
+    rules = [line for line in SYSTEM_PROMPT_V3.splitlines() if line[:2] in {f"{n}." for n in range(1, 10)}]
+    assert len(rules) <= 5
+    assert len(SYSTEM_PROMPT_V3.splitlines()) <= len(SYSTEM_PROMPT.splitlines()) + 2
+    assert len(SYSTEM_PROMPT_V3) < len(SYSTEM_PROMPT) * 1.5
+
+
+def test_answer_and_stream_use_prompt_v3(settings):
+    from app.rag import REFUSAL_REMINDER, REFUSAL_SENTENCE
+
+    settings.prompt_variant = "v3"
+    llm = FakeLLM(prompts=[], answer=REFUSAL_SENTENCE)
+    services = make_services(settings, llm=llm)
+    services.indexer.run()
+    result = services.rag.answer("How does online multiplayer sync positions?", top_k=2)
+    assert result.answer == REFUSAL_SENTENCE
+    assert REFUSAL_REMINDER in llm.prompts[0]
+    events = list(services.rag.stream("How does online multiplayer sync positions?", top_k=2))
+    assert REFUSAL_REMINDER in llm.prompts[1]
+    assert "".join(e.data["text"] for e in events if e.kind == "token") == REFUSAL_SENTENCE

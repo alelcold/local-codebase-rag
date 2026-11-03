@@ -71,6 +71,7 @@ Runs from [`evaluation/experiment-plan-retrieval.md`](evaluation/experiment-plan
 | 2026-11-03 | G. + threshold | **Not adopted after calibration**: no `SCORE_THRESHOLD` value suggested, group not run | — | — | — | — | — | — | — | — | — | [calibration](evaluation/results/2026-11-03-threshold-calibration.md) |
 | 2026-11-03 | H. + rerank | `RERANK`, 10 → 4 | {待填} | 0/3 (0%) | 2/3 (67%) | 2/9 (22%) | 85% | 1 / 1 | No (0/1) | 21.2 / 27.4 | 2.9 / 4.4 | [main](evaluation/results/2026-11-03-codespace-3b-k4-rerank.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-rerank-ident.md) |
 | 2026-11-03 | I. hybrid + split + rerank | `HYBRID_SEARCH`, `SPLIT_RETRIEVAL`, `DOC_TOP_K=1`, `RERANK`, 10 → 4 (redefined, see the experiment plan) | {待填} | 3/3 (100%) | 3/3 (100%) | 7/9 (78%) | 23% | 0 / 0 | No (0/1) | 26.8 / 26.3 | 4.8 / 6.4 | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank-ident.md) |
+| {待填} | J. D + prompt v3 | `HYBRID_SEARCH`, `SPLIT_RETRIEVAL`, `DOC_TOP_K=1`, `PROMPT_VARIANT=v3` (ADR 0016) | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
 
 "Answers with Simplified", "First token, mean (s)" and "Rerank time, mean (s)" are given as main / ident.; "Q10 refused" is from the main set. Manual correctness is not judged yet. Comparisons: `evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all,rerank,hybrid-split-rerank}[-ident].md` `2026-11-03-split-vs-hybrid-split-rerank[-ident].md`, and for D: `2026-11-03-split-vs-hybrid-split[-ident].md` (C → D) and `2026-11-03-hybrid-split-vs-hybrid-split-rerank[-ident].md` (D → I, the effect of rerank alone). First-token time is measured from the request, so in H and I it includes the rerank time. Rerank time grows with excerpt length: in I most candidates are code chunks (longer than doc sections), hence 4.8–6.4 s vs 2.9 s in H. Prompt caching (footnote ¹) shows up once: in I's ident. set, question 15 retrieved the same excerpts as in H, and its first token minus rerank time was 0.2 s, so I's ident. first-token mean is too low. Even after subtracting rerank, H's main-set first-token mean (18.3 s) is higher than A's (13.0 s), with similar excerpts. Compare latency between groups with care.
 
@@ -89,6 +90,17 @@ Cross-encoder only (no LLM, no retrieval): 10 (question, excerpt) pairs from the
 | {待填} | `BAAI/bge-reranker-base` | 512 | {待填} (Mac M2, in Docker) | {待填} | 1.1 |
 
 First load of `bge-reranker-base` from the local cache inside the backend image: 7.8 s (same container).
+
+### 4c. Refusing out-of-scope questions (ADR 0016)
+
+Group J of the [experiment plan](evaluation/experiment-plan-retrieval.md) against its reference D (same retrieval, prompt v1). "Refusal rate" = trick questions answered "not found" without invented code (report: 拒答率); "False refusal rate" = answerable questions answered with a "not found" phrase and no keyword hit (report: 誤拒率). "Out-of-scope" = `questions-out-of-scope.yaml` (5 trick questions 21–25, 3 control questions 26–28). Main-set false refusals are over its 9 answerable questions.
+
+| Date | Group | Prompt | Refusal rate, out-of-scope (/5) | False refusal rate, out-of-scope (/3) | Q10 refused, main | False refusal rate, main (/9) | False refusal rate, ident. (/5) | Answers with Simplified, main / out-of-scope | Manual correctness, main (/20) | Report |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-03 (main, ident.) · {待填} (out-of-scope) | D. hybrid + split | v1 | {待填} | {待填} | No (0/1) | 0/9 (0%) ² | 0/5 (0%) ² | 4 / {待填} | {待填} | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · out-of-scope {待填} |
+| {待填} | J. D + prompt v3 | v3 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+
+² Re-scored, not re-run: the false-refusal check applied to D's existing 2026-11-03 answers. The same re-scoring of every A–I report (main and ident.) also gives 0: none of the 14 answerable questions' answers contained a refusal phrase in any group, so the v1 / v2 baseline is 0 and any false refusal in J comes from prompt v3. Reports written before ADR 0016 have no `false_refusals` in their summary, so `compare.py` shows "—" for them.
 
 ## 5. Model comparison (3B / 14B / 32B)
 
@@ -113,6 +125,7 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 | 2026-11-02 | CI duration, first run (no caches): unit tests / compose config / image builds (backend, frontend) / smoke test | 40 s / 5 s / 76 s, 45 s / 2 min 41 s (PR #3) |
 | 2026-11-02 | Backend unit tests with threshold, rerank (fake cross-encoder) and calibration script | 157 passed (≈ 7 s, no network, no model download) |
 | 2026-11-02 | Backend image size, default / `INSTALL_RERANK=true` (`docker images`, linux/amd64) | 616 MB / 2.14 GB (+1.5 GB: torch CPU, transformers, scipy, scikit-learn …; model not included) |
+| 2026-11-03 | Backend unit tests with prompt v3, out-of-scope question set and refusal / false-refusal metrics | 170 passed (≈ 7 s, no network) |
 
 ## How to measure
 
@@ -215,6 +228,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-03 | G. + 門檻 | **校準後不採用**：`calibrate_threshold.py` 沒有建議值，未執行 | — | — | — | — | — | — | — | — | — | [校準輸出](evaluation/results/2026-11-03-threshold-calibration.md) |
 | 2026-11-03 | H. + Rerank | `RERANK`，10 → 4 | {待填} | 0/3 (0%) | 2/3 (67%) | 2/9 (22%) | 85% | 1 / 1 | 否（0/1） | 21.2 / 27.4 | 2.9 / 4.4 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-rerank.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-rerank-ident.md) |
 | 2026-11-03 | I. 混合 + 分類 + Rerank | `HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K=1`、`RERANK`，10 → 4（重新定義，見實驗計畫） | {待填} | 3/3 (100%) | 3/3 (100%) | 7/9 (78%) | 23% | 0 / 0 | 否（0/1） | 26.8 / 26.3 | 4.8 / 6.4 | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-rerank-ident.md) |
+| {待填} | J. D + 提示 v3 | `HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`DOC_TOP_K=1`、`PROMPT_VARIANT=v3`（ADR 0016） | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | — | {待填} |
 
 「混入簡體字的回答」、「首字延遲平均」與「rerank 耗時平均」的格式為 主要 / 識別字；「Q10 拒答」來自主要題組。人工判定正確性尚未評分。比較報告：`evaluation/results/2026-11-03-baseline-vs-{hybrid,split,all,rerank,hybrid-split-rerank}[-ident].md` 、`2026-11-03-split-vs-hybrid-split-rerank[-ident].md`，以及 D 組的 `2026-11-03-split-vs-hybrid-split[-ident].md`（C → D）與 `2026-11-03-hybrid-split-vs-hybrid-split-rerank[-ident].md`（D → I，只有 rerank 的差別）。首字延遲從送出請求開始計算，所以 H、I 組包含 rerank 耗時。rerank 耗時隨片段長度增加：I 組的候選多半是程式碼片段（比文件段落長），所以是 4.8–6.4 秒，H 組是 2.9 秒。提示快取（註 ¹）出現了一次：I 組識別字題組第 15 題取回的片段與 H 組相同，首字延遲扣掉 rerank 只有 0.2 秒，所以 I 組識別字題組的首字平均偏低。H 組主要題組扣掉 rerank 後的首字平均（18.3 秒）仍高於 A 組（13.0 秒），而兩組取回的片段相近。各組之間的延遲比較要小心解讀。
 
@@ -233,6 +247,17 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | {待填} | `BAAI/bge-reranker-base` | 512 | {待填}（Mac M2，Docker 內） | {待填} | 1.1 |
 
 在 backend 映像檔內從本機快取第一次載入 `bge-reranker-base`：7.8 秒（同一個容器環境）。
+
+### 4c. 拒答範圍外的問題（ADR 0016）
+
+[實驗計畫](evaluation/experiment-plan-retrieval.md)的 J 組，以 D 組（同樣的檢索、提示 v1）為參考。「拒答率」= 陷阱題回答「找不到」而且沒有編造程式碼（報告的「拒答率」）；「誤拒率」= 可回答的題目，回答含有「找不到」類的字句而且沒有命中任何關鍵字（報告的「誤拒率」）。「範圍外」= `questions-out-of-scope.yaml`（陷阱題 21–25 共 5 題、對照題 26–28 共 3 題）。主要題組的誤拒率以其中 9 題可回答的題目計算。
+
+| 日期 | 組別 | 提示 | 拒答率，範圍外（/5） | 誤拒率，範圍外（/3） | Q10 拒答，主要 | 誤拒率，主要（/9） | 誤拒率，識別字（/5） | 混入簡體字的回答，主要 / 範圍外 | 人工判定正確性，主要（/20） | 報告 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-03（主要、識別字）· {待填}（範圍外） | D. 混合 + 分類 | v1 | {待填} | {待填} | 否（0/1） | 0/9 (0%) ² | 0/5 (0%) ² | 4 / {待填} | {待填} | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · 範圍外 {待填} |
+| {待填} | J. D + 提示 v3 | v3 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+
+² 重新計分，不是重新執行：用誤拒判定檢查 D 組 2026-11-03 既有的回答。對 A～I 組所有報告（主要與識別字題組）做同樣的重新計分，結果也都是 0：14 題可回答的題目在任何一組的回答都沒有出現拒答字句，所以 v1／v2 的基準是 0，J 組若有誤拒，就是提示 v3 造成的。ADR 0016 之前產生的報告摘要中沒有 `false_refusals`，`compare.py` 會顯示「—」。
 
 ## 5. 模型比較（3B／14B／32B）
 
@@ -257,6 +282,7 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-02 | CI 耗時，第一次執行（沒有快取）：單元測試／compose 檢查／映像檔 build（backend、frontend）／冒煙測試 | 40 秒／5 秒／76 秒、45 秒／2 分 41 秒（PR #3） |
 | 2026-11-02 | 含門檻、rerank（假的交叉編碼器）與校準腳本的後端單元測試 | 157 個通過（約 7 秒，不需網路、不下載模型） |
 | 2026-11-02 | backend 映像檔大小，預設／`INSTALL_RERANK=true`（`docker images`，linux/amd64） | 616 MB／2.14 GB（+1.5 GB：torch CPU 版、transformers、scipy、scikit-learn 等；不含模型） |
+| 2026-11-03 | 含提示 v3、範圍外題組與拒答率／誤拒率的後端單元測試 | 170 個通過（約 7 秒，不需網路） |
 
 ## 量測方式
 
