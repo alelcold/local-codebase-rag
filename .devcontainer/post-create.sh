@@ -7,9 +7,17 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 step() { echo; echo "==> $*"; }
 
-step "Installing jq, zstd and iproute2 (used by the scripts and the Ollama installer)"
+step "Installing jq, zstd, iproute2 (used by the scripts and the Ollama installer) and git-lfs"
 sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends jq zstd iproute2 >/dev/null
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends jq zstd iproute2 git-lfs >/dev/null
+
+# The repository's git hooks (post-checkout, post-commit, post-merge, pre-push)
+# call git-lfs; without it every checkout prints "This repository is configured
+# for Git LFS but 'git-lfs' was not found on your path".
+# --skip-repo: only the global filter config. Plain `git lfs install` exits 2
+# when the repo already has these hooks, which would stop this script (set -e).
+step "Setting up Git LFS"
+git lfs install --skip-repo
 
 step "Installing Ollama"
 if command -v ollama >/dev/null 2>&1; then
