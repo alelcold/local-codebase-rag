@@ -1,0 +1,1431 @@
+{
+  "schema": 1,
+  "date": "2026-11-03",
+  "started_at": "2026-11-03T05:16:40+00:00",
+  "config": {
+    "label": "codespace-3b-k4-split",
+    "base_url": "http://localhost:8080/api",
+    "top_k": null,
+    "lang": "zh",
+    "warmup": true,
+    "only": null,
+    "questions_file": "docs/evaluation/questions.yaml"
+  },
+  "health": {
+    "status": "ok",
+    "ollama": {
+      "ok": true,
+      "url": "http://host.docker.internal:11434",
+      "llm_model": "qwen2.5-coder:3b",
+      "embed_model": "nomic-embed-text",
+      "missing_models": []
+    },
+    "qdrant": {
+      "ok": true,
+      "url": "http://qdrant:6333",
+      "collection": "codebase_nomic_embed_text",
+      "indexed": true,
+      "points": 67,
+      "index_config": "chunker=1;embed_format=2;chunk_max_chars=3000;embed_model=nomic-embed-text;doc_prefix='search_document: ';chunk_metadata=off",
+      "reindex_needed": false
+    },
+    "top_k": 4,
+    "retrieval": {
+      "hybrid_search": false,
+      "split_retrieval": true,
+      "doc_top_k": 1,
+      "chunk_metadata": false,
+      "prompt_variant": "v1",
+      "rrf_k": null,
+      "retrieval_candidates": 30
+    }
+  },
+  "summary": {
+    "questions": 10,
+    "errors": 0,
+    "first_token_seconds_mean": 15.928,
+    "first_token_seconds_median": 12.485,
+    "total_seconds_mean": 25.703,
+    "tokens_mean": 109.0,
+    "file_recall_mean": 0.398,
+    "code_hit": {
+      "hit": 6,
+      "of": 9,
+      "rate": 0.667
+    },
+    "doc_hit": {
+      "hit": 2,
+      "of": 4,
+      "rate": 0.5
+    },
+    "definition_hit": {
+      "hit": 1,
+      "of": 3,
+      "rate": 0.333
+    },
+    "answer_cited_hit": {
+      "hit": 1,
+      "of": 9,
+      "rate": 0.111
+    },
+    "retrieved_doc_share_mean": 0.25,
+    "keyword_rate_mean": 0.275,
+    "simplified_answers": 3,
+    "no_answer_refused": {
+      "hit": 0,
+      "of": 1,
+      "rate": 0.0
+    },
+    "keyword_rate_by_type": {
+      "定位設定": 0.067,
+      "解釋邏輯": 0.35,
+      "跨檔案流程": 0.5,
+      "陷阱題": 0.0
+    }
+  },
+  "results": [
+    {
+      "id": 1,
+      "type": "定位設定",
+      "question": "玩家受傷後的無敵時間在哪裡設定？是多久？",
+      "key_facts": "gameConfig.ts 的 INVINCIBLE_MS = 1500 毫秒；在 Player.takeDamage() 設定； isInvincible 為真時（衝刺時也是）不會受傷",
+      "expected_files": [
+        "src/config/gameConfig.ts",
+        "src/entities/Player.ts",
+        "docs/gameplay.md"
+      ],
+      "definition_files": [
+        "src/config/gameConfig.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "玩家受傷後的無敵時間是在 `src/game/Player.ts` 文件的第 12 行到第 14 行，具体代码如下：\n\n```typescript\nprivate invincibilityTime = 2; // 2 秒\n```\n\n因此，玩家受傷後的無敵時間是 2 秒。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/game/Game.ts",
+          "start_line": 66,
+          "end_line": 84,
+          "symbol": "Game.frame",
+          "score": 0.4821
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/Game.ts",
+          "start_line": 86,
+          "end_line": 100,
+          "symbol": "Game.handleGlobalInput",
+          "score": 0.4717
+        },
+        {
+          "ref": 3,
+          "file_path": "src/utils/math.js",
+          "start_line": 7,
+          "end_line": 9,
+          "symbol": "randomRange",
+          "score": 0.4661
+        },
+        {
+          "ref": 4,
+          "file_path": "README.md",
+          "start_line": 26,
+          "end_line": 32,
+          "symbol": "Starlight Courier（範例專案） > 可以試著問的問題",
+          "score": 0.5992
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 16.831,
+        "total_seconds": 22.959,
+        "tokens": 68,
+        "server": {
+          "retrieval_seconds": 0.067,
+          "first_token_seconds": 16.829,
+          "total_seconds": 22.957,
+          "tokens": 68,
+          "answer_chars": 136
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "README.md",
+            "src/game/Game.ts",
+            "src/utils/math.js"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 3,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/gameConfig.ts",
+              "src/entities/Player.ts",
+              "docs/gameplay.md"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/gameConfig.ts",
+              "src/entities/Player.ts"
+            ]
+          },
+          "doc": {
+            "expected": 1,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "docs/gameplay.md"
+            ]
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "answer_cited": {
+            "expected": 3,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/gameConfig.ts",
+              "src/entities/Player.ts",
+              "docs/gameplay.md"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 5,
+          "hit": 0,
+          "rate": 0.0,
+          "matched": [],
+          "missed": [
+            "INVINCIBLE_MS",
+            "1500 / 1.5 秒 / 1.5秒 / 1.5 s / 1.5s",
+            "gameConfig",
+            "takeDamage",
+            "isInvincible"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [
+          "体",
+          "码"
+        ],
+        "has_simplified": true
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 2,
+      "type": "解釋邏輯",
+      "question": "連擊倍率怎麼計算？什麼時候會歸零？",
+      "key_facts": "1 + 連擊數 × 0.25（COMBO_STEP），最高 4 倍（MAX_COMBO_MULTIPLIER）； 超過 COMBO_WINDOW_MS（2500 毫秒）沒有收集包裹，或玩家受傷時歸零",
+      "expected_files": [
+        "src/systems/ScoreSystem.ts",
+        "src/config/gameConfig.ts",
+        "docs/gameplay.md"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "連擊倍率的計算公式在 `src/game/Player.ts` 的 `calculateHitMultiplier()` 方法中。這個方法會根據玩家的連擊次數和時間間隔來計算連擊倍率。\n\n連擊倍率歸零的條件是玩家的生命值歸零。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/game/Game.ts",
+          "start_line": 51,
+          "end_line": 54,
+          "symbol": "Game.start",
+          "score": 0.5763
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "GamePhase",
+          "score": 0.5762
+        },
+        {
+          "ref": 3,
+          "file_path": "src/utils/math.js",
+          "start_line": 7,
+          "end_line": 9,
+          "symbol": "randomRange",
+          "score": 0.5739
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/architecture.md",
+          "start_line": 11,
+          "end_line": 20,
+          "symbol": "架構說明 > 狀態機",
+          "score": 0.6619
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 9.307,
+        "total_seconds": 14.206,
+        "tokens": 60,
+        "server": {
+          "retrieval_seconds": 0.085,
+          "first_token_seconds": 9.305,
+          "total_seconds": 14.204,
+          "tokens": 60,
+          "answer_chars": 113
+        },
+        "heartbeats": 1,
+        "files": {
+          "retrieved_files": [
+            "docs/architecture.md",
+            "src/game/Game.ts",
+            "src/game/GameState.ts",
+            "src/utils/math.js"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 3,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/systems/ScoreSystem.ts",
+              "src/config/gameConfig.ts",
+              "docs/gameplay.md"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/systems/ScoreSystem.ts",
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "doc": {
+            "expected": 1,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "docs/gameplay.md"
+            ]
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 3,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/systems/ScoreSystem.ts",
+              "src/config/gameConfig.ts",
+              "docs/gameplay.md"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 1,
+          "rate": 0.25,
+          "matched": [
+            "受傷"
+          ],
+          "missed": [
+            "0.25 / COMBO_STEP",
+            "MAX_COMBO_MULTIPLIER / 4 倍 / 4倍 / 4x",
+            "COMBO_WINDOW_MS / 2500 / 2.5 秒 / 2.5秒"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 3,
+      "type": "解釋邏輯",
+      "question": "遊戲主迴圈的流程是什麼？怎麼做到不受畫面更新率影響？",
+      "key_facts": "requestAnimationFrame → Game.frame；累加經過時間，以 FIXED_DT（1/60 秒）為單位執行 update()； 單幀時間上限 MAX_FRAME_TIME（0.25 秒）；最後呼叫一次 render()",
+      "expected_files": [
+        "src/game/Game.ts",
+        "docs/architecture.md"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "遊戲主迴圈的流程如下：\n\n1. 使用 `requestAnimationFrame` 循環，每幀調用 `frame()` 函數。\n2. 在 `frame()` 函數中，累加經過的時間到 `accumulator`。\n3. 每 `FIXED_DT`（1/60 秒）為單位呼叫 `update()` 函數，更新遊戲狀態。\n4. 最後，呼叫一次 `render()` 函數，渲染遊戲畫面。\n\n這樣做的目的是確保物理與碰撞的結果不受畫面更新率的影響，保持遊戲的穩定性和一致性。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/game/Game.ts",
+          "start_line": 102,
+          "end_line": 118,
+          "symbol": "Game.update",
+          "score": 0.4922
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/Game.ts",
+          "start_line": 14,
+          "end_line": 35,
+          "symbol": "Game",
+          "score": 0.4871
+        },
+        {
+          "ref": 3,
+          "file_path": "src/entities/Player.ts",
+          "start_line": 16,
+          "end_line": 113,
+          "symbol": "Player",
+          "score": 0.483
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/architecture.md",
+          "start_line": 1,
+          "end_line": 9,
+          "symbol": "架構說明 > 遊戲主迴圈",
+          "score": 0.6344
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 47.208,
+        "total_seconds": 59.565,
+        "tokens": 118,
+        "server": {
+          "retrieval_seconds": 0.081,
+          "first_token_seconds": 47.205,
+          "total_seconds": 59.563,
+          "tokens": 118,
+          "answer_chars": 234
+        },
+        "heartbeats": 5,
+        "files": {
+          "retrieved_files": [
+            "docs/architecture.md",
+            "src/entities/Player.ts",
+            "src/game/Game.ts"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 2,
+            "hit": 2,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "code": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "doc": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/game/Game.ts",
+              "docs/architecture.md"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 5,
+          "hit": 4,
+          "rate": 0.8,
+          "matched": [
+            "requestAnimationFrame",
+            "FIXED_DT",
+            "accumulator",
+            "render"
+          ],
+          "missed": [
+            "MAX_FRAME_TIME / 0.25"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 4,
+      "type": "跨檔案流程",
+      "question": "小行星的生成頻率怎麼隨關卡變化？超過最後一關之後呢？",
+      "key_facts": "LEVELS 裡每關的 asteroidInterval（1.2 → 0.9 → 0.6 → 0.4 秒）；超過最後一關後， getLevel() 每多一關把間隔乘以 0.9，最低 0.15 秒；Spawner.update 使用這個值",
+      "expected_files": [
+        "src/config/levels.js",
+        "src/systems/Spawner.ts"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "小行星的生成頻率在 `src/game/GameState.ts` 文件的第 14 行定义为 `ASTEROID_SPAWN_RATE`，其值为 `1000`。这个值是固定的，不随关卡变化。因此，超过最后一关之后，小行星的生成频率不会变化。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 14,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.4978
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "GamePhase",
+          "score": 0.4941
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 86,
+          "end_line": 100,
+          "symbol": "Game.handleGlobalInput",
+          "score": 0.4931
+        },
+        {
+          "ref": 4,
+          "file_path": "README.md",
+          "start_line": 26,
+          "end_line": 32,
+          "symbol": "Starlight Courier（範例專案） > 可以試著問的問題",
+          "score": 0.686
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 13.137,
+        "total_seconds": 18.947,
+        "tokens": 69,
+        "server": {
+          "retrieval_seconds": 0.078,
+          "first_token_seconds": 13.135,
+          "total_seconds": 18.945,
+          "tokens": 69,
+          "answer_chars": 120
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "README.md",
+            "src/game/Game.ts",
+            "src/game/GameState.ts"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/levels.js",
+              "src/systems/Spawner.ts"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/levels.js",
+              "src/systems/Spawner.ts"
+            ]
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/config/levels.js",
+              "src/systems/Spawner.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 5,
+          "hit": 0,
+          "rate": 0.0,
+          "matched": [],
+          "missed": [
+            "asteroidInterval",
+            "getLevel",
+            "0.9",
+            "0.15",
+            "Spawner"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [
+          "义",
+          "为",
+          "这",
+          "个",
+          "随",
+          "关",
+          "变",
+          "过",
+          "后",
+          "频",
+          "会"
+        ],
+        "has_simplified": true
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 5,
+      "type": "跨檔案流程",
+      "question": "遊戲中按 Esc 暫停之後發生什麼事？恢復時又做了什麼？",
+      "key_facts": "透過 setPhase 進入 paused；迴圈繼續跑，但不呼叫 update()； 恢復時把 accumulator 設為 0，避免遊戲一下子往前跳；Overlay 顯示「Paused」",
+      "expected_files": [
+        "src/game/Game.ts",
+        "src/ui/Overlay.tsx"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "[1] src/game/Game.ts:86-100 (method Game.handleGlobalInput)\n```typescript\nelse if (this.input.wasPressed(\"pause\")) {\n  if (this.phase === \"playing\") this.setPhase(\"paused\");\n  else if (this.phase === \"paused\") {\n    // Drop time accumulated while paused so the game doesn't jump forward.\n    this.accumulator = 0;\n    this.setPhase(\"playing\");\n  }\n}\n```\n\n按 Esc 暫停時，如果遊戲正在進行中，則將遊戲狀態設置為暫停。如果遊戲已經暫停，則將累積的時間清零，並將遊戲狀態設置回進行中。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/game/Game.ts",
+          "start_line": 86,
+          "end_line": 100,
+          "symbol": "Game.handleGlobalInput",
+          "score": 0.5503
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 14,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.5262
+        },
+        {
+          "ref": 3,
+          "file_path": "src/systems/InputManager.ts",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "Action",
+          "score": 0.5139
+        },
+        {
+          "ref": 4,
+          "file_path": "README.md",
+          "start_line": 26,
+          "end_line": 32,
+          "symbol": "Starlight Courier（範例專案） > 可以試著問的問題",
+          "score": 0.6665
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 13.051,
+        "total_seconds": 25.341,
+        "tokens": 143,
+        "server": {
+          "retrieval_seconds": 0.073,
+          "first_token_seconds": 13.048,
+          "total_seconds": 25.338,
+          "tokens": 143,
+          "answer_chars": 419
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "README.md",
+            "src/game/Game.ts",
+            "src/game/GameState.ts",
+            "src/systems/InputManager.ts"
+          ],
+          "answer_cited_files": [
+            "src/game/Game.ts"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/ui/Overlay.tsx"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/ui/Overlay.tsx"
+            ]
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/ui/Overlay.tsx"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 3,
+          "rate": 0.75,
+          "matched": [
+            "paused",
+            "setPhase",
+            "accumulator"
+          ],
+          "missed": [
+            "Overlay"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 6,
+      "type": "跨檔案流程",
+      "question": "React 的 HUD 怎麼取得遊戲資料，又不會每一幀都重新 render？",
+      "key_facts": "createUiStore 外部 store；set() 只在數值改變時通知；Hud 使用 useSyncExternalStore； Game.syncUi 負責寫入",
+      "expected_files": [
+        "src/game/store.ts",
+        "src/ui/Hud.tsx",
+        "src/game/Game.ts",
+        "docs/architecture.md"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "React 的 HUD 取得遊戲資料的方式是通過 `useSyncExternalStore` 函數。這個函數從 `src/game/store.ts` 中的 `createUiStore` 函數中獲取遊戲狀態。`createUiStore` 函數返回一個包含 `get`、`subscribe` 和 `set` 方法的對象。`get` 方法返回當前的遊戲狀態，`subscribe` 方法允許 React 訂閱狀態變化，而 `set` 方法允許遊戲更新狀態。當遊戲狀態改變時，`set` 方法會通知所有訂閱的 React 組件，但只有當數值改變時才會重新渲染。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/ui/Hud.tsx",
+          "start_line": 8,
+          "end_line": 28,
+          "symbol": "Hud",
+          "score": 0.6965
+        },
+        {
+          "ref": 2,
+          "file_path": "src/ui/Hud.tsx",
+          "start_line": 1,
+          "end_line": 2,
+          "symbol": "",
+          "score": 0.6793
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/store.ts",
+          "start_line": 5,
+          "end_line": 28,
+          "symbol": "createUiStore",
+          "score": 0.6478
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/architecture.md",
+          "start_line": 31,
+          "end_line": 35,
+          "symbol": "架構說明 > Canvas 與 React 的分工",
+          "score": 0.7449
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 19.92,
+        "total_seconds": 32.416,
+        "tokens": 135,
+        "server": {
+          "retrieval_seconds": 0.074,
+          "first_token_seconds": 19.917,
+          "total_seconds": 32.414,
+          "tokens": 135,
+          "answer_chars": 281
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "docs/architecture.md",
+            "src/game/store.ts",
+            "src/ui/Hud.tsx"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 4,
+            "hit": 3,
+            "recall": 0.75,
+            "any": true,
+            "missed": [
+              "src/game/Game.ts"
+            ]
+          },
+          "code": {
+            "expected": 3,
+            "hit": 2,
+            "recall": 0.667,
+            "any": true,
+            "missed": [
+              "src/game/Game.ts"
+            ]
+          },
+          "doc": {
+            "expected": 1,
+            "hit": 1,
+            "recall": 1.0,
+            "any": true,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 4,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/game/store.ts",
+              "src/ui/Hud.tsx",
+              "src/game/Game.ts",
+              "docs/architecture.md"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 3,
+          "rate": 0.75,
+          "matched": [
+            "createUiStore",
+            "useSyncExternalStore",
+            "改變"
+          ],
+          "missed": [
+            "syncUi"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 7,
+      "type": "解釋邏輯",
+      "question": "碰撞偵測是怎麼實作的？",
+      "key_facts": "圓形對圓形；比較距離平方與半徑和的平方（不開根號）；findOverlaps 過濾清單； 在 Game.handleCollisions 中使用",
+      "expected_files": [
+        "src/systems/collision.ts",
+        "src/game/Game.ts"
+      ],
+      "definition_files": [],
+      "expect_no_answer": false,
+      "answer": "碰撞偵測在 `src/game/Player.ts` 中實作。[1] 中的 `Hud` 遊具元件中，`useSyncExternalStore` 函數用於監聽 `store` 的變化，並根據 `ui.phase` 的值決定是否渲染 HUD 元素。當 `ui.phase` 為 `\"title\"` 時，返回 `null`，表示不渲染 HUD。當 `ui.phase` 為 `\"playing\"` 時，渲染 HUD 元素，其中包含玩家的得分、連擊倍率、關卡和生命值等資訊。碰撞偵測的詳細實作在 `src/game/Player.ts` 中的 `update` 方法中，該方法會檢查玩家的碰撞狀態並更新遊戲狀態。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/ui/Hud.tsx",
+          "start_line": 8,
+          "end_line": 28,
+          "symbol": "Hud",
+          "score": 0.5645
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "GamePhase",
+          "score": 0.549
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 61,
+          "end_line": 64,
+          "symbol": "Game.setPhase",
+          "score": 0.5403
+        },
+        {
+          "ref": 4,
+          "file_path": "README.md",
+          "start_line": 26,
+          "end_line": 32,
+          "symbol": "Starlight Courier（範例專案） > 可以試著問的問題",
+          "score": 0.6838
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 7.459,
+        "total_seconds": 21.416,
+        "tokens": 154,
+        "server": {
+          "retrieval_seconds": 0.051,
+          "first_token_seconds": 7.457,
+          "total_seconds": 21.414,
+          "tokens": 154,
+          "answer_chars": 303
+        },
+        "heartbeats": 1,
+        "files": {
+          "retrieved_files": [
+            "README.md",
+            "src/game/Game.ts",
+            "src/game/GameState.ts",
+            "src/ui/Hud.tsx"
+          ],
+          "answer_cited_files": [
+            "src/ui/Hud.tsx"
+          ],
+          "all": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/systems/collision.ts"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/systems/collision.ts"
+            ]
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/systems/collision.ts",
+              "src/game/Game.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 4,
+          "hit": 0,
+          "rate": 0.0,
+          "matched": [],
+          "missed": [
+            "圓 / circle",
+            "平方 / squared / sqrt / 開根號",
+            "findOverlaps",
+            "handleCollisions"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 8,
+      "type": "定位設定",
+      "question": "衝刺（dash）怎麼運作？按哪個鍵、速度、持續時間、冷卻時間？",
+      "key_facts": "Shift 鍵（ShiftLeft／ShiftRight → dash）；必須有移動方向；DASH_SPEED 720 px/s、 DASH_DURATION_MS 180、DASH_COOLDOWN_MS 900；衝刺期間無敵",
+      "expected_files": [
+        "src/entities/Player.ts",
+        "src/config/gameConfig.ts",
+        "src/systems/InputManager.ts"
+      ],
+      "definition_files": [
+        "src/config/gameConfig.ts",
+        "src/systems/InputManager.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "衝刺（dash）在遊戲中運作如下：\n\n- 按 Shift 鍵。\n- 有冷卻時間，冷卻時間的長度未在提供的資訊中明確指出，但通常在遊戲中會有相關的說明或提示。\n- 持續時間也未在提供的資訊中明確指出，但通常在遊戲中會有相關的說明或提示。\n\n請參考遊戲的官方文件或遊戲的說明來獲得更詳細的資訊。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/ui/Hud.tsx",
+          "start_line": 8,
+          "end_line": 28,
+          "symbol": "Hud",
+          "score": 0.5943
+        },
+        {
+          "ref": 2,
+          "file_path": "src/systems/InputManager.ts",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "Action",
+          "score": 0.593
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 164,
+          "end_line": 173,
+          "symbol": "Game.syncUi",
+          "score": 0.5916
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 1,
+          "end_line": 8,
+          "symbol": "玩法規則 > 操作",
+          "score": 0.6716
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 9.214,
+        "total_seconds": 17.793,
+        "tokens": 96,
+        "server": {
+          "retrieval_seconds": 0.205,
+          "first_token_seconds": 9.212,
+          "total_seconds": 17.79,
+          "tokens": 96,
+          "answer_chars": 145
+        },
+        "heartbeats": 1,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/game/Game.ts",
+            "src/systems/InputManager.ts",
+            "src/ui/Hud.tsx"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 3,
+            "hit": 1,
+            "recall": 0.333,
+            "any": true,
+            "missed": [
+              "src/entities/Player.ts",
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "code": {
+            "expected": 3,
+            "hit": 1,
+            "recall": 0.333,
+            "any": true,
+            "missed": [
+              "src/entities/Player.ts",
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/config/gameConfig.ts"
+            ]
+          },
+          "answer_cited": {
+            "expected": 3,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/entities/Player.ts",
+              "src/config/gameConfig.ts",
+              "src/systems/InputManager.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 5,
+          "hit": 1,
+          "rate": 0.2,
+          "matched": [
+            "Shift"
+          ],
+          "missed": [
+            "DASH_SPEED / 720",
+            "DASH_DURATION_MS / 180",
+            "DASH_COOLDOWN_MS / 900",
+            "無敵 / invincible / isInvincible"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [],
+        "has_simplified": false
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 9,
+      "type": "定位設定",
+      "question": "最高分存在哪裡？",
+      "key_facts": "localStorage，key 為 HIGH_SCORE_KEY = \"starlight-courier.highScore\"； 在 Game.gameOver() 寫入；在 Game 建構子讀取",
+      "expected_files": [
+        "src/game/GameState.ts",
+        "src/game/Game.ts"
+      ],
+      "definition_files": [
+        "src/game/GameState.ts"
+      ],
+      "expect_no_answer": false,
+      "answer": "最高分存在于 `UiStore` 中。具体来说，`UiStore` 的 `score` 属性存储了当前游戏的最高得分。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/ui/Hud.tsx",
+          "start_line": 8,
+          "end_line": 28,
+          "symbol": "Hud",
+          "score": 0.5223
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/Game.ts",
+          "start_line": 86,
+          "end_line": 100,
+          "symbol": "Game.handleGlobalInput",
+          "score": 0.5188
+        },
+        {
+          "ref": 3,
+          "file_path": "src/ui/Hud.tsx",
+          "start_line": 4,
+          "end_line": 6,
+          "symbol": "HudProps",
+          "score": 0.5102
+        },
+        {
+          "ref": 4,
+          "file_path": "docs/gameplay.md",
+          "start_line": 16,
+          "end_line": 21,
+          "symbol": "玩法規則 > 計分",
+          "score": 0.6371
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 11.919,
+        "total_seconds": 14.42,
+        "tokens": 29,
+        "server": {
+          "retrieval_seconds": 0.047,
+          "first_token_seconds": 11.917,
+          "total_seconds": 14.417,
+          "tokens": 29,
+          "answer_chars": 59
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "docs/gameplay.md",
+            "src/game/Game.ts",
+            "src/ui/Hud.tsx"
+          ],
+          "answer_cited_files": [],
+          "all": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/game/GameState.ts"
+            ]
+          },
+          "code": {
+            "expected": 2,
+            "hit": 1,
+            "recall": 0.5,
+            "any": true,
+            "missed": [
+              "src/game/GameState.ts"
+            ]
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 1,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/game/GameState.ts"
+            ]
+          },
+          "answer_cited": {
+            "expected": 2,
+            "hit": 0,
+            "recall": 0.0,
+            "any": false,
+            "missed": [
+              "src/game/GameState.ts",
+              "src/game/Game.ts"
+            ]
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 3,
+          "hit": 0,
+          "rate": 0.0,
+          "matched": [],
+          "missed": [
+            "localStorage",
+            "HIGH_SCORE_KEY / starlight-courier.highScore",
+            "gameOver"
+          ],
+          "forbidden_hits": []
+        },
+        "simplified_chars": [
+          "于",
+          "体",
+          "来",
+          "说",
+          "储",
+          "当"
+        ],
+        "has_simplified": true
+      },
+      "manual_correctness": null
+    },
+    {
+      "id": 10,
+      "type": "陷阱題",
+      "question": "線上多人模式怎麼同步玩家位置？",
+      "key_facts": "陷阱題：專案中沒有多人或網路功能。正確的回答應該說找不到，而不是編造程式碼。",
+      "expected_files": [],
+      "definition_files": [],
+      "expect_no_answer": true,
+      "answer": "線上多人模式的玩家位置同步通常涉及使用協議（Protocol）來協調不同用戶端之間的數據傳輸。在這個範例中，我們可以從 `Game.ts` 檔案的 `syncUi` 方法中找到相關的資訊。\n\n[3] src/game/Game.ts:164-173 (method Game.syncUi)\n```typescript\n  private syncUi(): void {\n    this.ui.set({\n      score: this.score.score,\n      lives: this.player.lives,\n      level: this.level + 1,\n      levelName: getLevel(this.level).name,\n      comboMultiplier: this.score.multiplier,\n      dashReady: this.player.dashReady,\n    });\n  }\n```\n\n這個方法展示了如何將遊戲狀態同步到 UI 上，包括玩家的位置。然而，要實現線上多人模式的玩家位置同步，需要更詳細的協議和數據傳輸機制，這通常涉及到使用 WebSocket、HTTP 等通信協議，並在用戶端和伺服器之間進行數據的同步和更新。",
+      "sources": [
+        {
+          "ref": 1,
+          "file_path": "src/systems/collision.ts",
+          "start_line": 15,
+          "end_line": 18,
+          "symbol": "findOverlaps",
+          "score": 0.4903
+        },
+        {
+          "ref": 2,
+          "file_path": "src/game/GameState.ts",
+          "start_line": 14,
+          "end_line": 14,
+          "symbol": "",
+          "score": 0.4859
+        },
+        {
+          "ref": 3,
+          "file_path": "src/game/Game.ts",
+          "start_line": 164,
+          "end_line": 173,
+          "symbol": "Game.syncUi",
+          "score": 0.4776
+        },
+        {
+          "ref": 4,
+          "file_path": "README.md",
+          "start_line": 26,
+          "end_line": 32,
+          "symbol": "Starlight Courier（範例專案） > 可以試著問的問題",
+          "score": 0.5703
+        }
+      ],
+      "error": null,
+      "metrics": {
+        "first_token_seconds": 11.23,
+        "total_seconds": 29.969,
+        "tokens": 218,
+        "server": {
+          "retrieval_seconds": 0.057,
+          "first_token_seconds": 11.228,
+          "total_seconds": 29.967,
+          "tokens": 218,
+          "answer_chars": 563
+        },
+        "heartbeats": 2,
+        "files": {
+          "retrieved_files": [
+            "README.md",
+            "src/game/Game.ts",
+            "src/game/GameState.ts",
+            "src/systems/collision.ts"
+          ],
+          "answer_cited_files": [
+            "src/game/Game.ts"
+          ],
+          "all": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "code": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "doc": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "definition": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "answer_cited": {
+            "expected": 0,
+            "hit": 0,
+            "recall": null,
+            "any": null,
+            "missed": []
+          },
+          "retrieved_doc_share": 0.25
+        },
+        "keywords": {
+          "total": 1,
+          "hit": 0,
+          "rate": 0.0,
+          "matched": [],
+          "missed": [
+            "找不到 / 沒有 / 没有 / 不存在 / 未包含 / 無法 / 沒找到 / not found / no multiplayer / does not / doesn't / cannot find / can't find"
+          ],
+          "forbidden_hits": [
+            "WebSocket"
+          ]
+        },
+        "simplified_chars": [],
+        "has_simplified": false,
+        "refused": false
+      },
+      "manual_correctness": null
+    }
+  ]
+}
