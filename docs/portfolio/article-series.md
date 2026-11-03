@@ -4,6 +4,19 @@
 > Privacy: every example, screenshot and number in the articles comes from the sample project (`examples/sample-game-frontend/`) or from this repo. Never show company code, file names or architecture.
 > Metric references (M§n) point to sections of [`../metrics.md`](../metrics.md).
 
+## Progress and files
+
+> **Language exception**: articles are published as **two separate files, one per language** (`NN-name.zh-TW.md` and `NN-name.en.md`), not as one file with English first and Chinese below. This is an exception to the bilingual rule in `CLAUDE.md`, made so each version can be published on its own. Each article has its own title options and LinkedIn summary per language, and the two versions must be updated together. This planning file itself still follows the normal rule (English first, Chinese below).
+
+| # | Article | Status | Files in `articles/` |
+| --- | --- | --- | --- |
+| 1 | Why I built an on-prem codebase RAG | Not started | — |
+| 2 | Building the whole system with a Claude Code cloud session for about USD 7 | Not started | — |
+| 3 | Docker on a Mac can't use the GPU? Lessons from deploying a local LLM | **Draft** (zh-TW and English). Open `{待填}`: Mac numbers, the 504 test beyond 100 s, restart test, screenshots | `03-local-llm-deployment-pitfalls.zh-TW.md`, `03-local-llm-deployment-pitfalls.en.md` |
+| 4 | 3B vs. 14B vs. 32B local models | Not started (needs Mac and GPU-instance measurements) | — |
+| 5 | How to evaluate RAG answer quality | Not started (the evaluation tool exists; ADR 0012) | — |
+| 6 | Improving RAG retrieval with data | **Draft** (zh-TW and English), **automatic metrics only; manual correctness not judged yet**. Open: manual scoring, Mac 14B run, screenshots and charts | `06-data-driven-rag-retrieval.zh-TW.md`, `06-data-driven-rag-retrieval.en.md` |
+
 ## Article 1 — Why I built an on-prem codebase RAG
 
 - **Target readers**: Front-end and game developers, and tech leads who want "ask the codebase" without sending code to the cloud.
@@ -42,6 +55,7 @@
   6. One compose file for Mac, Codespaces and an EC2 GPU instance.
 - **Screenshots**: `ollama ps` showing GPU usage; `/health` before and after the Linux fix; Codespaces Ports panel with 11434 private.
 - **Data**: tokens/s with CPU vs. Metal (M§5, still to be measured); first-query load time (M§3).
+- **Draft** (2026-11-03): `03-local-llm-deployment-pitfalls.{zh-TW,en}.md`. The draft is organised around three Codespaces pitfalls plus a Git LFS bonus (devlog 2026-11-03), and uses the streaming numbers from devlog 2026-11-02 (time to first token 30.4 s, total 43.8 s).
 
 ## Article 4 — 3B vs. 14B vs. 32B local models: real-world measurements
 
@@ -81,7 +95,8 @@
   5. **Rerank** (ADR 0015): ordering within the candidates. Metrics: Defining file retrieved / cited ↑, Manual correctness ↑, **rerank time vs. first-token time**; model choice table (v2-m3 vs. base vs. MiniLM, metrics §4b); image size cost (+1.5 GB, §6) (groups H, I).
   6. What did not help, what was kept off by default, and why (the "decision rule" of the experiment plan).
 - **Figures**: one chart of Defining file retrieved and Manual correctness across groups A → I; the calibration score distribution (expected vs. other); a latency stack (retrieval / rerank / first token).
-- **Data**: all from `docs/metrics.md` §4a, §4b, §6 ({待填} until the experiment plan has been run).
+- **Data**: all from `docs/metrics.md` §4a, §4b, §4c, §6.
+- **Draft** (2026-11-03): `06-data-driven-rag-retrieval.{zh-TW,en}.md`. The experiment plan has since been run, so the draft differs from the outline above: group G (threshold) was **not run** because calibration found no usable value (correct excerpts median cosine 0.616 vs. irrelevant 0.604; 0.70 would drop 25/27 = 93%); group I was redefined as hybrid + split + rerank; group D was added and showed that the hybrid gain on identifier questions is already delivered by split retrieval; group J (prompt v3) was added and not adopted (8/9 false refusals). The draft's thesis became "tried many common techniques, kept one switch". Manual correctness is not judged for any group, so all results are labelled "automatic metrics only".
 
 ## Publishing checklist (each article)
 
@@ -96,6 +111,19 @@
 
 > 隱私：文章中所有的範例、截圖與數字，都來自範例專案（`examples/sample-game-frontend/`）或本 repo。不得出現公司的程式碼、檔名或架構。
 > 數據代號（M§n）指的是 [`../metrics.md`](../metrics.md) 的章節。
+
+## 進度與檔名
+
+> **語言例外**：文章採「**中英文分檔**」發布（`NN-name.zh-TW.md` 與 `NN-name.en.md` 兩個檔案），而不是同一個檔案先英文、下方再中文。這是 `CLAUDE.md` 雙語規則的例外，原因是方便分別發佈。每篇文章在各語言版本都有自己的標題選項與 LinkedIn 摘要，兩個版本要一起更新。本規劃檔本身仍照一般規則（先英文、下方中文）。
+
+| # | 文章 | 狀態 | `articles/` 裡的檔案 |
+| --- | --- | --- | --- |
+| 1 | 為什麼做地端 codebase RAG | 尚未開始 | — |
+| 2 | 用 Claude Code 雲端工作階段約 7 美元建出整套系統 | 尚未開始 | — |
+| 3 | Mac Docker 用不到 GPU？地端 LLM 部署踩坑紀錄 | **草稿**（繁中與英文）。待補 `{待填}`：Mac 數據、超過 100 秒的 504 測試、重啟測試、截圖 | `03-local-llm-deployment-pitfalls.zh-TW.md`、`03-local-llm-deployment-pitfalls.en.md` |
+| 4 | 3B vs 14B vs 32B 地端模型實測 | 尚未開始（需要 Mac 與 GPU 機器的量測） | — |
+| 5 | 如何評估 RAG 回答品質 | 尚未開始（評估工具已完成，ADR 0012） | — |
+| 6 | 用數據改善 RAG 檢索 | **草稿**（繁中與英文），**僅自動指標，正確性評分待補**。待補：人工評分、Mac 14B 實測、截圖與圖表 | `06-data-driven-rag-retrieval.zh-TW.md`、`06-data-driven-rag-retrieval.en.md` |
 
 ## 第 1 篇 — 為什麼做地端 codebase RAG
 
@@ -135,6 +163,7 @@
   6. 一個 compose 檔同時支援 Mac、Codespaces 與 EC2 GPU 機器。
 - **截圖**：`ollama ps` 顯示 GPU 使用情況；Linux 修正前後的 `/health`；Codespaces Ports 面板中 11434 為 private。
 - **數據**：CPU 與 Metal 的 tokens/s（M§5，尚待量測）；第一次查詢的載入時間（M§3）。
+- **草稿**（2026-11-03）：`03-local-llm-deployment-pitfalls.{zh-TW,en}.md`。以 Codespaces 的三個坑加上 Git LFS 番外（devlog 2026-11-03）為主軸，並使用 devlog 2026-11-02 的串流數據（首字延遲 30.4 秒、總耗時 43.8 秒）。
 
 ## 第 4 篇 — 3B vs 14B vs 32B 地端模型實測
 
@@ -174,7 +203,8 @@
   5. **Rerank**（ADR 0015）：候選內的排序。指標：定義檔命中／引用 ↑、人工判定正確性 ↑、**rerank 耗時與首字延遲的比較**；模型選擇表（v2-m3 vs. base vs. MiniLM，metrics §4b）；映像檔大小成本（+1.5 GB，§6）（H、I 組）。
   6. 哪些沒有幫助、哪些維持預設關閉，以及原因（實驗計畫的「決策規則」）。
 - **圖表**：A → I 各組的定義檔命中與人工判定正確性折線圖；校準的分數分布（預期 vs. 其他）；延遲堆疊圖（檢索／rerank／首字）。
-- **數據**：全部取自 `docs/metrics.md` §4a、§4b、§6（實驗計畫跑完前為 {待填}）。
+- **數據**：全部取自 `docs/metrics.md` §4a、§4b、§4c、§6。
+- **草稿**（2026-11-03）：`06-data-driven-rag-retrieval.{zh-TW,en}.md`。實驗計畫已經跑完，所以草稿和上面的大綱不同：G 組（門檻）**沒有執行**，因為校準找不到可用的值（正確片段 cosine 中位數 0.616 vs 不相關 0.604；0.70 會丟掉 25/27 = 93%）；I 組重新定義為混合 + 分類 + rerank；補跑了 D 組，發現混合檢索在識別字題的增益其實分類取回就做到了；新增 J 組（prompt v3）並不採用（誤拒 8/9）。草稿主軸改成「試了很多常見技巧，只留下一個開關」。人工正確性目前一組都沒評分，所以所有結果都標註「僅自動指標」。
 
 ## 發布前檢查（每篇）
 
