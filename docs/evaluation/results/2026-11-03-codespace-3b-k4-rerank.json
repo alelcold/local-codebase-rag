@@ -88,6 +88,12 @@
       "解釋邏輯": 0.283,
       "跨檔案流程": 0.333,
       "陷阱題": 0.0
+    },
+    "manual_correctness": {
+      "judged": 10,
+      "of": 10,
+      "total": 6,
+      "max": 20
     }
   },
   "results": [
@@ -253,7 +259,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     },
     {
       "id": 2,
@@ -412,7 +418,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 3,
@@ -567,7 +573,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     },
     {
       "id": 4,
@@ -726,7 +732,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     },
     {
       "id": 5,
@@ -883,7 +889,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     },
     {
       "id": 6,
@@ -1044,7 +1050,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 2
     },
     {
       "id": 7,
@@ -1200,7 +1206,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 8,
@@ -1368,7 +1374,7 @@
         "simplified_chars": [],
         "has_simplified": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 9,
@@ -1547,7 +1553,7 @@
         ],
         "has_simplified": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 10,
@@ -1692,7 +1698,7 @@
         "has_simplified": false,
         "refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     }
   ]
 }

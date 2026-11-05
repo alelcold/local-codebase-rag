@@ -93,6 +93,12 @@
       "解釋邏輯": 0.267,
       "跨檔案流程": 0.0,
       "陷阱題": 1.0
+    },
+    "manual_correctness": {
+      "judged": 10,
+      "of": 10,
+      "total": 3,
+      "max": 20
     }
   },
   "results": [
@@ -264,7 +270,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 2,
@@ -430,7 +436,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 3,
@@ -584,7 +590,7 @@
         "refusal_phrases": [],
         "falsely_refused": false
       },
-      "manual_correctness": null
+      "manual_correctness": 1
     },
     {
       "id": 4,
@@ -745,7 +751,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 5,
@@ -903,7 +909,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 6,
@@ -1069,7 +1075,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 7,
@@ -1228,7 +1234,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 8,
@@ -1402,7 +1408,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 9,
@@ -1563,7 +1569,7 @@
         ],
         "falsely_refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 0
     },
     {
       "id": 10,
@@ -1706,7 +1712,7 @@
         "has_simplified": false,
         "refused": true
       },
-      "manual_correctness": null
+      "manual_correctness": 2
     }
   ]
 }
