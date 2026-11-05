@@ -30,7 +30,7 @@
 
 ---
 
-## 2. 20 題面試問答
+## 2. 21 題面試問答
 
 > 每題格式：**問題** → **參考回答**（口語、可直接講）→ **可能的追問**（若有）→ **出處**（複習時查證）。
 
@@ -268,6 +268,20 @@ Chroma 比較簡單但過濾與維運功能較少；pgvector 要多一個 Postgr
 
 **出處**：[ADR 0018]（Consequences、Follow-ups）、[devlog 2026-11-05]（Next）、[ADR 0019]、[article 6]（第 7、8 節）、[metrics §3]。
 
+#### Q21. 這個系統能擴展到多大？
+
+**參考回答**：設計目標是約 50～300 個檔案（ADR 0003 以最多幾千個片段估算），但**評估只在 20 個檔案、67 個片段的範例專案上做過**，所以我能講的是機制和風險，不是已驗證的上限。
+
+機制上不怕專案變大：索引是增量的。每個檔案的 `file_hash`（內容加上切塊器版本、`CHUNK_MAX_CHARS`、`EMBED_MODEL`）存在 Qdrant，新增的檔案切塊後寫入，修改的檔案先產生完新的 embedding 再取代舊片段，刪除的檔案移除，沒變的直接略過、不呼叫 embedding，所以更新成本只和有變動的檔案成正比。只有 `index_config`（切塊器版本、embedding 格式、`CHUNK_MAX_CHARS`、`EMBED_MODEL`、文件前綴、`CHUNK_METADATA`）改變時才自動全量重建；BM25 索引在資料變動後會自動重建。
+
+規模的影響我會分開講：檢索時間在範例專案每一組都只有 0.07～0.21 秒，大專案是 `{待填}`；回答生成時間取決於 `TOP_K`、片段長度與模型，不是專案大小；首次全量索引時間主要是 embedding，大致隨片段數線性增加，範例專案在 CI runner 上是 21.54 秒（67 個片段，約 0.3 秒／片段，是推算值不是實測），Mac 與真實專案 `{待填}`。**最大的風險是回答品質**：候選變多，名稱相近的檔案會搶 `TOP_K` 名額。這是預期風險，我還沒在大專案量測。
+
+另一個要誠實講的點：在 20 個檔案上，混合檢索與 rerank 都沒有比單獨的分類取回更好，但大專案可能不同，所以我的建議是專案明顯變大時，用實際專案準備題庫（放在 repo 外，遵守隱私規則），跑 `evaluate.py` 重新評估，再逐一檢視 `TOP_K`、`DOC_TOP_K`、混合檢索、rerank，不要直接沿用範例專案的結論。
+
+**可能的追問**：怎麼避免不該索引的檔案拖垮索引？→ `INDEX_EXTENSIONS`、`EXCLUDE_DIRS`、`EXCLUDE_PATTERNS`、`MAX_FILE_BYTES` 可設定（索引器不讀 `.gitignore`），建議排除資源檔、自動產生的程式碼與測試快照；這個建議沒有量測過對檢索的影響。
+
+**出處**：[README 專案規模與擴展]、[ADR 0003]、[ADR 0013]（settings fingerprint、BM25 快取）、[ADR 0018]（Limits of the evidence）、[metrics §2]、[metrics §4a]。
+
 ---
 
 ## 3. 一頁式專案摘要（STAR）
@@ -336,7 +350,7 @@ I built an **on-prem code Q&A system**. A team can ask a game front-end project,
 
 ---
 
-## 2. Twenty interview questions
+## 2. Twenty-one interview questions
 
 > Format per question: **Question** → **Suggested answer** (spoken style, ready to say) → **Likely follow-up** (if any) → **Sources** (to check while reviewing).
 
@@ -574,6 +588,20 @@ Next (all in the ADR and devlog to-do lists): run `./scripts/benchmark-mac.sh` o
 
 **Sources**: [ADR 0018] (Consequences, Follow-ups), [devlog 2026-11-05] (Next), [ADR 0019], [article 6] (sections 7, 8), [metrics §3].
 
+#### Q21. How large a project can this system scale to?
+
+**Suggested answer**: the design target is roughly 50–300 files (ADR 0003 sizes it at a few thousand chunks at most), but **evaluation was done only on the 20-file, 67-chunk sample project**, so what I can describe is the mechanism and the risks, not a verified ceiling.
+
+Mechanically, a bigger project is not a problem, because indexing is incremental. Each file's `file_hash` (content plus the chunker version, `CHUNK_MAX_CHARS` and `EMBED_MODEL`) is stored in Qdrant: a new file is chunked and written, a modified file gets its new embeddings first and then replaces the old chunks, a deleted file is removed, and an unchanged file is skipped without calling the embedding model, so the cost of an update is proportional to the files that changed. A full rebuild runs automatically only when `index_config` changes (chunker version, embedding format, `CHUNK_MAX_CHARS`, `EMBED_MODEL`, document prefix, `CHUNK_METADATA`); the BM25 index is rebuilt automatically after the data changes.
+
+I would separate the effects of scale: retrieval time was only 0.07–0.21 s in every group on the sample project and is `{待填}` for a large one; answer generation time depends on `TOP_K`, excerpt length and the model, not project size; the first full index is dominated by embedding and grows roughly linearly with chunk count, 21.54 s for 67 chunks on a CI runner (about 0.3 s per chunk, derived, not measured), with the Mac and a real project `{待填}`. **The biggest risk is answer quality**: more candidates, and similarly named files compete for `TOP_K` slots. That is an expected risk I have not measured on a large project.
+
+One more honest point: on 20 files, hybrid search and rerank did not beat split retrieval alone, but they may on a large project. So when a project grows noticeably, I would build a question set from the real project (kept outside the repo, following the privacy rule), re-run `evaluate.py`, and re-check `TOP_K`, `DOC_TOP_K`, hybrid search and rerank one by one, instead of reusing the sample project's conclusions.
+
+**Likely follow-up**: how do you keep files that should not be indexed from bloating the index? → `INDEX_EXTENSIONS`, `EXCLUDE_DIRS`, `EXCLUDE_PATTERNS` and `MAX_FILE_BYTES` are configurable (the indexer does not read `.gitignore`); I would exclude assets, generated code and test snapshots, and that advice has not been measured for its effect on retrieval.
+
+**Sources**: [README project scale and scaling], [ADR 0003], [ADR 0013] (settings fingerprint, BM25 cache), [ADR 0018] (Limits of the evidence), [metrics §2], [metrics §4a].
+
 ---
 
 ## 3. One-page project summary (STAR)
@@ -640,5 +668,7 @@ Build a complete RAG pipeline on one machine: ask in natural language (Chinese),
 [metrics §6]: ../metrics.md
 [experiment plan]: ../evaluation/experiment-plan-retrieval.md
 [calibration]: ../evaluation/results/2026-11-03-threshold-calibration.md
+[README 專案規模與擴展]: ../../README.md#專案規模與擴展
+[README project scale and scaling]: ../../README.md#專案規模與擴展
 [article 3]: articles/03-local-llm-deployment-pitfalls.zh-TW.md
 [article 6]: articles/06-data-driven-rag-retrieval.zh-TW.md
