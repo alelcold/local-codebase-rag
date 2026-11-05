@@ -305,7 +305,7 @@ The main set's defining files are finally all retrieved: question 1's `gameConfi
 
 | Metric | D (v1) | J (v3) |
 | --- | --- | --- |
-| Trick questions refused, out-of-scope 21–25 | 1/5 (keyword screen); 2/5 by reading | **5/5** |
+| Trick questions refused, out-of-scope 21–25 | 2/5 (keyword screen, re-scored under ADR 0019; it was 1/5) | **5/5** |
 | Question 10 refused | No | **Yes** |
 | False refusal, control 26–28 | 0/3 | **3/3** |
 | False refusal, main (9 answerable) | 0/9 | **8/9** |
@@ -360,6 +360,7 @@ The recommendation in [devlog 2026-11-03](../../devlog/2026-11-03.md), confirmed
 | `CHUNK_METADATA` | Keep off | F: no gain, and it lost C's question 8 hit; changing it forces a full re-index |
 | `SCORE_THRESHOLD` | Leave empty | No value can be calibrated (correct 0.616 vs. irrelevant 0.604) |
 | `PROMPT_VARIANT` | Keep `v1` | v2: no retrieval gain, Simplified still 2; v3: main-set false refusals 8/9 |
+| `QUERY_GLOSSARY` | Keep off (implemented, not yet tested) | Only an offline check so far (3/19 → 16/19, an upper bound); the end-to-end group K is {待填}; needs `HYBRID_SEARCH` (ADR 0020) |
 
 The plan's own decision rule says: "turn a switch on by default when it improves defining file retrieved or manual correctness and does not lower manual correctness on any question type; write a new ADR for the change of defaults." Split retrieval meets it (correctness 11 → 17 of 30, no drop on questions 2, 3 and 6), and the change of defaults is recorded in ADR 0018, together with the reasons each other switch stays off and the limits of the evidence.
 
@@ -373,8 +374,8 @@ The Mac `.env.example` (14B, `TOP_K=8`) is unchanged and waits for `./scripts/be
 2. **Look at the refusal rate and the false refusal rate together.** v3's 5/5 refusal rate is lovely; the false refusal rate in the next column of the same table is 8/9. Report only the first and it is a successful experiment.
 3. **Validate generic advice on your own data.** 0.70 is common in customer-support RAG; on this data it drops 93% of the correct excerpts, because the cosine distributions of correct and irrelevant excerpts overlap. The general-purpose reranker gives docs 0.8–0.99 and code mostly below 0.1. The advice is not wrong; its premises (docs and question in different languages from code, scores that separate relevance) do not hold for "Chinese questions about an English codebase".
 4. **The evaluation script has holes too.**
-   - The trick-question refusal keywords list 「無法」 in Traditional form only, not the Simplified 「无法」. Out-of-scope question 22's answer, 「我无法提供…」, is a refusal written in Simplified, and it scored "not refused".
-   - Questions 23 (cloud sync "via `syncUi`") and 25 (gamepad mapped to the keyboard handler) are **invented answers** that pass the "not refused, no forbidden word" check. Reading D's answers, it refused 2 of 5; the keyword screen counts 1.
+   - The trick-question refusal keywords originally listed 「無法」 in Traditional form only, not the Simplified 「无法」. Out-of-scope question 22's answer, 「我无法提供…」, is a refusal written in Simplified, and it scored "not refused". ADR 0019 replaced the per-question copies with one Traditional/Simplified list and re-scored the old reports.
+   - Questions 23 (cloud sync "via `syncUi`") and 25 (gamepad mapped to the keyboard handler) are **invented answers** that pass the "not refused, no forbidden word" check. Reading D's answers, it refused 2 of 5; the keyword screen counted 1 before the fix and counts 2 after it. Invented behaviour built from real names is still not caught by the fabrication check that ADR 0019 added (it checks that files and symbols exist).
    - On the other side, question 28's 「没有直接处理…的逻辑」 is a wrong answer, but a bare 「没有」 is deliberately not a refusal phrase, so it is not counted as a false refusal.
    - None of this touches J's numbers (its refusals are the exact fixed sentence), but it does affect the control group D.
 5. **Latency numbers fool you easily.** B's "twice as fast" was the prompt cache; asking the same question twice differs by 40×. Compare latency between groups with care, and do not credit it to the technique.
@@ -399,12 +400,12 @@ The Mac `.env.example` (14B, `TOP_K=8`) is unchanged and waits for `./scripts/be
 
 - [x] **Correctness scoring**: done by AI with the 5 least certain re-checked by a person; C did not hurt questions 2, 3 and 6; defaults recorded in ADR 0018. Still open: a person confirming the other scores.
 - [ ] **Mac 14B**: run `./scripts/benchmark-mac.sh --with-rerank` and record the results in metrics; also check whether v3 still refuses almost everything on 14B, and `DOC_TOP_K` with `TOP_K=8`.
-- [ ] **Chinese tokenization for BM25**: BM25 indexes ASCII only, so a Chinese question gives it nothing. A Chinese → identifier glossary (for example 無敵 → `INVINCIBLE`) might finally retrieve `gameConfig.ts` for question 1 (missed in every group except I) and `ScoreSystem.ts` for question 2 (0 points in every group).
+- [ ] **Group K: a Chinese term → identifier glossary**: BM25 indexes ASCII only, so a Chinese question gives it nothing. `QUERY_GLOSSARY` (ADR 0020) maps Chinese terms in the question to identifiers; it is implemented and off by default, and **has no end-to-end experiment yet** (group K, {待填}). An offline check (keyword and identifier channels only, glossary written by someone who had seen the questions, so an upper bound) raised the expected code files in the top 4 from 3/19 to 16/19, including `gameConfig.ts` for question 1 and `ScoreSystem.ts` for question 2. Question 1 was missed in every group except I.
 - [ ] **C + rerank**: check whether, without hybrid, the same rerank cost gives I's main-set result.
-- [ ] Fix the evaluation script: add 「无法」 to the trick-question refusal keywords and re-score D's out-of-scope report.
+- [x] Fix the evaluation script's Simplified refusals and add a fabrication check, then re-score old reports: done (ADR 0019); D's out-of-scope refusal rate re-scores to 2/5.
 - [ ] If refusal is retried: a v4 prompt without the trailing reminder, or a rule tied to something checkable (the question's identifier or file is in no excerpt).
 
-Source code, ADRs, devlogs and every evaluation report are in the repo: {待填: repo URL}
+Source code, ADRs, devlogs and every evaluation report are in the repo: https://github.com/alelcold/local-codebase-rag
 
 ---
 

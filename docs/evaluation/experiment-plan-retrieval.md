@@ -378,6 +378,8 @@ Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row
 - Query glossary (K): worth turning on for Codespaces only if D → K raises Code file retrieved or Defining file retrieved on the main set without lowering Manual correctness on any set, and the gain should also be checked with questions written after the glossary (ADR 0020).
 - Prompt v3 (J): make it the default only if the refusal rate rises (at least Q10 and most of 21–25), the false refusal rate stays 0 on every set, and main-set Manual correctness does not drop. A single false refusal of a real question outweighs one more refused trick question: a wrong "not found" hides code that exists. Write a new ADR for the change of default; do not edit `.env.codespaces` until then.
 
+**Outcome (2026-11-05, [ADR 0018](../decisions/0018-codespaces-default-retrieval-settings.md))**: applying these rules to groups A–J with the AI-judged correctness scores, only split retrieval (C) was turned on, in `.env.codespaces`. Hybrid search, rerank, metadata, the threshold and prompts v2/v3 were not adopted. Group K (`QUERY_GLOSSARY`, [ADR 0020](../decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md)) has not been run, so its rule is still open.
+
 ---
 
 # 實驗計畫：混合檢索、分類取回、切塊 metadata、提示 v2、相似度門檻、Rerank、提示 v3、查詢詞彙表
@@ -496,3 +498,5 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
 - 門檻（G）：只能用校準出的值開啟，且沒有任何可回答的題目被拒答。這個值綁定 embedding 模型，換模型就要重新校準。
 - Rerank（H）：只有在人工判定正確性提升，**而且**在目標機器上 rerank 耗時相對首字延遲可以接受時，才預設開啟。
 - 提示 v3（J）：只有在拒答率提升（至少第 10 題與 21–25 題中的大多數）、每個題組的誤拒率都維持 0，而且主要題組的人工判定正確性沒有下降時，才改為預設。誤拒一題真實問題比多拒答一題陷阱題更嚴重：錯誤的「找不到」會把存在的程式碼藏起來。改預設值時新增 ADR；在那之前不修改 `.env.codespaces`。
+
+**結果（2026-11-05，[ADR 0018](../decisions/0018-codespaces-default-retrieval-settings.md)）**：用 AI 評分的正確性對 A–J 各組套用這些規則，結果只有分類取回（C）在 `.env.codespaces` 開啟；混合檢索、Rerank、metadata、門檻、提示 v2／v3 都不採用。K 組（`QUERY_GLOSSARY`，[ADR 0020](../decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md)）還沒跑，所以它的規則仍待檢驗。

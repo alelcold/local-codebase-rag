@@ -106,9 +106,9 @@ Chroma 比較簡單但過濾與維運功能較少；pgvector 要多一個 Postgr
 
 合併用 **RRF（Reciprocal Rank Fusion）**：`score = Σ 1/(k + rank)`，`k=60`。它只看排名，不需要把 cosine 和 BM25 分數正規化到同一個尺度；被多個檢索器同時找到的片段會被拉高。
 
-一個我自己踩到的坑：BM25 一開始對中文用字元 bigram，結果中文文件的每個 bigram 都只比對得到文件，蓋過唯一的精確識別字，關鍵字通道反而在放大文件擠掉程式碼的問題。修正是 BM25 只索引 ASCII 單字、識別字與數字，中文語意交給向量通道。代價是：不含識別字的中文問題，BM25 無從比對。
+一個我自己踩到的坑：BM25 一開始對中文用字元 bigram，結果中文文件的每個 bigram 都只比對得到文件，蓋過唯一的精確識別字，關鍵字通道反而在放大文件擠掉程式碼的問題。修正是 BM25 只索引 ASCII 單字、識別字與數字，中文語意交給向量通道。代價是：不含識別字的中文問題，BM25 無從比對。為了補這個洞，我做了查詢詞彙表 `QUERY_GLOSSARY`（ADR 0020）：把問題中的中文詞對應到識別字，只加進 BM25 與識別字通道，需搭配 `HYBRID_SEARCH`。它已實作、預設關閉，**端到端實驗（K 組）還沒跑**；離線檢查（只含關鍵字與識別字通道，詞彙表由看過題目的人寫，是上限）顯示預期程式碼檔進前 4 名從 3/19 增加到 16/19。
 
-**出處**：[ADR 0013]（RRF、tokenizer、替代方案）、[devlog 2026-11-02]（Problem 5、6）、[article 6]。
+**出處**：[ADR 0013]（RRF、tokenizer、替代方案）、[ADR 0020]、[devlog 2026-11-02]（Problem 5、6）、[devlog 2026-11-05]（查詢詞彙表一節）、[article 6]。
 
 #### Q8. Rerank 是什麼？為什麼你沒有預設開啟？
 
@@ -164,7 +164,7 @@ Chroma 比較簡單但過濾與維運功能較少；pgvector 要多一個 Postgr
 
 #### Q13. 所以最後的結論是什麼？證據有多強？
 
-**參考回答**：只有**分類取回**（`SPLIT_RETRIEVAL=true`、`DOC_TOP_K=1`）預設開啟，而且只套用在 Codespaces 的 `.env.codespaces`（ADR 0018），Mac 的 `.env.example` 沒改，等 Mac 實測。證據（主題庫，Codespaces 3B）：取回內容中文件比例 95% → 25%、程式碼檔命中 1/9 → 6/9、識別字題定義檔 1/3 → 3/3，檢索時間仍是 0.07～0.21 秒；AI 評分的正確性（兩個題庫共 30 分）從 11 提高到 17；重點在文件的第 2、3、6 題沒有退步（0/2/2 → 0/2/2）。
+**參考回答**：只有**分類取回**（`SPLIT_RETRIEVAL=true`、`DOC_TOP_K=1`）預設開啟，而且只套用在 Codespaces 的 `.env.codespaces`（ADR 0018），Mac 的 `.env.example` 沒改，等 Mac 實測。混合檢索、Rerank、metadata、門檻、prompt v2／v3 都不採用；`QUERY_GLOSSARY` 已實作但尚未實驗（K 組）。證據（主題庫，Codespaces 3B）：取回內容中文件比例 95% → 25%、程式碼檔命中 1/9 → 6/9、識別字題定義檔 1/3 → 3/3，檢索時間仍是 0.07～0.21 秒；AI 評分的正確性（兩個題庫共 30 分）從 11 提高到 17；重點在文件的第 2、3、6 題沒有退步（0/2/2 → 0/2/2）。
 
 它為什麼有效：文件跟中文問題用同一種語言，在 embedding 空間永遠贏過英文程式碼；與其讓程式碼更像，不如保證程式碼有座位。
 
@@ -230,7 +230,7 @@ Chroma 比較簡單但過濾與維運功能較少；pgvector 要多一個 Postgr
 
 #### Q18. 你怎麼驗證 AI 的產出？
 
-**參考回答**：分四層，每層回答一個問題，由便宜到貴（ADR 0007）：單元測試用假物件驗邏輯（現在 183 個，約 7 秒、不需網路）；compose 與映像檔檢查；端到端冒煙測試（CI 上裝真的 Ollama、用 0.5B 模型，驗證流程而不是品質）；最後是在目標環境手動跑。品質只在目標模型與硬體上判斷，不用 0.5B 或 3B 當作品質結論。
+**參考回答**：分四層，每層回答一個問題，由便宜到貴（ADR 0007）：單元測試用假物件驗邏輯（現在 200 個，約 7 秒、不需網路）；compose 與映像檔檢查；端到端冒煙測試（CI 上裝真的 Ollama、用 0.5B 模型，驗證流程而不是品質）；最後是在目標環境手動跑。品質只在目標模型與硬體上判斷，不用 0.5B 或 3B 當作品質結論。
 
 具體例子：
 - AI 自己在 sandbox 用真實 Qdrant 加假的 Ollama server 跑端到端，抓到單元測試漏掉的 `text-dense` 向量名稱 bug（跨程序狀態，記憶體假物件看不到）。
@@ -264,7 +264,7 @@ Chroma 比較簡單但過濾與維運功能較少；pgvector 要多一個 Postgr
 - **評估**：編造偵測是字面的，抓不到用真實名稱編造的行為。
 - **產品面**：單機吞吐量；簡體字漂移（3B 模型壓不住，v2 prompt 後仍有 2 個）。
 
-下一步（都在 ADR 與 devlog 的待辦裡）：在 Mac 上跑 `./scripts/benchmark-mac.sh` 並另外決定 Mac 預設（ADR 0017、0018）；測「分類取回 + rerank、不含混合檢索」；中文 → 識別字對照表給關鍵字通道；重跑各組以估計雜訊；由人確認剩餘的評分；超過 100 秒的串流查詢與 codespace 停止再啟動的實測。
+下一步（都在 ADR 與 devlog 的待辦裡）：在 Mac 上跑 `./scripts/benchmark-mac.sh` 並另外決定 Mac 預設（ADR 0017、0018）；測「分類取回 + rerank、不含混合檢索」；跑 K 組（`QUERY_GLOSSARY` 已實作，ADR 0020，尚未實驗），用詞彙表寫好之後才寫的新題目測；重跑各組以估計雜訊；由人確認剩餘的評分；超過 100 秒的串流查詢與 codespace 停止再啟動的實測。
 
 **出處**：[ADR 0018]（Consequences、Follow-ups）、[devlog 2026-11-05]（Next）、[ADR 0019]、[article 6]（第 7、8 節）、[metrics §3]。
 
@@ -307,8 +307,8 @@ Chroma 比較簡單但過濾與維運功能較少；pgvector 要多一個 Postgr
 **Result（結果）**
 - **分類取回**：取回內容中的文件比例 95% → 25%、程式碼檔命中 1/9 → 6/9、識別字題定義檔命中 1/3 → 3/3，檢索時間仍是 0.07～0.21 秒；AI 評分的正確性 11 → 17（滿分 30）。已套用到 Codespaces 預設設定（ADR 0018）。
 - **被數據淘汰的 6 種做法**：混合檢索（分類取回之上沒有額外效果）、chunk metadata 與 prompt v2（沒有改善）、相似度門檻（0.70 會丟掉 93% 的正確片段）、rerank（+4.8 秒、約 +10 秒首字延遲、映像檔 616 MB → 2.14 GB，正確性與分類取回同為 17/30）、拒答 prompt v3（9 題可回答題誤拒 8 題）。
-- **工程**：串流查詢在轉發網址上完成（首字延遲 30.4 秒、總耗時 43.8 秒）；183 個單元測試約 7 秒、不需網路；第一版以約 7 美元的 AI 工作階段完成。
-- **尚未完成**：Mac M2 + 14B 的速度與品質 `{待填}`；正確性由人確認；真實專案規模的驗證。
+- **工程**：串流查詢在轉發網址上完成（首字延遲 30.4 秒、總耗時 43.8 秒）；200 個單元測試約 7 秒、不需網路；第一版以約 7 美元的 AI 工作階段完成。
+- **尚未完成**：K 組實驗（`QUERY_GLOSSARY`）；Mac M2 + 14B 的速度與品質 `{待填}`；正確性由人確認；真實專案規模的驗證。
 
 ---
 
@@ -426,9 +426,9 @@ The cost: it depends on pinned tree-sitter packages; small helpers become tiny c
 
 Merging uses **RRF (Reciprocal Rank Fusion)**: `score = Σ 1/(k + rank)` with `k=60`. It looks only at ranks, so cosine and BM25 scores never need a common scale, and a chunk found by several retrievers rises.
 
-A trap I fell into: my first BM25 used character bigrams for Chinese, so every Chinese bigram of the question matched only the Chinese docs and outweighed the one exact identifier; the keyword channel amplified the docs-crowd-out-code problem. The fix: BM25 indexes only ASCII words, identifiers and numbers, and Chinese meaning is left to the vector channel. The price: a Chinese question with no identifier gives BM25 nothing to match.
+A trap I fell into: my first BM25 used character bigrams for Chinese, so every Chinese bigram of the question matched only the Chinese docs and outweighed the one exact identifier; the keyword channel amplified the docs-crowd-out-code problem. The fix: BM25 indexes only ASCII words, identifiers and numbers, and Chinese meaning is left to the vector channel. The price: a Chinese question with no identifier gives BM25 nothing to match. To close that gap I built a query glossary, `QUERY_GLOSSARY` (ADR 0020): Chinese terms in the question are mapped to identifiers that are added to the BM25 and identifier channels only, and it needs `HYBRID_SEARCH`. It is implemented and off by default, and **the end-to-end experiment (group K) has not been run**; an offline check (keyword and identifier channels only, with a glossary written by someone who had seen the questions, so an upper bound) raised the expected code files in the top 4 from 3/19 to 16/19.
 
-**Sources**: [ADR 0013] (RRF, tokenizer, alternatives), [devlog 2026-11-02] (Problems 5, 6), [article 6].
+**Sources**: [ADR 0013] (RRF, tokenizer, alternatives), [ADR 0020], [devlog 2026-11-02] (Problems 5, 6), [devlog 2026-11-05] (query glossary section), [article 6].
 
 #### Q8. What is rerank, and why is it not on by default?
 
@@ -484,7 +484,7 @@ That is why articles and resume say "automatic metrics only" or "AI-judged", and
 
 #### Q13. So what is the conclusion, and how strong is the evidence?
 
-**Suggested answer**: only **split retrieval** (`SPLIT_RETRIEVAL=true`, `DOC_TOP_K=1`) is on by default, and only in the Codespaces template `.env.codespaces` (ADR 0018); the Mac `.env.example` is unchanged until the Mac is measured. Evidence (main set, Codespaces 3B): docs among the retrieved chunks 95% → 25%, code-file retrieval 1/9 → 6/9, identifier-question defining file 1/3 → 3/3, retrieval time still 0.07–0.21 s; AI-scored correctness (both sets, out of 30) 11 → 17; and the doc-heavy questions 2, 3, 6 did not regress (0/2/2 → 0/2/2).
+**Suggested answer**: only **split retrieval** (`SPLIT_RETRIEVAL=true`, `DOC_TOP_K=1`) is on by default, and only in the Codespaces template `.env.codespaces` (ADR 0018); the Mac `.env.example` is unchanged until the Mac is measured. Hybrid search, rerank, metadata, the threshold and prompts v2/v3 are not adopted; `QUERY_GLOSSARY` is implemented but not yet tested (group K). Evidence (main set, Codespaces 3B): docs among the retrieved chunks 95% → 25%, code-file retrieval 1/9 → 6/9, identifier-question defining file 1/3 → 3/3, retrieval time still 0.07–0.21 s; AI-scored correctness (both sets, out of 30) 11 → 17; and the doc-heavy questions 2, 3, 6 did not regress (0/2/2 → 0/2/2).
 
 Why it works: docs share a language with the Chinese question and always beat English code in embedding space; instead of making code look more similar, guarantee code a seat.
 
@@ -550,7 +550,7 @@ An honest addition: the later "manual correctness" is AI-scored, not mine, and t
 
 #### Q18. How do you verify what the AI produces?
 
-**Suggested answer**: in four layers, each answering one question, cheapest first (ADR 0007): unit tests with fakes for logic (183 now, about 7 s, no network); compose and image checks; an end-to-end smoke test (real Ollama on the CI runner with a 0.5B model, which checks that the pipeline runs, not quality); and manual runs on the target environment. Quality is judged only on the target model and hardware, never on 0.5B or 3B alone.
+**Suggested answer**: in four layers, each answering one question, cheapest first (ADR 0007): unit tests with fakes for logic (200 now, about 7 s, no network); compose and image checks; an end-to-end smoke test (real Ollama on the CI runner with a 0.5B model, which checks that the pipeline runs, not quality); and manual runs on the target environment. Quality is judged only on the target model and hardware, never on 0.5B or 3B alone.
 
 Concrete examples:
 - The AI ran an end-to-end test in its sandbox with a real Qdrant and a fake Ollama server, and caught the `text-dense` vector-name bug the unit tests missed (cross-process state, invisible to in-memory fakes).
@@ -584,7 +584,7 @@ My rule: write verification results down as concrete records (symptom, command, 
 - **Evaluation**: the fabrication check is lexical and misses invented behaviour built from real names.
 - **Product**: single-machine throughput; Simplified-character drift (a 3B model that a prompt does not hold; 2 answers still had it with v2).
 
-Next (all in the ADR and devlog to-do lists): run `./scripts/benchmark-mac.sh` on the Mac and decide the Mac defaults separately (ADRs 0017, 0018); measure split + rerank without hybrid; try a Chinese → identifier glossary for the keyword channel; re-run the groups to estimate noise; have a person confirm the remaining scores; test a streaming query longer than 100 s and a codespace stop/start.
+Next (all in the ADR and devlog to-do lists): run `./scripts/benchmark-mac.sh` on the Mac and decide the Mac defaults separately (ADRs 0017, 0018); measure split + rerank without hybrid; run group K (`QUERY_GLOSSARY` is implemented, ADR 0020, but untested end to end), ideally with new questions written after the glossary; re-run the groups to estimate noise; have a person confirm the remaining scores; test a streaming query longer than 100 s and a codespace stop/start.
 
 **Sources**: [ADR 0018] (Consequences, Follow-ups), [devlog 2026-11-05] (Next), [ADR 0019], [article 6] (sections 7, 8), [metrics §3].
 
@@ -627,8 +627,8 @@ Build a complete RAG pipeline on one machine: ask in natural language (Chinese),
 **Result**
 - **Split retrieval**: docs among the retrieved context 95% → 25%, code-file retrieval 1/9 → 6/9, identifier-question defining file 1/3 → 3/3, retrieval time still 0.07–0.21 s; AI-scored correctness 11 → 17 (out of 30). Applied to the Codespaces default settings (ADR 0018).
 - **Six approaches ruled out by data**: hybrid search (nothing on top of split), chunk metadata and prompt v2 (no improvement), a similarity threshold (0.70 would drop 93% of correct excerpts), rerank (+4.8 s, about +10 s first token, image 616 MB → 2.14 GB, same 17/30 correctness as split), and the refusal prompt v3 (8 of 9 answerable questions refused).
-- **Engineering**: a streamed query completes through the forwarded URL (time to first token 30.4 s, total 43.8 s); 183 unit tests in about 7 s with no network; the first version delivered in an AI session costing about USD 7.
-- **Not done yet**: Mac M2 + 14B speed and quality `{待填}`; human confirmation of correctness; validation at real-project scale.
+- **Engineering**: a streamed query completes through the forwarded URL (time to first token 30.4 s, total 43.8 s); 200 unit tests in about 7 s with no network; the first version delivered in an AI session costing about USD 7.
+- **Not done yet**: the group K experiment (`QUERY_GLOSSARY`); Mac M2 + 14B speed and quality `{待填}`; human confirmation of correctness; validation at real-project scale.
 
 ---
 
@@ -652,6 +652,7 @@ Build a complete RAG pipeline on one machine: ask in natural language (Chinese),
 [ADR 0016]: ../decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md
 [ADR 0018]: ../decisions/0018-codespaces-default-retrieval-settings.md
 [ADR 0019]: ../decisions/0019-refusal-scoring-simplified-and-fabrication-check.md
+[ADR 0020]: ../decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md
 [devlog 2026-10-30]: ../devlog/2026-10-30.md
 [devlog 2026-11-01]: ../devlog/2026-11-01.md
 [devlog 2026-11-01 Codespaces]: ../devlog/2026-11-01-codespace-setup.md
