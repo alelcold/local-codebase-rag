@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkedIn 貼文草稿</title>
+<meta name="description" content="US$100 做地端程式碼問答系統：LinkedIn 貼文草稿（繁體中文、English）">
+<style>
+  :root {
+    --bg: #F6F4EF;
+    --card: #FFFFFF;
+    --text: #1B2A44;
+    --muted: #5B6575;
+    --border: #E2DDD2;
+    --accent: #C4571E;
+    --accent-text: #FFFFFF;
+    --tab-bg: #ECE7DC;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111A2E;
+      --card: #1A2640;
+      --text: #EEF0F4;
+      --muted: #A9B4C6;
+      --border: #2C3A57;
+      --accent: #F08A4B;
+      --accent-text: #1B2A44;
+      --tab-bg: #22304D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111A2E;
+    --card: #1A2640;
+    --text: #EEF0F4;
+    --muted: #A9B4C6;
+    --border: #2C3A57;
+    --accent: #F08A4B;
+    --accent-text: #1B2A44;
+    --tab-bg: #22304D;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.7;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+  header p.eyebrow { margin: 0 0 8px; color: var(--accent); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
+  h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.3; }
+  header p.sub { margin: 0 0 32px; color: var(--muted); font-size: 15px; }
+  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--tab-bg); border-radius: 10px; width: fit-content; margin-bottom: 16px; }
+  .tabs button {
+    border: 0; background: transparent; color: var(--muted);
+    font: inherit; font-size: 15px; font-weight: 600;
+    padding: 8px 18px; border-radius: 8px; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .count { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .copy {
+    border: 0; background: var(--accent); color: var(--accent-text);
+    font: inherit; font-size: 14px; font-weight: 700;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  }
+  .copy:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  pre {
+    margin: 0; padding: 20px 20px 24px;
+    white-space: pre-wrap; word-break: break-word;
+    font: inherit; font-size: 16px;
+  }
+  .panel[hidden] { display: none; }
+  .tips { margin-top: 32px; padding: 20px; border: 1px dashed var(--border); border-radius: 14px; }
+  .tips h2 { margin: 0 0 8px; font-size: 17px; }
+  .tips ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">LinkedIn 貼文草稿</p>
+    <h1>US$100 做出一套地端程式碼問答系統</h1>
+    <p class="sub">繁體中文與英文兩個版本，切換分頁後按「複製」即可貼到 LinkedIn。</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="語言">
+    <button role="tab" id="tab-zh" aria-selected="true" aria-controls="panel-zh">繁體中文</button>
+    <button role="tab" id="tab-en" aria-selected="false" aria-controls="panel-en" tabindex="-1">English</button>
+  </div>
+
+  <section class="panel card" id="panel-zh" role="tabpanel" aria-labelledby="tab-zh">
+    <div class="toolbar">
+      <span class="count" data-count-for="post-zh"></span>
+      <button class="copy" data-copy="post-zh">複製</button>
+    </div>
+<pre id="post-zh">我用 US$100 的 AI 雲端額度，一週做出一套地端程式碼問答系統。
+最意外的收穫是：試了 6 種常見的 RAG 技巧，最後只留下 1 個。
+
+起點很簡單：想用中文問「無敵時間在哪裡設定？」，讓系統直接指出檔案和行號。條件是程式碼不能離開電腦，所以模型、向量資料庫全部在本機執行。
+
+開發交給 Claude Code，一週合併了 25 個 PR、留下 20 份技術決策紀錄。我負責決定方向、部署除錯、review 每個 PR。
+
+真正有意思的是實驗。我做了自動化評估，每次只改一個開關，跑了 8 組對照實驗：
+
+✅ 分類取回：限制文件最多佔 1 段，文件佔比 95% → 25%，幾乎零成本，唯一採用
+❌ 混合檢索：單看以為很有效，加了對照組才發現是別的開關的功勞
+❌ 相似度門檻 0.70：套在程式碼上會丟掉 94% 的正確片段
+❌ Rerank：首字延遲多約 10 秒，改善不穩定
+❌ 防幻覺 prompt：陷阱題都拒答了，但可回答的題目也誤拒 8/9
+
+學到的三件事：
+1. 要有對照組，不然很容易把功勞算錯
+2. 網路上的建議數字，要用自己的資料驗證
+3. 指標要成對看，拒答率漂亮不代表系統有用
+
+限制：範例專案只有 20 個檔案、3B 模型、每組只跑一次。下一步是在 Mac 上用 14B 模型實測。
+
+完整的程式碼、實驗數據和決策紀錄都公開在 GitHub，連結放在留言。
+
+#RAG #LLM #AI輔助開發 #ClaudeCode #軟體工程</pre>
+  </section>
+
+  <section class="panel card" id="panel-en" role="tabpanel" aria-labelledby="tab-en" lang="en" hidden>
+    <div class="toolbar">
+      <span class="count" data-count-for="post-en"></span>
+      <button class="copy" data-copy="post-en">Copy</button>
+    </div>
+<pre id="post-en">I spent US$100 of AI cloud credits building an on-prem codebase Q&amp;A system in one week.
+The surprise: I tested 6 popular RAG techniques and kept only 1.
+
+The goal was simple. Ask "Where is the invincibility time set?" and get the file and line numbers back. The constraint: source code never leaves the machine, so the model and vector database all run locally.
+
+Claude Code did the building: 25 merged PRs and 20 architecture decision records in a week. My job was direction, deployment, debugging, and reviewing every PR.
+
+The interesting part was the experiments. I built automated evaluation and changed one switch at a time across 8 controlled runs:
+
+✅ Split retrieval (cap docs at 1 excerpt): doc share 95% → 25%, almost free. The only one adopted.
+❌ Hybrid search: looked great alone, but a control group showed another switch deserved the credit
+❌ A 0.70 similarity threshold: dropped 94% of correct excerpts on code
+❌ Rerank: about 10 s more time to first token, unstable gains
+❌ Anti-hallucination prompt: refused every trick question, but also refused 8 of 9 answerable ones
+
+Three takeaways:
+1. Always run a control group, or you will credit the wrong change
+2. Validate popular thresholds on your own data
+3. Read metrics in pairs: a perfect refusal rate can hide a useless system
+
+Limits: a 20-file sample project, a 3B model, one run per group. Next: real hardware tests with a 14B model on a Mac.
+
+Code, experiment data and decision records are public on GitHub (link in the first comment).
+
+#RAG #LLM #AIEngineering #ClaudeCode #SoftwareEngineering</pre>
+  </section>
+
+  <aside class="tips">
+    <h2>發文前提醒</h2>
+    <ul>
+      <li>repo 連結放在第一則留言，內文放外部連結會降低觸及</li>
+      <li>可搭配簡報下載成 PDF，當作輪播文件一起上傳</li>
+      <li>只使用範例專案的內容，不提公司名稱、實際專案或內部架構</li>
+      <li>LinkedIn 貼文上限 3,000 字元，上方有字數統計</li>
+    </ul>
+  </aside>
+
+  <footer>
+    專案：<a href="https://github.com/alelcold/local-codebase-rag">github.com/alelcold/local-codebase-rag</a>
+  </footer>
+</main>
+
+<script>
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+    function select(tab) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      });
+      tab.focus();
+      try { localStorage.setItem('linkedin-post-tab', tab.id); } catch (e) {}
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () { select(t); });
+      t.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          var n = (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+          select(tabs[n]);
+        }
+      });
+    });
+    try {
+      var saved = localStorage.getItem('linkedin-post-tab');
+      if (saved && document.getElementById(saved)) {
+        tabs.forEach(function (t) {
+          var on = t.id === saved;
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          t.tabIndex = on ? 0 : -1;
+          document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+        });
+      }
+    } catch (e) {}
+
+    document.querySelectorAll('[data-count-for]').forEach(function (el) {
+      var text = document.getElementById(el.getAttribute('data-count-for')).textContent;
+      var n = Array.from(text).length;
+      var zh = el.closest('#panel-zh') !== null;
+      el.textContent = zh ? n + ' / 3,000 字元' : n + ' / 3,000 characters';
+    });
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      var label = btn.textContent;
+      btn.addEventListener('click', function () {
+        var text = document.getElementById(btn.getAttribute('data-copy')).textContent;
+        var done = function () {
+          btn.textContent = btn.closest('#panel-zh') ? '已複製' : 'Copied';
+          setTimeout(function () { btn.textContent = label; }, 1600);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, fallback);
+        } else { fallback(); }
+        function fallback() {
+          var ta = document.createElement('textarea');
+          ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); done(); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      });
+    });
+  })();
+</script>
+</body>
+</html>
