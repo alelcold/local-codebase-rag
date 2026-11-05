@@ -30,6 +30,7 @@
 | Time to first token, mean / median / 首字延遲 平均／中位數 | 21.2 s / 17.1 s |
 | Total time, mean / 總耗時平均 | 27.4 s |
 | Tokens, mean / 平均 token 數 | 68.4 |
+| Rerank time, mean / rerank 耗時平均 | — |
 | Expected-file recall, mean / 預期檔案命中率平均 | 50% |
 | Code file retrieved / 程式碼檔命中 | 4/5 (80%) |
 | Doc file retrieved / 文件檔命中 | — |
@@ -38,7 +39,10 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 60% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 57% |
 | Answers with Simplified characters / 混入簡體字的回答 | 0 |
-| Trick question refused / 陷阱題正確拒答 | — |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | — |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/5 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 1/5 (20%) |
+| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 10 |
 
 Keyword hit rate by type / 各題型關鍵字命中率：定位設定 47%、解釋邏輯 75%、跨檔案流程 67%
@@ -48,7 +52,7 @@ Keyword hit rate by type / 各題型關鍵字命中率：定位設定 47%、解�
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 11 | 定位設定 | 17.1 s | 22.4 s | 60 | 0/2 | 0/2 | — | 0/1 | 1/4 | — | 0 | AI：沒有給出數值，定義處指向文件，又說用在主迴圈，皆錯。 |
-| 12 | 解釋邏輯 | 25.6 s | 34.4 s | 100 | 1/2 | 1/2 | — | — | 3/4 | — | 2 | AI：公式 min(MAX_COMBO_MULTIPLIER, 1 + combo × COMBO_STEP) 與原始碼一致（未列 0.25、4 的數值與歸零條件，但題目只問計算方式）；另把 getter 稱為 getMultiplier，屬小瑕疵。 |
+| 12 | 解釋邏輯 | 25.6 s | 34.4 s | 100 | 1/2 | 1/2 | — | — | 3/4 (**suspected fabrication**) | — | 2 | AI：公式 min(MAX_COMBO_MULTIPLIER, 1 + combo × COMBO_STEP) 與原始碼一致（未列 0.25、4 的數值與歸零條件，但題目只問計算方式）；另把 getter 稱為 getMultiplier，屬小瑕疵。 |
 | 13 | 定位設定 | 16.2 s | 21.5 s | 53 | 1/2 | 1/2 | — | 0/1 | 2/4 | — | 0 | AI：檔案對但數值 1000／500 錯（實為 900／180）。 |
 | 14 | 定位設定 | 14.6 s | 18.2 s | 40 | 1/2 | 1/2 | — | 1/1 | 2/3 | — | 2 | AI：HIGH_SCORE_KEY 在 GameState.ts、以此為 key 存在 localStorage，正確（未點名 gameOver）。 |
 | 15 | 跨檔案流程 | 32.4 s | 40.7 s | 89 | 2/2 | 2/2 | — | — | 2/3 | — | 2 | AI：getLevel 在 levels.js、Spawner.update 依關卡設定更新生成計時器，正確。 |
@@ -80,6 +84,7 @@ INVINCIBLE_MS 在 [1] docs/gameplay.md:10-14 說明，值是 `INVINCIBLE_MS`。�
 - **Retrieved**: [1] `src/systems/ScoreSystem.ts:9-60`, [2] `docs/architecture.md:22-29`, [3] `src/systems/ScoreSystem.ts:1-7`, [4] `docs/gameplay.md:16-21`
 - **Missed expected files**: `src/config/gameConfig.ts`
 - **Missed keywords**: `onPlayerHit / COMBO_WINDOW_MS`
+- **Suspected fabrication (not in the project, check)**: symbols `getMultiplier`
 
 <details><summary>Answer</summary>
 

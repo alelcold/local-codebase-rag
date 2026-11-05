@@ -826,6 +826,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0016](docs/decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md) | 在提示中拒答範圍外的問題（提示 v3，未採用）/ Refuse out-of-scope questions in the prompt (prompt v3, not adopted) |
 | [0017](docs/decisions/0017-one-command-mac-benchmark.md) | Mac M2 一鍵實機測試 / One-command benchmark on the Mac M2 |
 | [0018](docs/decisions/0018-codespaces-default-retrieval-settings.md) | Codespaces 的預設檢索設定：只開分類取回 / Default retrieval settings for Codespaces: split retrieval only |
+| [0019](docs/decisions/0019-refusal-scoring-simplified-and-fabrication-check.md) | 拒答計分：簡體拒答字句與編造檢查 / Refusal scoring: Simplified refusal phrases and a fabrication check |
 | **學習與評估 / Learning & evaluation** | |
 | [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 23 個主題的解釋、程式碼位置、面試題、自我檢核 / 23 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |

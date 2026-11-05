@@ -39,7 +39,9 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 25% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 28% |
 | Answers with Simplified characters / 混入簡體字的回答 | 4 |
-| Trick question refused / 陷阱題正確拒答 | 0/1 (0%) |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 0/1 (0%) |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/9 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 4/10 (40%) |
 | Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 20 |
 
@@ -49,16 +51,16 @@ Keyword hit rate by type / 各題型關鍵字命中率：定位設定 27%、解�
 
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 定位設定 | 18.8 s | 25.2 s | 67 | 0/3 | 0/2 | 0/1 | 0/1 | 0/5 | 体码 | 0 | AI：編造 Player.ts 的 invincibilityTime = 2 秒。 |
+| 1 | 定位設定 | 18.8 s | 25.2 s | 67 | 0/3 | 0/2 | 0/1 | 0/1 | 0/5 (**suspected fabrication**) | 体码 | 0 | AI：編造 Player.ts 的 invincibilityTime = 2 秒。 |
 | 2 | 解釋邏輯 | 10.4 s | 15.5 s | 58 | 0/3 | 0/2 | 0/1 | — | 1/4 | — | 0 | AI：公式 1+hits/100 為編造，歸零條件也錯。 |
 | 3 | 解釋邏輯 | 52.9 s | 67.3 s | 129 | 2/2 | 1/1 | 1/1 | — | 4/5 | — | 2 | AI：requestAnimationFrame→frame、累加、FIXED_DT 步進 update、最後 render 一次皆正確（未提 MAX_FRAME_TIME 上限）。 |
-| 4 | 跨檔案流程 | 14.6 s | 22.4 s | 84 | 0/2 | 0/2 | — | — | 0/5 | 义为这个频没随关变过后 | 0 | AI：編造 GameState.ts 的 PLANET_SPAWN_RATE=1000 且說不隨關卡變，與 levels.js 的 asteroidInterval 相反。 |
+| 4 | 跨檔案流程 | 14.6 s | 22.4 s | 84 | 0/2 | 0/2 | — | — | 0/5 (**suspected fabrication**) | 义为这个频没随关变过后 | 0 | AI：編造 GameState.ts 的 PLANET_SPAWN_RATE=1000 且說不隨關卡變，與 levels.js 的 asteroidInterval 相反。 |
 | 5 | 跨檔案流程 | 7.0 s | 17.0 s | 107 | 2/2 | 2/2 | — | — | 2/4 | — | 2 | AI：handleGlobalInput：playing→paused，恢復時 accumulator=0 並回 playing，正確。 |
 | 6 | 跨檔案流程 | 22.5 s | 29.8 s | 75 | 3/4 | 2/3 | 1/1 | — | 2/4 | 并 | 2 | AI：useSyncExternalStore 訂閱 store、資料改變才重新 render，正確（未點名 createUiStore、syncUi）。 |
-| 7 | 解釋邏輯 | 8.5 s | 19.3 s | 115 | 1/2 | 1/2 | — | — | 0/4 | — | 0 | AI：指向 Player.ts 並說不確定，沒有答出實作。 |
+| 7 | 解釋邏輯 | 8.5 s | 19.3 s | 115 | 1/2 | 1/2 | — | — | 0/4 (**suspected fabrication**) | — | 0 | AI：指向 Player.ts 並說不確定，沒有答出實作。 |
 | 8 | 定位設定 | 11.6 s | 21.0 s | 95 | 1/3 | 1/3 | — | 0/2 | 4/5 | — | 1 | AI：Shift 與常數名稱正確（但說在 Player.ts 定義，實為 gameConfig.ts 匯入），沒給數值。 |
 | 9 | 定位設定 | 13.2 s | 14.8 s | 16 | 1/2 | 1/2 | — | 0/1 | 0/3 | 于体 | 0 | AI：說存在 store 的 score，沒答到 localStorage。 |
-| 10 | 陷阱題 | 12.4 s | 30.9 s | 203 | — | — | — | — | 0/1 (**not refused**) | — | 0 | AI：說 syncUi 是多人位置同步邏輯，屬編造。 |
+| 10 | 陷阱題 | 12.4 s | 30.9 s | 203 | — | — | — | — | 0/1 (**not refused**) (**suspected fabrication**) | — | 0 | AI：說 syncUi 是多人位置同步邏輯，屬編造。 |
 
 Files / Code / Doc / Def. = expected files found among the retrieved sources.
 
@@ -71,6 +73,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `src/game/Game.ts:66-84`, [2] `src/game/Game.ts:86-100`, [3] `src/utils/math.js:7-9`, [4] `README.md:26-32`
 - **Missed expected files**: `src/config/gameConfig.ts`, `src/entities/Player.ts`, `docs/gameplay.md`
 - **Missed keywords**: `INVINCIBLE_MS`, `1500 / 1.5 秒 / 1.5秒 / 1.5 s / 1.5s`, `gameConfig`, `takeDamage`, `isInvincible`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`; symbols `invincibilityTime`
 - **Simplified characters**: 体码
 
 <details><summary>Answer</summary>
@@ -135,6 +138,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `src/game/GameState.ts:14-14`, [2] `src/game/GameState.ts:1-1`, [3] `src/game/Game.ts:86-100`, [4] `README.md:26-32`
 - **Missed expected files**: `src/config/levels.js`, `src/systems/Spawner.ts`
 - **Missed keywords**: `asteroidInterval`, `getLevel`, `0.9`, `0.15`, `Spawner`
+- **Suspected fabrication (not in the project, check)**: symbols `PLANET_SPAWN_RATE`
 - **Simplified characters**: 义为这个频没随关变过后
 
 <details><summary>Answer</summary>
@@ -190,6 +194,7 @@ React 的 HUD 取得遊戲資料的方式是使用 `useSyncExternalStore`。[1] 
 - **Retrieved**: [1] `src/ui/Hud.tsx:8-28`, [2] `src/game/GameState.ts:1-1`, [3] `src/game/Game.ts:61-64`, [4] `README.md:26-32`
 - **Missed expected files**: `src/systems/collision.ts`
 - **Missed keywords**: `圓 / circle`, `平方 / squared / sqrt / 開根號`, `findOverlaps`, `handleCollisions`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`
 
 <details><summary>Answer</summary>
 
@@ -249,6 +254,7 @@ React 的 HUD 取得遊戲資料的方式是使用 `useSyncExternalStore`。[1] 
 - **Missed expected files**: —
 - **Missed keywords**: `找不到 / 沒有 / 没有 / 不存在 / 未包含 / 無法 / 沒找到 / not found / no multiplayer / does not / doesn't / cannot find / can't find`
 - **Forbidden keywords found**: WebSocket
+- **Suspected fabrication (not in the project, check)**: symbols `WebSockets`
 
 <details><summary>Answer</summary>
 

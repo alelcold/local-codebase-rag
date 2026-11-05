@@ -47,6 +47,8 @@
     "first_token_seconds_median": 25.297,
     "total_seconds_mean": 38.861,
     "tokens_mean": 159.0,
+    "rerank_seconds_mean": null,
+    "threshold_refusals": 0,
     "file_recall_mean": 0.9,
     "code_hit": {
       "hit": 5,
@@ -75,6 +77,16 @@
       "hit": 0,
       "of": 0,
       "rate": null
+    },
+    "false_refusals": {
+      "hit": 0,
+      "of": 5,
+      "rate": 0.0
+    },
+    "suspected_fabrication": {
+      "hit": 0,
+      "of": 5,
+      "rate": 0.0
     },
     "keyword_rate_by_type": {
       "定位設定": 1.0,
@@ -142,6 +154,8 @@
         "first_token_seconds": 47.566,
         "total_seconds": 60.153,
         "tokens": 119,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.073,
           "first_token_seconds": 47.563,
@@ -211,7 +225,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -266,6 +287,8 @@
         "first_token_seconds": 25.297,
         "total_seconds": 39.565,
         "tokens": 156,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.058,
           "first_token_seconds": 25.295,
@@ -341,7 +364,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -398,6 +428,8 @@
         "first_token_seconds": 4.399,
         "total_seconds": 11.403,
         "tokens": 64,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.105,
           "first_token_seconds": 4.396,
@@ -468,7 +500,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -525,6 +564,8 @@
         "first_token_seconds": 12.625,
         "total_seconds": 47.613,
         "tokens": 388,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.065,
           "first_token_seconds": 12.622,
@@ -593,7 +634,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -648,6 +696,8 @@
         "first_token_seconds": 29.28,
         "total_seconds": 35.569,
         "tokens": 68,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.075,
           "first_token_seconds": 29.278,
@@ -717,9 +767,20 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     }
-  ]
+  ],
+  "rescored": {
+    "at": "2026-11-05T05:21:40+00:00",
+    "scoring": 2
+  }
 }

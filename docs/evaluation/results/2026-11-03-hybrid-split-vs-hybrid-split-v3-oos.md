@@ -21,10 +21,11 @@
 | Defining file retrieved / 定義檔命中 | 0% | 0% | 0 |
 | Expected file cited with [n] / 回答引用預期檔案 | 33% | 0% | -33 pt ▼ |
 | Docs among retrieved chunks / 取回片段中文件比例 | 25% | 25% | 0 |
-| Keyword hit rate / 關鍵字命中率 | 12% | 62% | +50 pt ▲ |
+| Keyword hit rate / 關鍵字命中率 | 25% | 62% | +38 pt ▲ |
 | Answers with Simplified / 混入簡體字的回答 | 7 | 0 | -7 ▲ |
-| Refusal rate, trick questions / 拒答率 | 20% | 100% | +80 pt ▲ |
+| Refusal rate, trick questions / 拒答率 | 40% | 100% | +60 pt ▲ |
 | False refusal rate / 誤拒率 | 0% | 100% | +100 pt ▼ |
+| Suspected fabrication / 疑似編造 | 0 | 0 | 0 |
 | Refused by SCORE_THRESHOLD / 因門檻直接拒答 | 0 | 0 | 0 |
 | Manual correctness / 人工判定正確性 | 4 | 10 | +6 |
 | Errors / 失敗題數 | 0 | 0 | 0 |
@@ -34,7 +35,7 @@
 | # | Type | First token A → B | Total A → B | Files A → B | Code A → B | Def. A → B | Keywords A → B | Simplified A / B | Manual A / B |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 21 | 陷阱題 | 23.5 s → 16.9 s | 48.0 s → 18.0 s | — → — | — → — | — → — | 0/1 → 1/1 | 档 / — | 0 / 2 |
-| 22 | 陷阱題 | 10.0 s → 9.5 s | 15.9 s → 10.5 s | — → — | — → — | — → — | 0/1 → 1/1 | 无关于内细为这处务码阅统档开发队联获 / — | 1 / 2 |
+| 22 | 陷阱題 | 10.0 s → 9.5 s | 15.9 s → 10.5 s | — → — | — → — | — → — | 1/1 → 1/1 | 无关于内细为这处务码阅统档开发队联获 / — | 1 / 2 |
 | 23 | 陷阱題 | 33.7 s → 26.3 s | 47.0 s → 27.4 s | — → — | — → — | — → — | 0/1 → 1/1 | 数 / — | 0 / 2 |
 | 24 | 陷阱題 | 21.8 s → 17.2 s | 26.9 s → 18.4 s | — → — | — → — | — → — | 1/1 → 1/1 | 据码没关于项档 / — | 2 / 2 |
 | 25 | 陷阱題 | 18.8 s → 14.5 s | 54.9 s → 15.6 s | — → — | — → — | — → — | 0/1 → 1/1 | — / — | 0 / 2 |

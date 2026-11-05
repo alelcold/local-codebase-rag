@@ -30,6 +30,7 @@
 | Time to first token, mean / median / 首字延遲 平均／中位數 | 13.0 s / 13.4 s |
 | Total time, mean / 總耗時平均 | 20.9 s |
 | Tokens, mean / 平均 token 數 | 89.3 |
+| Rerank time, mean / rerank 耗時平均 | — |
 | Expected-file recall, mean / 預期檔案命中率平均 | 15% |
 | Code file retrieved / 程式碼檔命中 | 1/9 (11%) |
 | Doc file retrieved / 文件檔命中 | 3/4 (75%) |
@@ -38,7 +39,10 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 95% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 32% |
 | Answers with Simplified characters / 混入簡體字的回答 | 1 |
-| Trick question refused / 陷阱題正確拒答 | 0/1 (0%) |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 0/1 (0%) |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/9 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 5/10 (50%) |
+| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 20 |
 
 Keyword hit rate by type / 各題型關鍵字命中率：定位設定 13%、解釋邏輯 35%、跨檔案流程 25%、陷阱題 100%
@@ -48,15 +52,15 @@ Keyword hit rate by type / 各題型關鍵字命中率：定位設定 13%、解�
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 定位設定 | 18.6 s | 23.7 s | 56 | 1/3 | 0/2 | 1/1 | 0/1 | 1/5 | — | 0 | AI：說在 gameplay.md 設定、1000 毫秒，與 gameConfig.ts 的 INVINCIBLE_MS=1500 不符。 |
-| 2 | 解釋邏輯 | 17.0 s | 28.6 s | 133 | 0/3 | 0/2 | 0/1 | — | 1/4 | — | 0 | AI：編造不存在的 Player.ts 連擊邏輯與數值，與 ScoreSystem（1+連擊×0.25、上限 4、2500ms 或受傷歸零）不符。 |
+| 2 | 解釋邏輯 | 17.0 s | 28.6 s | 133 | 0/3 | 0/2 | 0/1 | — | 1/4 (**suspected fabrication**) | — | 0 | AI：編造不存在的 Player.ts 連擊邏輯與數值，與 ScoreSystem（1+連擊×0.25、上限 4、2500ms 或受傷歸零）不符。 |
 | 3 | 解釋邏輯 | 3.9 s | 14.0 s | 113 | 1/2 | 0/1 | 1/1 | — | 4/5 | — | 2 | AI：與文件一致：累加器、FIXED_DT 步進、render 一次、MAX_FRAME_TIME 上限（未提 requestAnimationFrame）。 |
-| 4 | 跨檔案流程 | 11.9 s | 17.3 s | 64 | 0/2 | 0/2 | — | — | 0/5 | — | 0 | AI：編造 Level.ts，並說頻率隨關卡降低、最後歸零，皆錯。 |
+| 4 | 跨檔案流程 | 11.9 s | 17.3 s | 64 | 0/2 | 0/2 | — | — | 0/5 (**suspected fabrication**) | — | 0 | AI：編造 Level.ts，並說頻率隨關卡降低、最後歸零，皆錯。 |
 | 5 | 跨檔案流程 | 11.7 s | 17.8 s | 71 | 0/2 | 0/2 | — | — | 1/4 | — | 1 | AI：正確說明暫停時迴圈仍跑但不呼叫 update，但沒提恢復時 accumulator 歸零。 |
 | 6 | 跨檔案流程 | 16.1 s | 25.8 s | 105 | 2/4 | 1/3 | 1/1 | — | 2/4 | — | 2 | AI：useSyncExternalStore 訂閱外部 store、值改變才重新 render，正確（未點名 createUiStore、syncUi）。 |
-| 7 | 解釋邏輯 | 11.3 s | 17.5 s | 73 | 0/2 | 0/2 | — | — | 0/4 | — | 0 | AI：編造 collidesWith() 與矩形碰撞，實為圓形。 |
+| 7 | 解釋邏輯 | 11.3 s | 17.5 s | 73 | 0/2 | 0/2 | — | — | 0/4 (**suspected fabrication**) | — | 0 | AI：編造 collidesWith() 與矩形碰撞，實為圓形。 |
 | 8 | 定位設定 | 16.2 s | 23.9 s | 83 | 0/3 | 0/3 | — | 0/2 | 1/5 | — | 0 | AI：說速度與持續時間「無固定」、冷卻 1 秒，皆錯，又說衝刺會閃爍（閃爍是受傷無敵）。 |
-| 9 | 定位設定 | 15.0 s | 17.8 s | 32 | 0/2 | 0/2 | — | 0/1 | 0/3 | 体 | 0 | AI：編造 Player.score 屬性。 |
-| 10 | 陷阱題 | 8.6 s | 22.9 s | 163 | — | — | — | — | 1/1 (**not refused**) | — | 0 | AI：沒有說專案無此功能，推測 Game.ts 可能有 WebSocket／SSE。 |
+| 9 | 定位設定 | 15.0 s | 17.8 s | 32 | 0/2 | 0/2 | — | 0/1 | 0/3 (**suspected fabrication**) | 体 | 0 | AI：編造 Player.score 屬性。 |
+| 10 | 陷阱題 | 8.6 s | 22.9 s | 163 | — | — | — | — | 1/1 (**not refused**: refusal phrase, but suspected fabrication) | — | 0 | AI：沒有說專案無此功能，推測 Game.ts 可能有 WebSocket／SSE。 |
 
 Files / Code / Doc / Def. = expected files found among the retrieved sources.
 
@@ -85,6 +89,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `docs/architecture.md:11-20`, [2] `README.md:26-32`, [3] `README.md:1-5`, [4] `docs/architecture.md:1-9`
 - **Missed expected files**: `src/systems/ScoreSystem.ts`, `src/config/gameConfig.ts`, `docs/gameplay.md`
 - **Missed keywords**: `0.25 / COMBO_STEP`, `MAX_COMBO_MULTIPLIER / 4 倍 / 4倍 / 4x`, `COMBO_WINDOW_MS / 2500 / 2.5 秒 / 2.5秒`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`; symbols `isCollidingWithEnemy`, `hitMultiplier`
 
 <details><summary>Answer</summary>
 
@@ -141,6 +146,7 @@ class Player {
 - **Retrieved**: [1] `README.md:26-32`, [2] `README.md:1-5`, [3] `docs/gameplay.md:10-14`, [4] `docs/architecture.md:11-20`
 - **Missed expected files**: `src/config/levels.js`, `src/systems/Spawner.ts`
 - **Missed keywords**: `asteroidInterval`, `getLevel`, `0.9`, `0.15`, `Spawner`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Level.ts`
 
 <details><summary>Answer</summary>
 
@@ -191,6 +197,7 @@ React 的 HUD 取得遊戲資料並避免每一幀都重新 render，是透過 `
 - **Retrieved**: [1] `README.md:26-32`, [2] `docs/gameplay.md:10-14`, [3] `docs/architecture.md:11-20`, [4] `README.md:1-5`
 - **Missed expected files**: `src/systems/collision.ts`, `src/game/Game.ts`
 - **Missed keywords**: `圓 / circle`, `平方 / squared / sqrt / 開根號`, `findOverlaps`, `handleCollisions`
+- **Suspected fabrication (not in the project, check)**: symbols `collidesWith`
 
 <details><summary>Answer</summary>
 
@@ -230,6 +237,7 @@ React 的 HUD 取得遊戲資料並避免每一幀都重新 render，是透過 `
 - **Retrieved**: [1] `docs/gameplay.md:16-21`, [2] `docs/architecture.md:1-9`, [3] `docs/gameplay.md:1-8`, [4] `docs/gameplay.md:23-26`
 - **Missed expected files**: `src/game/GameState.ts`, `src/game/Game.ts`
 - **Missed keywords**: `localStorage`, `HIGH_SCORE_KEY / starlight-courier.highScore`, `gameOver`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`
 - **Simplified characters**: 体
 
 <details><summary>Answer</summary>
@@ -248,6 +256,7 @@ React 的 HUD 取得遊戲資料並避免每一幀都重新 render，是透過 `
 - **Missed expected files**: —
 - **Missed keywords**: —
 - **Forbidden keywords found**: WebSocket
+- **Suspected fabrication (not in the project, check)**: symbols `WebSockets`, `WebSocket`
 
 <details><summary>Answer</summary>
 

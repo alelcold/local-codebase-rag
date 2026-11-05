@@ -47,6 +47,8 @@
     "first_token_seconds_median": 13.407,
     "total_seconds_mean": 20.934,
     "tokens_mean": 89.3,
+    "rerank_seconds_mean": null,
+    "threshold_refusals": 0,
     "file_recall_mean": 0.148,
     "code_hit": {
       "hit": 1,
@@ -75,6 +77,16 @@
       "hit": 0,
       "of": 1,
       "rate": 0.0
+    },
+    "false_refusals": {
+      "hit": 0,
+      "of": 9,
+      "rate": 0.0
+    },
+    "suspected_fabrication": {
+      "hit": 5,
+      "of": 10,
+      "rate": 0.5
     },
     "keyword_rate_by_type": {
       "定位設定": 0.133,
@@ -144,6 +156,8 @@
         "first_token_seconds": 18.58,
         "total_seconds": 23.727,
         "tokens": 56,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.096,
           "first_token_seconds": 18.574,
@@ -224,7 +238,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -280,6 +301,8 @@
         "first_token_seconds": 16.975,
         "total_seconds": 28.644,
         "tokens": 133,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.059,
           "first_token_seconds": 16.972,
@@ -361,7 +384,19 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [
+            "src/game/Player.ts"
+          ],
+          "symbols": [
+            "isCollidingWithEnemy",
+            "hitMultiplier"
+          ]
+        },
+        "suspected_fabrication": true,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -416,6 +451,8 @@
         "first_token_seconds": 3.851,
         "total_seconds": 14.041,
         "tokens": 113,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.072,
           "first_token_seconds": 3.848,
@@ -490,7 +527,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -545,6 +589,8 @@
         "first_token_seconds": 11.861,
         "total_seconds": 17.333,
         "tokens": 64,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.108,
           "first_token_seconds": 11.859,
@@ -621,7 +667,16 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [
+            "src/game/Level.ts"
+          ],
+          "symbols": []
+        },
+        "suspected_fabrication": true,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -676,6 +731,8 @@
         "first_token_seconds": 11.675,
         "total_seconds": 17.802,
         "tokens": 71,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.073,
           "first_token_seconds": 11.673,
@@ -754,7 +811,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 1
     },
@@ -811,6 +875,8 @@
         "first_token_seconds": 16.084,
         "total_seconds": 25.76,
         "tokens": 105,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.102,
           "first_token_seconds": 16.082,
@@ -889,7 +955,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -944,6 +1017,8 @@
         "first_token_seconds": 11.306,
         "total_seconds": 17.469,
         "tokens": 73,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.048,
           "first_token_seconds": 11.303,
@@ -1019,7 +1094,16 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": [
+            "collidesWith"
+          ]
+        },
+        "suspected_fabrication": true,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -1078,6 +1162,8 @@
         "first_token_seconds": 16.221,
         "total_seconds": 23.939,
         "tokens": 83,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.106,
           "first_token_seconds": 16.218,
@@ -1160,7 +1246,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -1217,6 +1310,8 @@
         "first_token_seconds": 14.953,
         "total_seconds": 17.765,
         "tokens": 32,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.066,
           "first_token_seconds": 14.95,
@@ -1294,7 +1389,16 @@
         "simplified_chars": [
           "体"
         ],
-        "has_simplified": true
+        "has_simplified": true,
+        "unknown_refs": {
+          "files": [
+            "src/game/Player.ts"
+          ],
+          "symbols": []
+        },
+        "suspected_fabrication": true,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -1346,6 +1450,8 @@
         "first_token_seconds": 8.637,
         "total_seconds": 22.865,
         "tokens": 163,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.088,
           "first_token_seconds": 8.631,
@@ -1412,9 +1518,22 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": [
+            "WebSockets",
+            "WebSocket"
+          ]
+        },
+        "suspected_fabrication": true,
+        "refusal_keyword_hit": true,
         "refused": false
       },
       "manual_correctness": 0
     }
-  ]
+  ],
+  "rescored": {
+    "at": "2026-11-05T05:21:40+00:00",
+    "scoring": 2
+  }
 }

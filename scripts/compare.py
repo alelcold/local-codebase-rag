@@ -40,6 +40,7 @@ SUMMARY_ROWS: list[tuple[str, Callable[[dict], Any], str]] = [
     ("Answers with Simplified / 混入簡體字的回答", lambda s: s.get("simplified_answers"), "count-lower"),
     ("Refusal rate, trick questions / 拒答率", lambda s: (s.get("no_answer_refused") or {}).get("rate"), "rate"),
     ("False refusal rate / 誤拒率", lambda s: (s.get("false_refusals") or {}).get("rate"), "rate-lower"),
+    ("Suspected fabrication / 疑似編造", lambda s: (s.get("suspected_fabrication") or {}).get("hit"), "count-lower"),
     ("Refused by SCORE_THRESHOLD / 因門檻直接拒答", lambda s: s.get("threshold_refusals"), "number"),
     ("Manual correctness / 人工判定正確性", lambda s: (s.get("manual_correctness") or {}).get("total"), "number"),
     ("Errors / 失敗題數", lambda s: s.get("errors"), "count-lower"),

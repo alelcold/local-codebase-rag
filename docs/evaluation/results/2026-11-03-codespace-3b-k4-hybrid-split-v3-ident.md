@@ -41,6 +41,7 @@
 | Answers with Simplified characters / 混入簡體字的回答 | 0 |
 | Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | — |
 | False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 2/5 (40%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 0/5 (0%) |
 | Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 10 |
 

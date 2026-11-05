@@ -39,7 +39,9 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 45% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 73% |
 | Answers with Simplified characters / 混入簡體字的回答 | 1 |
-| Trick question refused / 陷阱題正確拒答 | — |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | — |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/5 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 1/5 (20%) |
 | Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 10 |
 
@@ -49,7 +51,7 @@ Keyword hit rate by type / 各題型關鍵字命中率：定位設定 75%、解�
 
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 11 | 定位設定 | 20.7 s | 29.1 s | 87 | 0/2 | 0/2 | — | 0/1 | 1/4 | — | 0 | AI：定義處說成 gameplay.md、值說成 1000 毫秒，並指向不存在的 src/game/Player.ts，皆錯。 |
+| 11 | 定位設定 | 20.7 s | 29.1 s | 87 | 0/2 | 0/2 | — | 0/1 | 1/4 (**suspected fabrication**) | — | 0 | AI：定義處說成 gameplay.md、值說成 1000 毫秒，並指向不存在的 src/game/Player.ts，皆錯。 |
 | 12 | 解釋邏輯 | 33.3 s | 45.2 s | 126 | 1/2 | 1/2 | — | — | 3/4 | — | 2 | AI：公式 min(MAX_COMBO_MULTIPLIER, 1 + combo × COMBO_STEP) 與原始碼一致（未列 0.25、4 的數值與歸零條件，但題目只問計算方式）；寫成 this.multiplier = 為小瑕疵。 |
 | 13 | 定位設定 | 27.7 s | 33.7 s | 54 | 2/2 | 2/2 | — | 1/1 | 4/4 | — | 2 | AI：gameConfig.ts、DASH_COOLDOWN_MS=900、DASH_DURATION_MS=180 皆正確。 |
 | 14 | 定位設定 | 17.3 s | 32.8 s | 159 | 2/2 | 2/2 | — | 1/1 | 3/3 | 体 | 2 | AI：HIGH_SCORE_KEY 在 GameState.ts、由 Game.gameOver 寫入 localStorage，皆正確。 |
@@ -67,6 +69,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `docs/gameplay.md:10-14`, [2] `docs/architecture.md:11-20`, [3] `docs/gameplay.md:16-21`, [4] `README.md:26-32`
 - **Missed expected files**: `src/config/gameConfig.ts`, `src/entities/Player.ts`
 - **Missed keywords**: `1500 / 1.5 秒 / 1.5秒`, `gameConfig`, `takeDamage`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`
 
 <details><summary>Answer</summary>
 

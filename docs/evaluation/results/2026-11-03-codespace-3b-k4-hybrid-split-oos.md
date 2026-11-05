@@ -37,21 +37,22 @@
 | Defining file retrieved (定位設定) / 定義檔命中 | 0/1 (0%) |
 | Expected file cited with [n] / 回答以 [n] 引用預期檔案 | 1/3 (33%) |
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 25% |
-| Keyword hit rate, mean / 關鍵字命中率平均 | 12% |
+| Keyword hit rate, mean / 關鍵字命中率平均 | 25% |
 | Answers with Simplified characters / 混入簡體字的回答 | 7 |
-| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 1/5 (20%) |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 2/5 (40%) |
 | False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/3 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 0/8 (0%) |
 | Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 16 |
 
-Keyword hit rate by type / 各題型關鍵字命中率：陷阱題 20%、對照題 0%
+Keyword hit rate by type / 各題型關鍵字命中率：陷阱題 40%、對照題 0%
 
 ## Per question / 每題明細
 
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 21 | 陷阱題 | 23.5 s | 48.0 s | 234 | — | — | — | — | 0/1 (**not refused**) | 档 | 0 | AI：把多人房間流程當成存在（註冊、建立房間、分享連線資訊），沒有說專案無此功能。 |
-| 22 | 陷阱題 | 10.0 s | 15.9 s | 57 | — | — | — | — | 0/1 (**not refused**) | 无关于内细为这处务码阅统档开发队联获 | 1 | AI：沒有編造，但只說「無法提供詳細資訊」並指向後端，沒明說專案中沒有付款功能（且用簡體字）。 |
+| 22 | 陷阱題 | 10.0 s | 15.9 s | 57 | — | — | — | — | 1/1 (refused) | 无关于内细为这处务码阅统档开发队联获 | 1 | AI：沒有編造，但只說「無法提供詳細資訊」並指向後端，沒明說專案中沒有付款功能（且用簡體字）。 |
 | 23 | 陷阱題 | 33.7 s | 47.0 s | 105 | — | — | — | — | 0/1 (**not refused**) | 数 | 0 | AI：編造 syncUi 會把存檔同步到雲端（即 devlog 提到的第 23 題錯誤）。 |
 | 24 | 陷阱題 | 21.8 s | 26.9 s | 44 | — | — | — | — | 1/1 (refused) | 据码没关于项档 | 2 | AI：明說提供的程式碼沒有排行榜上傳相關內容，沒有編造。 |
 | 25 | 陷阱題 | 18.8 s | 54.9 s | 311 | — | — | — | — | 0/1 (**not refused**) | — | 0 | AI：把鍵盤的 confirm／pause 說成遊戲手把對應，編造手把支援。 |
@@ -94,7 +95,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Key facts**: 陷阱題：專案中沒有商店、貨幣或付款功能。正確的回答應該說找不到。
 - **Retrieved**: [1] `src/game/GameState.ts:14-14`, [2] `src/game/GameState.ts:1-1`, [3] `src/utils/math.js:7-9`, [4] `README.md:26-32`
 - **Missed expected files**: —
-- **Missed keywords**: `找不到 / 沒有 / 没有 / 不存在 / 未包含 / 無法 / 沒找到 / not found / does not / doesn't / cannot find / can't find`
+- **Missed keywords**: —
 - **Simplified characters**: 无关于内细为这处务码阅统档开发队联获
 
 <details><summary>Answer</summary>

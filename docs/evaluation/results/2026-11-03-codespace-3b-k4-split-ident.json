@@ -47,6 +47,8 @@
     "first_token_seconds_median": 11.195,
     "total_seconds_mean": 27.083,
     "tokens_mean": 99.2,
+    "rerank_seconds_mean": null,
+    "threshold_refusals": 0,
     "file_recall_mean": 0.9,
     "code_hit": {
       "hit": 5,
@@ -75,6 +77,16 @@
       "hit": 0,
       "of": 0,
       "rate": null
+    },
+    "false_refusals": {
+      "hit": 0,
+      "of": 5,
+      "rate": 0.0
+    },
+    "suspected_fabrication": {
+      "hit": 0,
+      "of": 5,
+      "rate": 0.0
     },
     "keyword_rate_by_type": {
       "定位設定": 0.917,
@@ -142,6 +154,8 @@
         "first_token_seconds": 42.915,
         "total_seconds": 49.787,
         "tokens": 67,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.066,
           "first_token_seconds": 42.912,
@@ -212,7 +226,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -267,6 +288,8 @@
         "first_token_seconds": 8.72,
         "total_seconds": 27.637,
         "tokens": 209,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.053,
           "first_token_seconds": 8.718,
@@ -342,7 +365,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -399,6 +429,8 @@
         "first_token_seconds": 22.344,
         "total_seconds": 28.267,
         "tokens": 58,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.104,
           "first_token_seconds": 22.342,
@@ -470,7 +502,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -527,6 +566,8 @@
         "first_token_seconds": 11.195,
         "total_seconds": 17.531,
         "tokens": 73,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.07,
           "first_token_seconds": 11.193,
@@ -595,7 +636,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -650,6 +698,8 @@
         "first_token_seconds": 3.983,
         "total_seconds": 12.191,
         "tokens": 89,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.062,
           "first_token_seconds": 3.981,
@@ -719,9 +769,20 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     }
-  ]
+  ],
+  "rescored": {
+    "at": "2026-11-05T05:21:40+00:00",
+    "scoring": 2
+  }
 }

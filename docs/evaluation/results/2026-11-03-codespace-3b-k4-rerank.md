@@ -39,7 +39,9 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 85% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 22% |
 | Answers with Simplified characters / 混入簡體字的回答 | 1 |
-| Trick question refused / 陷阱題正確拒答 | 0/1 (0%) |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 0/1 (0%) |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/9 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 3/10 (30%) |
 | Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 20 |
 
@@ -50,15 +52,15 @@ Keyword hit rate by type / 各題型關鍵字命中率：定位設定 13%、解�
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 定位設定 | 20.9 s | 25.1 s | 42 | 1/3 | 0/2 | 1/1 | 0/1 | 1/5 | — | 1 | AI：有點出 INVINCIBLE_MS，但位置說成 gameplay.md、沒給出 1500。 |
-| 2 | 解釋邏輯 | 17.3 s | 32.4 s | 152 | 1/3 | 0/2 | 1/1 | — | 1/4 | — | 0 | AI：編造「擊中小行星連擊、倍率×2」，與 ScoreSystem 不符。 |
+| 2 | 解釋邏輯 | 17.3 s | 32.4 s | 152 | 1/3 | 0/2 | 1/1 | — | 1/4 (**suspected fabrication**) | — | 0 | AI：編造「擊中小行星連擊、倍率×2」，與 ScoreSystem 不符。 |
 | 3 | 解釋邏輯 | 24.8 s | 35.4 s | 108 | 1/2 | 0/1 | 1/1 | — | 3/5 | — | 1 | AI：累加器、FIXED_DT、render 皆正確，但沒提 requestAnimationFrame 與 MAX_FRAME_TIME。 |
 | 4 | 跨檔案流程 | 18.3 s | 23.2 s | 55 | 0/2 | 0/2 | — | — | 0/5 | — | 1 | AI：正確指出由 levels.js 決定且越後面越頻繁，但沒有數值，也沒回答超過最後一關的行為。 |
 | 5 | 跨檔案流程 | 13.5 s | 31.8 s | 187 | 1/2 | 1/2 | — | — | 2/4 | — | 1 | AI：核心程式碼敘述對（accumulator=0），但「恢復」段落邏輯混亂，把 playing 切回 paused 也當成恢復。 |
 | 6 | 跨檔案流程 | 28.3 s | 39.8 s | 111 | 2/4 | 1/3 | 1/1 | — | 2/4 | — | 2 | AI：useSyncExternalStore 訂閱 game.ui、值改變才重新 render，正確（未點名 createUiStore、syncUi）。 |
-| 7 | 解釋邏輯 | 17.2 s | 24.6 s | 80 | 0/2 | 0/2 | — | — | 0/4 | — | 0 | AI：檔案 collision.ts 對，但編造 checkCollisions() 遍歷所有實體，實為 circlesOverlap／findOverlaps 的圓形平方距離比較。 |
+| 7 | 解釋邏輯 | 17.2 s | 24.6 s | 80 | 0/2 | 0/2 | — | — | 0/4 (**suspected fabrication**) | — | 0 | AI：檔案 collision.ts 對，但編造 checkCollisions() 遍歷所有實體，實為 circlesOverlap／findOverlaps 的圓形平方距離比較。 |
 | 8 | 定位設定 | 23.9 s | 34.5 s | 110 | 0/3 | 0/3 | — | 0/2 | 1/5 | — | 0 | AI：Shift 對，但持續 1 秒、冷卻 1 秒皆錯（180ms／900ms）。 |
 | 9 | 定位設定 | 25.6 s | 35.3 s | 102 | 0/2 | 0/2 | — | 0/1 | 0/3 | 体来说个状态于储数级连击组过订阅变并时 | 0 | AI：說存在 store 中並描述 Hud，沒答到 localStorage。 |
-| 10 | 陷阱題 | 22.1 s | 66.6 s | 465 | — | — | — | — | 0/1 (**not refused**) | — | 0 | AI：編造 WebSocket、socket.io 與不存在的 src/server/ 程式碼。 |
+| 10 | 陷阱題 | 22.1 s | 66.6 s | 465 | — | — | — | — | 0/1 (**not refused**) (**suspected fabrication**) | — | 0 | AI：編造 WebSocket、socket.io 與不存在的 src/server/ 程式碼。 |
 
 Files / Code / Doc / Def. = expected files found among the retrieved sources.
 
@@ -89,6 +91,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `README.md:26-32`, [2] `docs/architecture.md:11-20`, [3] `docs/architecture.md:1-9`, [4] `docs/gameplay.md:10-14`
 - **Missed expected files**: `src/systems/ScoreSystem.ts`, `src/config/gameConfig.ts`
 - **Missed keywords**: `0.25 / COMBO_STEP`, `MAX_COMBO_MULTIPLIER / 4 倍 / 4倍 / 4x`, `COMBO_WINDOW_MS / 2500 / 2.5 秒 / 2.5秒`
+- **Suspected fabrication (not in the project, check)**: symbols `hitCount`, `hitMultiplier`
 
 <details><summary>Answer</summary>
 
@@ -201,6 +204,7 @@ React 的 HUD 取得遊戲資料的方式是通過 `useSyncExternalStore` 函數
 - **Retrieved**: [1] `docs/architecture.md:1-9`, [2] `docs/gameplay.md:10-14`, [3] `README.md:13-24`, [4] `docs/gameplay.md:1-8`
 - **Missed expected files**: `src/systems/collision.ts`, `src/game/Game.ts`
 - **Missed keywords**: `圓 / circle`, `平方 / squared / sqrt / 開根號`, `findOverlaps`, `handleCollisions`
+- **Suspected fabrication (not in the project, check)**: symbols `checkCollisions`
 
 <details><summary>Answer</summary>
 
@@ -261,6 +265,7 @@ React 的 HUD 取得遊戲資料的方式是通過 `useSyncExternalStore` 函數
 - **Missed expected files**: —
 - **Missed keywords**: `找不到 / 沒有 / 没有 / 不存在 / 未包含 / 無法 / 沒找到 / not found / no multiplayer / does not / doesn't / cannot find / can't find`
 - **Forbidden keywords found**: WebSocket, socket.io
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`, `src/server/socket.ts`; symbols `WebSocket`, `send`, `updatePosition`, `require`, `emit`
 
 <details><summary>Answer</summary>
 

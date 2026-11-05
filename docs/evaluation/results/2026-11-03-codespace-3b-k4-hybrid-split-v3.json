@@ -88,6 +88,11 @@
       "of": 9,
       "rate": 0.889
     },
+    "suspected_fabrication": {
+      "hit": 0,
+      "of": 10,
+      "rate": 0.0
+    },
     "keyword_rate_by_type": {
       "定位設定": 0.0,
       "解釋邏輯": 0.267,
@@ -265,6 +270,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -431,6 +441,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -587,6 +602,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [],
         "falsely_refused": false
       },
@@ -746,6 +766,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -904,6 +929,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -1070,6 +1100,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -1229,6 +1264,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -1403,6 +1443,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -1564,6 +1609,11 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [
           "找不到"
         ],
@@ -1710,9 +1760,19 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_keyword_hit": true,
         "refused": true
       },
       "manual_correctness": 2
     }
-  ]
+  ],
+  "rescored": {
+    "at": "2026-11-05T05:21:40+00:00",
+    "scoring": 2
+  }
 }

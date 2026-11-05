@@ -30,6 +30,7 @@
 | Time to first token, mean / median / 首字延遲 平均／中位數 | 10.7 s / 10.9 s |
 | Total time, mean / 總耗時平均 | 18.5 s |
 | Tokens, mean / 平均 token 數 | 85.0 |
+| Rerank time, mean / rerank 耗時平均 | — |
 | Expected-file recall, mean / 預期檔案命中率平均 | 90% |
 | Code file retrieved / 程式碼檔命中 | 5/5 (100%) |
 | Doc file retrieved / 文件檔命中 | — |
@@ -38,7 +39,10 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 30% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 77% |
 | Answers with Simplified characters / 混入簡體字的回答 | 0 |
-| Trick question refused / 陷阱題正確拒答 | — |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | — |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/5 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 0/5 (0%) |
+| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 10 |
 
 Keyword hit rate by type / 各題型關鍵字命中率：定位設定 81%、解釋邏輯 75%、跨檔案流程 67%
