@@ -42,7 +42,8 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 | 2026-11-02 | Codespaces (CPU), browser through the forwarding URL, streaming | qwen2.5-coder:3b | 4 | 43.8 | — | — | 30.4 (first query) | Single query by hand: 「玩家受傷後的無敵時間在哪裡設定？」, first after model load, 129 tokens. All 4 retrieved chunks were docs; the answer named the wrong file and mixed in Simplified characters (devlog 2026-11-02) |
 | 2026-11-02 | Codespaces (CPU, 4 cores), `ollama run --verbose` | qwen2.5-coder:3b | — | — | — | — | — | Ollama's own counters, one run: **prompt eval 25.3 tokens/s, eval (generation) 12.4 tokens/s, model load ≈ 3.5 s**. Prompt eval is about twice as fast as generation, but a RAG prompt is hundreds to thousands of tokens, so it dominates the first token (e.g. 1,000 prompt tokens ≈ 40 s: arithmetic from the rate, not a measurement) |
 | 2026-11-02 | Same | qwen2.5-coder:3b | 4 | — | — | — | 0.8 (prompt cache) | Same question asked again: 14.3 s total, 134 tokens. Ollama reused the cached prompt, so this is **not** normal latency. Generation speed both times ≈ 10 tokens/s |
-| {待填} | Codespaces (CPU), `scripts/evaluate.py` | qwen2.5-coder:3b | 4 | — | {待填} | {待填} | {待填} | 10 questions; check that nothing is cut off at about 100 s |
+| 2026-11-02 | Codespaces (CPU), `scripts/evaluate.py` | qwen2.5-coder:3b | 4 | — (unscored warm-up) | 25.5 | 35.6 | 13.2 | 10 questions, 0 errors; slowest query 60.5 s, so nothing was cut off at about 100 s. p90 = 9th of 10 sorted totals. [report](evaluation/results/2026-11-02-codespace-3b-k4.md) |
+| 2026-11-02 | Codespaces (CPU), `scripts/evaluate.py` | qwen2.5-coder:3b | 8 | — (unscored warm-up) | 30.7 | 34.8 | 21.6 | Same 10 questions, slowest query 46.8 s. [report](evaluation/results/2026-11-02-codespace-3b-k8.md) |
 | 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 8 | — | — | — | CI smoke test (PR #3), one query, `LLM_NUM_CTX=4096`. Pipeline check only: the answer text had no `[n]` citation (sources were correct) |
 | 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 5 | — | — | 0.09 (backend) | CI smoke test (PR #4): non-streaming query 5 s; streaming query (model already loaded) 1.0 s total, 44 tokens, `first_token_seconds` 0.086 from the `done` event |
 | {待填} | Mac M2 32 GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | |
@@ -53,8 +54,8 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 
 | Date | Environment | Model | top_k | Manual correctness (/20) | Code file retrieved | Defining file retrieved | Keyword hit rate | Answers with Simplified | Q10 refused | First token, mean (s) | Total, mean (s) | Report |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| 2026-11-02 | Codespaces | qwen2.5-coder:3b | 4 | {待填} | 1/9 (11%) | 0/3 (0%) | 30% | 1 | No (0/1) | 13.2 | 25.5 | [report](evaluation/results/2026-11-02-codespace-3b-k4.md) |
+| 2026-11-02 | Codespaces | qwen2.5-coder:3b | 8 | {待填} | 2/9 (22%) | 0/3 (0%) | 24% | 1 | No (0/1) | 21.6 | 30.7 | [report](evaluation/results/2026-11-02-codespace-3b-k8.md) |
 | {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | {待填} | GPU instance | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
@@ -99,14 +100,14 @@ Group J of the [experiment plan](evaluation/experiment-plan-retrieval.md) agains
 
 | Date | Group | Prompt | Refusal rate, out-of-scope (/5) | False refusal rate, out-of-scope (/3) | Q10 refused, main | False refusal rate, main (/9) | False refusal rate, ident. (/5) | Answers with Simplified, main / out-of-scope | Manual correctness (AI), main (/20) | Manual correctness (AI), out-of-scope (/16) | Report |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-03 | D. hybrid + split | v1 | 1/5 (20%) ⁴ | 0/3 (0%) | No (0/1) | 0/9 (0%) ² | 0/5 (0%) ² | 4 / 7 | 7 (AI) | 4 (AI) | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · [out-of-scope](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-oos.md) |
+| 2026-11-03 | D. hybrid + split | v1 | 2/5 (40%) ⁴ | 0/3 (0%) | No (0/1) | 0/9 (0%) ² | 0/5 (0%) ² | 4 / 7 | 7 (AI) | 4 (AI) | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · [out-of-scope](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-oos.md) |
 | 2026-11-03 | J. D + prompt v3 | v3 | 5/5 (100%) | **3/3 (100%)** | Yes (1/1) | **8/9 (89%)** | **2/5 (40%)** | 0 / 0 ³ | 3 (AI) | 10 (AI) ⁵ | [main](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3.md) · [ident.](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-ident.md) · [out-of-scope](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-oos.md) |
 
 J retrieved exactly the same excerpts as D on all 23 questions, so every difference is the prompt. Of J's 23 answers, 19 are the fixed sentence 「在索引的專案中找不到相關內容。」 and nothing else (11 tokens); only main Q3 and ident. Q12, Q14, Q15 were answered. Refused real questions include main Q5, Q6 and ident. Q11, Q13, where every expected file was retrieved. **Prompt v3 is not adopted** (decision rule of the experiment plan: false refusal rate must stay 0). Comparisons: `evaluation/results/2026-11-03-hybrid-split-vs-hybrid-split-v3[-ident|-oos].md`.
 
 ³ Not a fix for Simplified characters: 19 of 23 J answers are the fixed sentence. The 4 real answers had none, too few to judge.
 
-⁴ Keyword screen. By reading the answers, D refused 2 of 5: Q22 is a refusal written in Simplified Chinese, and the keyword list has 無法 only in its Traditional form (quoted in the 2026-11-03 devlog). Q23 (cloud sync “via `syncUi`”) and Q25 (gamepad mapped to the keyboard handler) are invented answers.
+⁴ Keyword screen, re-scored with the rules of ADR 0019 (Simplified refusal phrases added; devlog 2026-11-05). It was 1/5 before: Q22 is a refusal written in Simplified Chinese, and the keyword list had 無法 only in its Traditional form (quoted in the 2026-11-03 devlog). The 2/5 now matches reading the answers. Q23 (cloud sync “via `syncUi`”) and Q25 (gamepad mapped to the keyboard handler) are invented answers.
 
 ⁵ By AI reading, not a sign of quality: J's 10/16 is 5 correct refusals on the trick questions (2 each) and 0 on all 3 control questions (a refusal of a real question scores 0). D's 4/16: 2 refusals-by-reading are scored Q24 = 2 and Q22 = 1 (see the devlog's uncertain list), Q23 and Q25 invented = 0, Q21 answered generically = 0, and the controls Q26 = 1, Q27 = 0, Q28 = 0.
 
@@ -116,7 +117,7 @@ J retrieved exactly the same excerpts as D on all 23 questions, so every differe
 
 | Model | Download size | Memory in use (`ollama ps`) | Runs on GPU? | Tokens/s (generation) | Avg query (s) | Eval score (/20) | Citation accuracy | Subjective quality notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| qwen2.5-coder:3b | ≈ 1.9 GB | {待填} | No (Codespaces, CPU only) | 12.4 (Codespaces, 4 cores; prompt eval 25.3) | {待填} | 3–9 / 20 by retrieval group (AI-judged, §4a); baseline 5 | {待填} | Often cites the wrong file or invents code when the right code is not retrieved |
+| qwen2.5-coder:3b | ≈ 1.9 GB | {待填} | No (Codespaces, CPU only) | 12.4 (Codespaces, 4 cores; prompt eval 25.3) | 25.5 (`TOP_K=4`) / 30.7 (`TOP_K=8`), total mean of 10 questions (2026-11-02, §3) | 3–9 / 20 by retrieval group (AI-judged, §4a); baseline 5 | {待填} | Often cites the wrong file or invents code when the right code is not retrieved |
 | qwen2.5-coder:14b | ≈ 9 GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | qwen2.5-coder:32b | ≈ 20 GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
@@ -136,6 +137,8 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 | 2026-11-02 | Backend unit tests with threshold, rerank (fake cross-encoder) and calibration script | 157 passed (≈ 7 s, no network, no model download) |
 | 2026-11-02 | Backend image size, default / `INSTALL_RERANK=true` (`docker images`, linux/amd64) | 616 MB / 2.14 GB (+1.5 GB: torch CPU, transformers, scipy, scikit-learn …; model not included) |
 | 2026-11-03 | Backend unit tests with prompt v3, out-of-scope question set and refusal / false-refusal metrics | 170 passed (≈ 7 s, no network) |
+| 2026-11-05 | Backend unit tests with the refusal scoring fix (ADR 0019) | 183 passed (≈ 7 s, no network) |
+| 2026-11-05 | Backend unit tests with `QUERY_GLOSSARY` (ADR 0020) | 200 passed (≈ 7 s, no network) |
 
 ## How to measure
 
@@ -217,7 +220,8 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 2026-11-02 | Codespaces（CPU），瀏覽器經轉發網址，串流 | qwen2.5-coder:3b | 4 | 43.8 | — | — | 30.4（第一次查詢） | 手動單次查詢：「玩家受傷後的無敵時間在哪裡設定？」，模型載入後的第一次，129 個 token。取回的 4 段全是文件；回答說錯檔案，並混入簡體字（devlog 2026-11-02） |
 | 2026-11-02 | Codespaces（CPU，4 核心），`ollama run --verbose` | qwen2.5-coder:3b | — | — | — | — | — | Ollama 自己的計數，單次：**prompt eval 25.3 tokens/s、eval（生成）12.4 tokens/s、模型載入約 3.5 秒**。Prompt eval 大約是生成速度的兩倍，但 RAG 的提示詞有數百到數千個 token，所以首字延遲主要由它決定（例如 1,000 個提示詞 token 約 40 秒：由速度推算，不是實測） |
 | 2026-11-02 | 同上 | qwen2.5-coder:3b | 4 | — | — | — | 0.8（提示詞快取） | 同一題再問一次：總耗時 14.3 秒，134 個 token。Ollama 重用了快取的提示詞，所以**不是**一般的延遲。兩次的生成速度都約每秒 10 個 token |
-| {待填} | Codespaces（CPU），`scripts/evaluate.py` | qwen2.5-coder:3b | 4 | — | {待填} | {待填} | {待填} | 10 題；確認不會在約 100 秒時被中斷 |
+| 2026-11-02 | Codespaces（CPU），`scripts/evaluate.py` | qwen2.5-coder:3b | 4 | —（不計分的暖機題） | 25.5 | 35.6 | 13.2 | 10 題，0 個失敗；最慢一題 60.5 秒，沒有在約 100 秒時被中斷。p90 取 10 個由小到大的總耗時中的第 9 個。[報告](evaluation/results/2026-11-02-codespace-3b-k4.md) |
+| 2026-11-02 | Codespaces（CPU），`scripts/evaluate.py` | qwen2.5-coder:3b | 8 | —（不計分的暖機題） | 30.7 | 34.8 | 21.6 | 同樣 10 題，最慢一題 46.8 秒。[報告](evaluation/results/2026-11-02-codespace-3b-k8.md) |
 | 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 8 | — | — | — | CI 冒煙測試（PR #3），單次查詢，`LLM_NUM_CTX=4096`。只用來驗證流程：回答文字沒有 `[n]` 引用（來源正確） |
 | 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 5 | — | — | 0.09（後端） | CI 冒煙測試（PR #4）：非串流查詢 5 秒；串流查詢（模型已載入）總共 1.0 秒、44 個 token，`done` 事件的 `first_token_seconds` 為 0.086 |
 | {待填} | Mac M2 32GB | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | |
@@ -228,8 +232,8 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 | 日期 | 環境 | 模型 | top_k | 人工判定正確性（/20） | 程式碼檔命中 | 定義檔命中 | 關鍵字命中率 | 混入簡體字的回答 | 第 10 題拒答 | 首字延遲平均（秒） | 總耗時平均（秒） | 報告 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| {待填} | Codespaces | qwen2.5-coder:3b | 4 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
-| {待填} | Codespaces | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| 2026-11-02 | Codespaces | qwen2.5-coder:3b | 4 | {待填} | 1/9 (11%) | 0/3 (0%) | 30% | 1 | 否（0/1） | 13.2 | 25.5 | [報告](evaluation/results/2026-11-02-codespace-3b-k4.md) |
+| 2026-11-02 | Codespaces | qwen2.5-coder:3b | 8 | {待填} | 2/9 (22%) | 0/3 (0%) | 24% | 1 | 否（0/1） | 21.6 | 30.7 | [報告](evaluation/results/2026-11-02-codespace-3b-k8.md) |
 | {待填} | Mac M2 | qwen2.5-coder:14b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | {待填} | GPU 機器 | qwen2.5-coder:32b | 8 | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
@@ -274,14 +278,14 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 
 | 日期 | 組別 | 提示 | 拒答率，範圍外（/5） | 誤拒率，範圍外（/3） | Q10 拒答，主要 | 誤拒率，主要（/9） | 誤拒率，識別字（/5） | 混入簡體字的回答，主要 / 範圍外 | 人工判定正確性（AI），主要（/20） | 人工判定正確性（AI），範圍外（/16） | 報告 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-03 | D. 混合 + 分類 | v1 | 1/5 (20%) ⁴ | 0/3 (0%) | 否（0/1） | 0/9 (0%) ² | 0/5 (0%) ² | 4 / 7 | 7 (AI) | 4 (AI) | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · [範圍外](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-oos.md) |
+| 2026-11-03 | D. 混合 + 分類 | v1 | 2/5 (40%) ⁴ | 0/3 (0%) | 否（0/1） | 0/9 (0%) ² | 0/5 (0%) ² | 4 / 7 | 7 (AI) | 4 (AI) | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.md) · [範圍外](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-oos.md) |
 | 2026-11-03 | J. D + 提示 v3 | v3 | 5/5 (100%) | **3/3 (100%)** | 是（1/1） | **8/9 (89%)** | **2/5 (40%)** | 0 / 0 ³ | 3 (AI) | 10 (AI) ⁵ | [主要](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3.md) · [識別字](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-ident.md) · [範圍外](evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-v3-oos.md) |
 
 J 組在全部 23 題取回的片段都與 D 組完全相同，所以所有差異都來自提示。J 組 23 個回答中，有 19 個只有固定句「在索引的專案中找不到相關內容。」（11 個 token）；只有主要題組第 3 題、識別字題組第 12、14、15 題有回答。被拒答的真實問題包括主要題組第 5、6 題與識別字題組第 11、13 題，這幾題的預期檔案全部都有取回。**不採用提示 v3**（實驗計畫的決策規則：誤拒率必須維持 0）。比較報告：`evaluation/results/2026-11-03-hybrid-split-vs-hybrid-split-v3[-ident|-oos].md`。
 
 ³ 這不代表簡體字問題解決了：J 組 23 個回答有 19 個是固定句。另外 4 個真正的回答沒有簡體字，但數量太少，無法下結論。
 
-⁴ 這是關鍵字篩選的結果。實際讀過回答，D 組 5 題拒答了 2 題：第 22 題是用簡體字寫的拒答，關鍵字清單的「無法」只有繁體寫法（原文引用在 2026-11-03 的 devlog）。第 23 題（「透過 `syncUi`」同步到雲端）與第 25 題（把手把對應到鍵盤處理函式）都是編造的回答。
+⁴ 這是關鍵字篩選的結果，已依 ADR 0019 的規則重新計分（加入簡體拒答字句；devlog 2026-11-05）。重新計分前是 1/5：第 22 題是用簡體字寫的拒答，當時關鍵字清單的「無法」只有繁體寫法（原文引用在 2026-11-03 的 devlog）。現在的 2/5 與實際讀過回答的結果一致。第 23 題（「透過 `syncUi`」同步到雲端）與第 25 題（把手把對應到鍵盤處理函式）都是編造的回答。
 
 ⁵ 由 AI 讀過回答後計分，不代表品質好：J 的 10/16 是 5 題陷阱題都正確拒答（各 2 分），3 題對照題全部 0 分（把真實問題拒答算 0）。D 的 4/16：第 24 題 2 分、第 22 題 1 分（見 devlog 的不確定清單），第 23、25 題編造 0 分，第 21 題給了一般性的回答 0 分，對照題第 26 題 1 分、第 27、28 題 0 分。
 
@@ -291,7 +295,7 @@ J 組在全部 23 題取回的片段都與 D 組完全相同，所以所有差�
 
 | 模型 | 下載大小 | 實際記憶體（`ollama ps`） | 是否在 GPU 上執行 | 生成速度（tokens/s） | 平均查詢（秒） | 評估分數（/20） | 引用正確率 | 主觀品質備註 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| qwen2.5-coder:3b | 約 1.9GB | {待填} | 否（Codespaces，只有 CPU） | 12.4（Codespaces 4 核心；prompt eval 25.3） | {待填} | 依檢索組別 3～9 / 20（AI 判讀，§4a）；基準線 5 | {待填} | 沒取回正確程式碼時，常引用錯的檔案或編造程式碼 |
+| qwen2.5-coder:3b | 約 1.9GB | {待填} | 否（Codespaces，只有 CPU） | 12.4（Codespaces 4 核心；prompt eval 25.3） | 25.5（`TOP_K=4`）／30.7（`TOP_K=8`），10 題總耗時平均（2026-11-02，§3） | 依檢索組別 3～9 / 20（AI 判讀，§4a）；基準線 5 | {待填} | 沒取回正確程式碼時，常引用錯的檔案或編造程式碼 |
 | qwen2.5-coder:14b | 約 9GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | qwen2.5-coder:32b | 約 20GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
@@ -311,6 +315,8 @@ J 組在全部 23 題取回的片段都與 D 組完全相同，所以所有差�
 | 2026-11-02 | 含門檻、rerank（假的交叉編碼器）與校準腳本的後端單元測試 | 157 個通過（約 7 秒，不需網路、不下載模型） |
 | 2026-11-02 | backend 映像檔大小，預設／`INSTALL_RERANK=true`（`docker images`，linux/amd64） | 616 MB／2.14 GB（+1.5 GB：torch CPU 版、transformers、scipy、scikit-learn 等；不含模型） |
 | 2026-11-03 | 含提示 v3、範圍外題組與拒答率／誤拒率的後端單元測試 | 170 個通過（約 7 秒，不需網路） |
+| 2026-11-05 | 含拒答計分修正（ADR 0019）的後端單元測試 | 183 個通過（約 7 秒，不需網路） |
+| 2026-11-05 | 含 `QUERY_GLOSSARY`（ADR 0020）的後端單元測試 | 200 個通過（約 7 秒，不需網路） |
 
 ## 量測方式
 

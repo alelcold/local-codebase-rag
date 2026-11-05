@@ -15,7 +15,7 @@
 | 3 | Docker on a Mac can't use the GPU? Lessons from deploying a local LLM | **Draft** (zh-TW and English). Open `{待填}`: Mac numbers, the 504 test beyond 100 s, restart test, screenshots | `03-local-llm-deployment-pitfalls.zh-TW.md`, `03-local-llm-deployment-pitfalls.en.md` |
 | 4 | 3B vs. 14B vs. 32B local models | Not started (needs Mac and GPU-instance measurements) | — |
 | 5 | How to evaluate RAG answer quality | Not started (the evaluation tool exists; ADR 0012) | — |
-| 6 | Improving RAG retrieval with data | **Draft** (zh-TW and English), **automatic metrics only; manual correctness not judged yet**. Open: manual scoring, Mac 14B run, screenshots and charts | `06-data-driven-rag-retrieval.zh-TW.md`, `06-data-driven-rag-retrieval.en.md` |
+| 6 | Improving RAG retrieval with data | **Draft** (zh-TW and English). Correctness is **AI-judged** (5 least certain scores re-checked by a person); defaults recorded in ADR 0018. Open: a person confirming the other scores, group K (`QUERY_GLOSSARY`), Mac 14B run, screenshots and charts | `06-data-driven-rag-retrieval.zh-TW.md`, `06-data-driven-rag-retrieval.en.md` |
 
 ## Article 1 — Why I built an on-prem codebase RAG
 
@@ -96,7 +96,7 @@
   6. What did not help, what was kept off by default, and why (the "decision rule" of the experiment plan).
 - **Figures**: one chart of Defining file retrieved and Manual correctness across groups A → I; the calibration score distribution (expected vs. other); a latency stack (retrieval / rerank / first token).
 - **Data**: all from `docs/metrics.md` §4a, §4b, §4c, §6.
-- **Draft** (2026-11-03): `06-data-driven-rag-retrieval.{zh-TW,en}.md`. The experiment plan has since been run, so the draft differs from the outline above: group G (threshold) was **not run** because calibration found no usable value (correct excerpts median cosine 0.616 vs. irrelevant 0.604; 0.70 would drop 25/27 = 93%); group I was redefined as hybrid + split + rerank; group D was added and showed that the hybrid gain on identifier questions is already delivered by split retrieval; group J (prompt v3) was added and not adopted (8/9 false refusals). The draft's thesis became "tried many common techniques, kept one switch". Manual correctness is not judged for any group, so all results are labelled "automatic metrics only".
+- **Draft** (2026-11-03): `06-data-driven-rag-retrieval.{zh-TW,en}.md`. The experiment plan has since been run, so the draft differs from the outline above: group G (threshold) was **not run** because calibration found no usable value (correct excerpts median cosine 0.616 vs. irrelevant 0.604; 0.70 would drop 25/27 = 93%); group I was redefined as hybrid + split + rerank; group D was added and showed that the hybrid gain on identifier questions is already delivered by split retrieval; group J (prompt v3) was added and not adopted (8/9 false refusals). The draft's thesis became "tried many common techniques, kept one switch". Correctness has since been scored 0–2 per answer by AI (5 least certain re-checked by a person; PR #20): split retrieval 11 → 17 of 30, the same 17 as the rerank setup, and the final defaults are in ADR 0018 (Codespaces: only `SPLIT_RETRIEVAL=true`, `DOC_TOP_K=1`). `QUERY_GLOSSARY` (ADR 0020) is implemented but group K has not been run, so the article lists it as a next step.
 
 ## Publishing checklist (each article)
 
@@ -123,7 +123,7 @@
 | 3 | Mac Docker 用不到 GPU？地端 LLM 部署踩坑紀錄 | **草稿**（繁中與英文）。待補 `{待填}`：Mac 數據、超過 100 秒的 504 測試、重啟測試、截圖 | `03-local-llm-deployment-pitfalls.zh-TW.md`、`03-local-llm-deployment-pitfalls.en.md` |
 | 4 | 3B vs 14B vs 32B 地端模型實測 | 尚未開始（需要 Mac 與 GPU 機器的量測） | — |
 | 5 | 如何評估 RAG 回答品質 | 尚未開始（評估工具已完成，ADR 0012） | — |
-| 6 | 用數據改善 RAG 檢索 | **草稿**（繁中與英文），**僅自動指標，正確性評分待補**。待補：人工評分、Mac 14B 實測、截圖與圖表 | `06-data-driven-rag-retrieval.zh-TW.md`、`06-data-driven-rag-retrieval.en.md` |
+| 6 | 用數據改善 RAG 檢索 | **草稿**（繁中與英文）。正確性為 **AI 評分**（最不確定的 5 題由人複核），預設值記錄在 ADR 0018。待補：由人確認其餘分數、K 組（`QUERY_GLOSSARY`）、Mac 14B 實測、截圖與圖表 | `06-data-driven-rag-retrieval.zh-TW.md`、`06-data-driven-rag-retrieval.en.md` |
 
 ## 第 1 篇 — 為什麼做地端 codebase RAG
 
@@ -204,7 +204,7 @@
   6. 哪些沒有幫助、哪些維持預設關閉，以及原因（實驗計畫的「決策規則」）。
 - **圖表**：A → I 各組的定義檔命中與人工判定正確性折線圖；校準的分數分布（預期 vs. 其他）；延遲堆疊圖（檢索／rerank／首字）。
 - **數據**：全部取自 `docs/metrics.md` §4a、§4b、§4c、§6。
-- **草稿**（2026-11-03）：`06-data-driven-rag-retrieval.{zh-TW,en}.md`。實驗計畫已經跑完，所以草稿和上面的大綱不同：G 組（門檻）**沒有執行**，因為校準找不到可用的值（正確片段 cosine 中位數 0.616 vs 不相關 0.604；0.70 會丟掉 25/27 = 93%）；I 組重新定義為混合 + 分類 + rerank；補跑了 D 組，發現混合檢索在識別字題的增益其實分類取回就做到了；新增 J 組（prompt v3）並不採用（誤拒 8/9）。草稿主軸改成「試了很多常見技巧，只留下一個開關」。人工正確性目前一組都沒評分，所以所有結果都標註「僅自動指標」。
+- **草稿**（2026-11-03）：`06-data-driven-rag-retrieval.{zh-TW,en}.md`。實驗計畫已經跑完，所以草稿和上面的大綱不同：G 組（門檻）**沒有執行**，因為校準找不到可用的值（正確片段 cosine 中位數 0.616 vs 不相關 0.604；0.70 會丟掉 25/27 = 93%）；I 組重新定義為混合 + 分類 + rerank；補跑了 D 組，發現混合檢索在識別字題的增益其實分類取回就做到了；新增 J 組（prompt v3）並不採用（誤拒 8/9）。草稿主軸改成「試了很多常見技巧，只留下一個開關」。之後已由 AI 逐題評 0～2 分（最不確定的 5 題由人複核，PR #20）：分類取回 11 → 17（/30），與 rerank 組同為 17；最終預設值記錄在 ADR 0018（Codespaces 只開 `SPLIT_RETRIEVAL=true`、`DOC_TOP_K=1`）。`QUERY_GLOSSARY`（ADR 0020）已實作，但 K 組還沒跑，所以文章把它列為下一步。
 
 ## 發布前檢查（每篇）
 

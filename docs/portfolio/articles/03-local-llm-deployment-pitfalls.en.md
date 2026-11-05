@@ -188,7 +188,7 @@ On every start, `.devcontainer/post-start.sh`:
 4. Indexes the sample project if Qdrant has no index yet.
 5. Runs `scripts/doctor.sh` as a health check and prints the URL.
 
-`devcontainer.json` also hard-codes the network decisions: `hostRequirements` asks for 4 CPUs / 16 GB / 32 GB; only port 8080 (the frontend) is forwarded, while 11434 (Ollama) and 6333 (Qdrant) are set to `ignore` and are never forwarded, so the security note from Pitfall 1 no longer depends on anyone remembering it. `postCreateCommand` creates `.env` from `.env.codespaces` (`qwen2.5-coder:3b`, `TOP_K=4`, `LLM_NUM_CTX=8192`).
+`devcontainer.json` also hard-codes the network decisions: `hostRequirements` asks for 4 CPUs / 16 GB / 32 GB; only port 8080 (the frontend) is forwarded, while 11434 (Ollama) and 6333 (Qdrant) are set to `ignore` and are never forwarded, so the security note from Pitfall 1 no longer depends on anyone remembering it. `postCreateCommand` creates `.env` from `.env.codespaces` (`qwen2.5-coder:3b`, `TOP_K=4`, `LLM_NUM_CTX=8192`, plus split retrieval `SPLIT_RETRIEVAL=true` / `DOC_TOP_K=1`, ADR 0018).
 
 Result: after rebuilding (or recreating) the codespace, `scripts/doctor.sh` passed 11 of 11 checks and I asked the first questions from the browser without typing a command (devlog 2026-11-02). Time from creating the codespace until the UI can answer: {待填}. **Whether Ollama and the stack come back after stopping and starting the codespace has not been tested yet** (an open item in devlog 2026-11-02), so "Pitfall 2 is solved" currently rests on the design, not on a test.
 
@@ -394,7 +394,7 @@ The smoke test deliberately uses the 0.5B model. It answers "does the pipeline r
 
 | Item | Value |
 | --- | --- |
-| Backend unit tests | 56 after the timeout work, 70 after streaming (about 2 s, no network); 170 on `main` at the time of writing (about 7 s, metrics §6) |
+| Backend unit tests | 56 after the timeout work, 70 after streaming (about 2 s, no network); 200 on `main` at the time of this update (about 7 s, metrics §6) |
 | Problems found in Codespaces that unit tests could not catch | The three pitfalls in this article plus the Git LFS bonus (full list from the test log: {待填}) |
 
 ### Mac M2 (not measured yet)
@@ -449,7 +449,7 @@ Next steps:
 - [ ] Test a streaming query **longer than 100 seconds** from the browser in Codespaces and confirm the forwarder does not cut it (the 43.8-second run is not enough to show that).
 - [ ] Stop and start the codespace, confirm Ollama and the stack come back by themselves (`./scripts/doctor.sh`), and record the time from creation until the UI can answer.
 
-Source code, ADRs and devlogs are all in the repo: {待填: repo URL}
+Source code, ADRs and devlogs are all in the repo: https://github.com/alelcold/local-codebase-rag
 
 ---
 

@@ -349,6 +349,8 @@
 - `RagService.retrieve` in `backend/app/rag.py`: vector list + BM25 list + identifier-definition list, fused with RRF when `HYBRID_SEARCH=true`; each source records `matched_by`.
 - `extract_identifiers` and `KeywordIndex.identifier_matches` in `backend/app/retrieval.py`.
 - Split retrieval (`SPLIT_RETRIEVAL`, `DOC_TOP_K`): a related fix for a different cause — docs crowding out code — by capping documentation slots. ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md).
+- Query glossary (`QUERY_GLOSSARY`, `backend/app/glossary.py`, `glossary/sample-game-frontend.yaml`): maps Chinese terms in the question to identifiers for the BM25 and identifier channels, because those index ASCII only. It needs `HYBRID_SEARCH=true`. Implemented and off by default; its end-to-end experiment (group K) has not been run. ADR [0020](../decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md).
+- Result in this repo (Codespaces, 3B, one run per group): hybrid search reached 3/3 defining files on the identifier questions, but split retrieval alone reached 3/3 too, and on the main set hybrid pushed one question out. Only split retrieval is on by default. ADR [0018](../decisions/0018-codespaces-default-retrieval-settings.md).
 
 **Interview questions**:
 - Give a query where dense retrieval fails and BM25 succeeds, and one the other way round.
@@ -404,6 +406,7 @@
 **In this repo**:
 - `SCORE_THRESHOLD` (empty = off) in `.env.example`; applied to the vector channel before fusion in `retrieve_detailed()` (`backend/app/rag.py`); identifier hits are exempt. ADR [0014](../decisions/0014-similarity-threshold.md).
 - `scripts/calibrate_threshold.py`: reads evaluation reports, groups by embedding, prints drops / blocks per candidate and a suggestion, or "not enough data". `vector_score` on every source makes this possible.
+- Result in this repo: no value can be calibrated. The median cosine is 0.616 for expected excerpts and 0.604 for the others, and 0.70 would drop 25 of 27 (93%) of the correct excerpts, so `SCORE_THRESHOLD` stays empty. ADR [0014](../decisions/0014-similarity-threshold.md), [0018](../decisions/0018-codespaces-default-retrieval-settings.md).
 
 **Interview questions**:
 - Why is 0.7 a bad universal threshold? What changes the score range?
@@ -440,6 +443,7 @@
 **In this repo**:
 - `RERANK`, `RERANK_MODEL`, `RERANK_CANDIDATES` (10), `RERANK_TOP_N` (3), `RERANK_MAX_LENGTH`; image built with `INSTALL_RERANK=true` (+1.5 GB). Order: threshold → fusion → split → rerank → code first. ADR [0015](../decisions/0015-rerank.md).
 - `rerank_seconds` in the stream's `done` event and in evaluation reports; `FakeReranker` in `backend/tests/conftest.py`.
+- Result in this repo: rerank alone left the main-set defining file at 0/3. Combined with hybrid and split retrieval it gave the best retrieval, but the same 17 of 30 correct-answer points as split retrieval alone, at +4.8 s of rerank and about +10 s to first token, so it stays off. ADR [0015](../decisions/0015-rerank.md), [0018](../decisions/0018-codespaces-default-retrieval-settings.md).
 
 **Interview questions**:
 - Where would you put a rerank stage in a RAG pipeline that also has a document quota? Why?
@@ -803,6 +807,8 @@
 - `backend/app/rag.py` 的 `RagService.retrieve`：`HYBRID_SEARCH=true` 時，以 RRF 融合向量清單、BM25 清單、識別字定義清單；每個引用片段記錄 `matched_by`。
 - `backend/app/retrieval.py` 的 `extract_identifiers` 與 `KeywordIndex.identifier_matches`。
 - 分類取回（`SPLIT_RETRIEVAL`、`DOC_TOP_K`）：針對另一個原因（文件擠掉程式碼）的相關修正，限制文件的名額。ADR [0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)。
+- 查詢詞彙表（`QUERY_GLOSSARY`、`backend/app/glossary.py`、`glossary/sample-game-frontend.yaml`）：把問題中的中文詞對應到識別字，給只索引 ASCII 的 BM25 與識別字通道使用，需搭配 `HYBRID_SEARCH=true`。已實作、預設關閉，端到端實驗（K 組）還沒跑。ADR [0020](../decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md)。
+- 本 repo 的結果（Codespaces、3B、每組一次）：混合檢索讓識別字題的定義檔命中達到 3/3，但單獨的分類取回也是 3/3，而且在主要題組還擠掉一題。預設只開分類取回。ADR [0018](../decisions/0018-codespaces-default-retrieval-settings.md)。
 
 **面試可能問**：
 - 舉一個 dense 檢索失敗、BM25 成功的查詢，再舉一個相反的例子。
@@ -858,6 +864,7 @@
 **本 repo 對應位置**：
 - `.env.example` 的 `SCORE_THRESHOLD`（空值 = 關閉）；在 `backend/app/rag.py` 的 `retrieve_detailed()` 中、融合之前套用在向量那一路；識別字的結果不受影響。ADR [0014](../decisions/0014-similarity-threshold.md)。
 - `scripts/calibrate_threshold.py`：讀取評估報告，依 embedding 分組，列出每個候選值丟掉／擋掉的片段數與建議值，或說明「資料不足」。每個引用片段的 `vector_score` 讓這件事成為可能。
+- 本 repo 的結果：沒有可校準的值。預期片段的 cosine 中位數 0.616、其他片段 0.604，0.70 會丟掉 27 個正確片段中的 25 個（93%），所以 `SCORE_THRESHOLD` 維持空白。ADR [0014](../decisions/0014-similarity-threshold.md)、[0018](../decisions/0018-codespaces-default-retrieval-settings.md)。
 
 **面試可能問**：
 - 為什麼 0.7 不適合當通用門檻？哪些因素會改變分數範圍？
@@ -894,6 +901,7 @@
 **本 repo 對應位置**：
 - `RERANK`、`RERANK_MODEL`、`RERANK_CANDIDATES`（10）、`RERANK_TOP_N`（3）、`RERANK_MAX_LENGTH`；映像檔以 `INSTALL_RERANK=true` 建置（+1.5 GB）。順序：門檻 → 融合 → 分類取回 → rerank → 程式碼在前。ADR [0015](../decisions/0015-rerank.md)。
 - 串流 `done` 事件與評估報告中的 `rerank_seconds`；`backend/tests/conftest.py` 的 `FakeReranker`。
+- 本 repo 的結果：單獨使用 rerank，主要題組的定義檔命中仍是 0/3；搭配混合檢索與分類取回時檢索最好，但答對的分數與單獨的分類取回同為 17/30，要多 4.8 秒 rerank、首字延遲多約 10 秒，所以維持關閉。ADR [0015](../decisions/0015-rerank.md)、[0018](../decisions/0018-codespaces-default-retrieval-settings.md)。
 
 **面試可能問**：
 - RAG 流程中同時有文件配額時，rerank 要放在哪裡？為什麼？

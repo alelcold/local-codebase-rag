@@ -36,7 +36,7 @@
 
 - **程式碼不離開本機**：LLM 與 embedding 模型用 Ollama 在 Mac 上執行，沒有任何雲端 API，每次查詢的 API 成本為零（[ADR 0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md)）。
 - **回答可以驗證**：每個回答都附上 `檔案:行號` 引用，點開就能核對，不必相信模型。
-- **用數據調整**：檢索方式的每個改動都是 `.env` 開關、預設關閉，用固定題庫跑自動評估後才決定要不要採用（見[用數據做決策](#用數據做決策)）。
+- **用數據調整**：檢索方式的每個改動都是 `.env` 開關，後端程式預設全部關閉；用固定題庫跑自動評估後才決定要不要採用（見[用數據做決策](#用數據做決策)）。結論是目前只有分類取回（`SPLIT_RETRIEVAL`、`DOC_TOP_K=1`）採用，而且只寫進 Codespaces 範本 `.env.codespaces`（[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)）。
 
 ```mermaid
 flowchart LR
@@ -56,12 +56,12 @@ flowchart LR
   project -. "唯讀掛載 /codebase<br/>tree-sitter／Markdown 切塊、增量索引" .-> be
 ```
 
-一次查詢在後端經過的步驟（除了向量檢索，其他都是 `.env` 開關，預設關閉）：
+一次查詢在後端經過的步驟（除了向量檢索，其他都是 `.env` 開關。後端程式預設全部關閉；Codespaces 範本只開 `SPLIT_RETRIEVAL`，[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)）：
 
 ```mermaid
 flowchart LR
   q["問題"] --> vec["向量檢索<br/>（可設 SCORE_THRESHOLD）"]
-  q --> kw["BM25 + 識別字定義比對<br/>HYBRID_SEARCH"]
+  q --> kw["BM25 + 識別字定義比對<br/>HYBRID_SEARCH<br/>（QUERY_GLOSSARY 選用）"]
   vec --> rrf["RRF 合併"]
   kw --> rrf
   rrf --> split["程式碼／文件分開取回<br/>SPLIT_RETRIEVAL、DOC_TOP_K"]
@@ -75,23 +75,28 @@ flowchart LR
 | --- | --- | --- |
 | **地端隱私** | Ollama 直接裝在 macOS 上使用 Metal GPU（Docker 在 Mac 上用不到 GPU），Qdrant、後端、前端在 Docker；前端預設只綁定本機，後端與 Qdrant 一律只綁定本機 | [ADR 0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md)、[0002](docs/decisions/0002-ollama-outside-docker-on-mac.md) |
 | **串流回應** | `POST /query/stream`（SSE）：檢索完先送引用、再逐 token 送回答，閒置時每 10 秒送 heartbeat，避開轉發代理約 100 秒切斷沒有回應的連線；nginx 對串流路徑關閉緩衝 | [ADR 0010](docs/decisions/0010-streaming-responses.md) |
-| **混合檢索與分類取回** | 向量 + BM25 + 識別字定義比對，以 RRF 合併；程式碼與文件分開取回，避免文件擠掉程式碼；另有相似度門檻與 cross-encoder rerank。全部是開關，預設關閉 | [ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[0014](docs/decisions/0014-similarity-threshold.md)、[0015](docs/decisions/0015-rerank.md) |
+| **混合檢索與分類取回** | 向量 + BM25 + 識別字定義比對，以 RRF 合併；程式碼與文件分開取回，避免文件擠掉程式碼；另有相似度門檻、cross-encoder rerank 與查詢詞彙表（中文詞 → 識別字）。全部是開關，後端程式預設關閉；實驗後只有分類取回寫進 Codespaces 範本 | [ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[0014](docs/decisions/0014-similarity-threshold.md)、[0015](docs/decisions/0015-rerank.md)、[0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)、[0020](docs/decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md) |
 | **語法感知切塊、增量索引** | tree-sitter 依函式／class 切塊（過大的 class 依 method 再切）、Markdown 依標題切；以內容雜湊做增量索引，切塊設定改變時自動全量重建 | [ADR 0004](docs/decisions/0004-chunking-by-file-type.md) |
 | **自動化評估與實驗** | `evaluate.py` 用 10 題主要題組＋5 題識別字題組量測延遲、引用命中、定義檔命中、簡體字、陷阱題拒答；`compare.py` 比較兩次執行；`calibrate_threshold.py` 從結果校準門檻；`benchmark-mac.sh` 一鍵完成 Mac 實測 | [ADR 0012](docs/decisions/0012-automated-evaluation-metrics.md)、[0017](docs/decisions/0017-one-command-mac-benchmark.md)、[實驗計畫](docs/evaluation/experiment-plan-retrieval.md) |
-| **CI** | GitHub Actions：單元測試（Ollama、Qdrant 皆以假物件取代，157 個測試約 7 秒）、compose 設定檢查、映像檔 build、對 `main` 的 PR 跑端到端冒煙測試（runner 上的 Ollama + `qwen2.5-coder:0.5b`） | [ADR 0008](docs/decisions/0008-ci-design.md)、[metrics §6](docs/metrics.md#6-engineering-quality) |
+| **CI** | GitHub Actions：單元測試（Ollama、Qdrant 皆以假物件取代，200 個測試約 7 秒）、compose 設定檢查、映像檔 build、對 `main` 的 PR 跑端到端冒煙測試（runner 上的 Ollama + `qwen2.5-coder:0.5b`） | [ADR 0008](docs/decisions/0008-ci-design.md)、[metrics §6](docs/metrics.md#6-engineering-quality) |
 | **Dev Container** | 開啟 GitHub Codespace 就自動安裝 Ollama、拉模型、啟動服務、建立索引；`scripts/doctor.sh` 依序做 12 項檢查並印出修正指令 | [ADR 0011](docs/decisions/0011-devcontainer-for-codespaces.md) |
 
 ## 用數據做決策
 
-檢索方式的改動都先在 Codespaces（CPU、`qwen2.5-coder:3b`、`TOP_K=4`）用固定題庫逐項比較，再決定要不要採用。下面的數字都來自 [`docs/metrics.md` §4a](docs/metrics.md#4a-retrieval-switches-adr-0013) 與 [devlog 2026-11-03](docs/devlog/2026-11-03.md)，是自動指標（人工判定正確性尚未完成）。
+檢索方式的改動都先在 Codespaces（CPU、`qwen2.5-coder:3b`、`TOP_K=4`）用固定題庫逐項比較，再決定要不要採用，每組只跑一次。下面的數字來自 [`docs/metrics.md` §4a／§4c](docs/metrics.md#4a-retrieval-switches-adr-0013)、[devlog 2026-11-03](docs/devlog/2026-11-03.md) 與 [devlog 2026-11-05](docs/devlog/2026-11-05.md)。正確性分數是 AI（Claude）逐題對照原始碼評 0～2 分，只有最不確定的 5 題由人複核，其餘未經人確認；兩個題組共 30 分（[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)）。
+
+**最終結論（ADR 0018）**：Codespaces 範本 `.env.codespaces` 只開 `SPLIT_RETRIEVAL=true`、`DOC_TOP_K=1`（`PROMPT_VARIANT=v1`）；混合檢索、Rerank、chunk metadata、相似度門檻、prompt v2／v3 都不採用，維持關閉。`QUERY_GLOSSARY` 已實作但尚未實驗（K 組），預設關閉。Mac 的 `.env.example` 沒有改，等 Mac 實測。
 
 | 問題 | 實驗 | 結果 | 決定 |
 | --- | --- | --- | --- |
-| 「在哪裡設定」的問題，取回的幾乎都是文件 | A 基準線 → C 分類取回（`DOC_TOP_K=1`） | 取回片段中的文件比例 **95% → 25%**；主要題組「有取回程式碼檔」**1/9 → 6/9** | 列入 Mac 實測（D 組）；預設值等人工評分後再決定 |
-| 問題直接寫出識別字（`INVINCIBLE_MS`）時找不到定義 | A → B 混合檢索 | 識別字題組「取回定義檔」**1/3 → 3/3**；每組的檢索時間都只有 0.07–0.21 秒 | 與分類取回一起列入 Mac 實測（D 組） |
-| 陷阱題（不存在的功能）應該回答「找不到」 | 用 A～F 的結果校準 `SCORE_THRESHOLD` | 相關與不相關片段的 cosine 中位數幾乎相同（0.616 vs 0.604）；常見的 0.70 會丟掉 **25/27（93%）**該取回的片段，0.50 就已經丟掉 2/27 | **不採用門檻**，G 組不執行（[校準輸出](docs/evaluation/results/2026-11-03-threshold-calibration.md)） |
-| 通用 reranker 能不能把定義程式碼排上來 | H 只開 rerank；D → I 在混合 + 分類上再加 rerank | H：主要題組定義檔仍 **0/3**、文件比例 85%；`bge-reranker-base` 給 Markdown 0.8–0.99 分、程式碼多半 < 0.1。I：定義檔 0/3 → 3/3，但被排上來的程式碼只有 0.0027 分、只有 3 題各一次，每次查詢多 **4.8 秒** rerank（CPU） | 通用 reranker 對程式碼的判斷有限：維持選用、預設關閉；Mac 實測用 `--with-rerank` 另跑 |
+| 「在哪裡設定」的問題，取回的幾乎都是文件 | A 基準線 → C 分類取回（`DOC_TOP_K=1`） | 取回片段中的文件比例 **95% → 25%**；主要題組「有取回程式碼檔」**1/9 → 6/9**；正確性 **11 → 17**（/30），重點在文件的第 2、3、6 題沒有退步 | **採用**，寫進 `.env.codespaces`（Mac 等實測） |
+| 問題直接寫出識別字（`INVINCIBLE_MS`）時找不到定義 | A → B 混合檢索 | 識別字題組「取回定義檔」**1/3 → 3/3**，檢索時間 0.07–0.21 秒；但 C 單獨也是 3/3，D（混合 + 分類）正確性 16 < C 的 17，主要題組還擠掉第 8 題 | 不採用：分類取回之上沒有額外效果，維持選用 |
+| 陷阱題（不存在的功能）應該回答「找不到」 | 用 A、C 的結果校準 `SCORE_THRESHOLD` | 相關與不相關片段的 cosine 中位數幾乎相同（0.616 vs 0.604）；常見的 0.70 會丟掉 **25/27（93%）**該取回的片段，0.50 就已經丟掉 2/27 | **不採用門檻**，G 組不執行（[校準輸出](docs/evaluation/results/2026-11-03-threshold-calibration.md)） |
+| 通用 reranker 能不能把定義程式碼排上來 | H 只開 rerank；D → I 在混合 + 分類上再加 rerank | H：主要題組定義檔仍 **0/3**、文件比例 85%；`bge-reranker-base` 給 Markdown 0.8–0.99 分、程式碼多半 < 0.1。I：定義檔 0/3 → 3/3，但被排上來的程式碼只有 0.0027 分，每次查詢多 **4.8 秒** rerank、首字延遲 D → I 多 **9.6 秒**（17.2 → 26.8 秒）；正確性 I 與 C 同為 17/30 | 不採用：成本高、答案沒有更好；C + rerank 尚未測 |
+| chunk metadata 與 prompt v2 | F（C + 混合 + metadata + v2） | 定義檔 0/3（C 為 1/3）、簡體字回答仍有 2 個；正確性 16/30（C 為 17）；改 metadata 要全量重建索引 | 不採用 |
+| 防幻覺 prompt v3 | J（D + v3），另跑範圍外題組 | 陷阱題拒答 **5/5**，但主要題組可回答題誤拒 **8/9**；正確性 8/30 | **不採用**（誤拒率必須是 0，[ADR 0016](docs/decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md)） |
 | B 組首字延遲看起來快一倍（6.7 vs 13.0 秒） | 逐題比對 JSON | 7/10 題取回的片段與 A 完全相同，其中 3 題首字只要約 0.2 秒：是 Ollama 的提示快取，不是混合檢索 | 延遲比較另加註記；`benchmark-mac.sh` 在每次評估前卸載模型 |
+| 中文問題沒有識別字，BM25 無從比對（第 2 題在 8 組都是 0 分） | `QUERY_GLOSSARY`：中文詞 → 識別字（[ADR 0020](docs/decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md)） | 只做了離線檢查（僅關鍵字與識別字通道，詞彙表由看過題目的人寫，是上限）：預期程式碼檔進前 4 名 3/19 → 16/19。端到端的 K 組實驗 {待填} | 已實作、預設關閉；**K 組尚未實驗** |
 
 Mac M2 上的同一組比較用 [`scripts/benchmark-mac.sh`](#在-mac-實機測試一鍵量測) 一個指令產生（數據 {待填}）。
 
@@ -470,7 +475,7 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 | `LLM_NUM_CTX` | `16384` | LLM 上下文長度；太小會截斷引用的程式碼 |
 | `TOP_K` | `8` | 預設取回的片段數 |
 | `HYBRID_SEARCH` | `false` | 混合檢索：向量 + BM25 + 識別字定義比對，以 RRF 合併（[ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)） |
-| `SPLIT_RETRIEVAL` / `DOC_TOP_K` | `false` / `1` | 程式碼與文件分開取回：文件最多 `DOC_TOP_K` 段，其餘給程式碼 |
+| `SPLIT_RETRIEVAL` / `DOC_TOP_K` | `false` / `1`（`.env.codespaces` 為 `true` / `1`） | 程式碼與文件分開取回：文件最多 `DOC_TOP_K` 段，其餘給程式碼。Codespaces 範本已開啟（[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)） |
 | `QUERY_GLOSSARY` / `QUERY_GLOSSARY_PATH` / `GLOSSARY_DIR` | `false` / `/glossary/sample-game-frontend.yaml` / `./glossary` | 查詢詞彙表：問題中的中文詞（例如「連擊」）把對應識別字加進 BM25 與識別字通道。**需要 `HYBRID_SEARCH=true` 才有作用**；草稿用 `scripts/build_glossary.py` 產生（[ADR 0020](docs/decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md)） |
 | `CHUNK_METADATA` | `false` | 把路徑、類型、符號、定義／export 的名稱放進 embedding 內容（**需重新索引**，會自動全量重建） |
 | `PROMPT_VARIANT` | `v1` | `v2` = 一律繁體中文回答，並先說明程式碼位置（檔案與行號）；`v3` = 以 v1 為基礎，片段沒有直接提到問題主題時明確回答找不到，並一律使用繁體中文（[ADR 0016](docs/decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md)） |
@@ -542,7 +547,7 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 - 確認索引是最新的（執行一次增量索引，結果會顯示新增/更新了哪些檔案）
 - 展開引用片段，看取回的程式碼是否相關。如果不相關，換個說法或直接提到函式/class 名稱
 - 提高「參考片段」數量
-- 「在哪裡設定」類的問題只引用到文件、沒有引用程式碼時，試試 `SPLIT_RETRIEVAL=true`（限制文件名額）與 `HYBRID_SEARCH=true`（問題中直接寫出識別字，例如 `INVINCIBLE_MS`、`ScoreSystem`，會精準命中定義它的程式碼）；`CHUNK_METADATA=true` 需要重新索引。逐項比較的方法見 [實驗計畫](docs/evaluation/experiment-plan-retrieval.md)
+- 「在哪裡設定」類的問題只引用到文件、沒有引用程式碼時，試試 `SPLIT_RETRIEVAL=true`（限制文件名額；Codespaces 範本已開，實驗中效果最好，[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)）。`HYBRID_SEARCH=true`（問題中直接寫出識別字，例如 `INVINCIBLE_MS`，會精準命中定義它的程式碼）在實驗中沒有比單獨的分類取回更好，`CHUNK_METADATA=true` 沒有增益且需要重新索引，可在自己的專案上依 [實驗計畫](docs/evaluation/experiment-plan-retrieval.md) 重新比較；中文問題沒有識別字時，可試 `QUERY_GLOSSARY=true`（需搭配 `HYBRID_SEARCH=true`，尚未實驗，[ADR 0020](docs/decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md)）
 - 確認相關檔案的副檔名在 `INDEX_EXTENSIONS` 內，且沒有被 `EXCLUDE_DIRS` / `EXCLUDE_PATTERNS` / `MAX_FILE_BYTES` 排除（索引結果會列出因檔案過大而略過的檔案）
 - 可以試試其他 embedding 模型，例如 `EMBED_MODEL=mxbai-embed-large`（`ollama pull` 後執行一次索引即可，會自動使用新的 collection）
 
@@ -662,7 +667,7 @@ git pull && docker compose up -d --build
 
 1. 在 GitHub 的 repo 頁面按 **Code → Codespaces → Create codespace on main**。建議使用 **4-core** 機型（[`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) 的 `hostRequirements` 會預先選好）。
 2. 等待自動設定完成，不用輸入任何指令。第一次約需數分鐘（{待填：實測時間}），可以在終端機的 Creation log 看到進度：
-   - **建立時**（`postCreateCommand`，只執行一次）：安裝 Ollama、`jq` 與 `git-lfs`；沒有 `.env` 時，從 [`.env.codespaces`](.env.codespaces) 建立（`qwen2.5-coder:3b`、`TOP_K=4`、範例專案）。
+   - **建立時**（`postCreateCommand`，只執行一次）：安裝 Ollama、`jq` 與 `git-lfs`；沒有 `.env` 時，從 [`.env.codespaces`](.env.codespaces) 建立（`qwen2.5-coder:3b`、`TOP_K=4`、範例專案、分類取回 `SPLIT_RETRIEVAL=true`／`DOC_TOP_K=1`，[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)）。
    - **每次啟動時**（`postStartCommand`，停止後重開也會執行）：以 `OLLAMA_HOST=0.0.0.0` 在背景啟動 Ollama、等待就緒、拉取缺少的模型、`docker compose up -d --build`、沒有索引時自動建立索引，最後執行 [`scripts/doctor.sh`](scripts/doctor.sh) 並印出網址。
 3. 右下角跳出 8080（**Frontend（查詢介面）**）的通知時，按 **Open in Browser**；或從 **Ports** 面板開啟 8080。
 
@@ -864,7 +869,7 @@ cd frontend && npm install && npm run dev
 ├── docker-compose.ci.yml       # CI 冒煙測試專用的 override
 ├── docker-compose.codespaces.yml # Codespaces 用的 override（由 COMPOSE_FILE 自動套用）
 ├── .env.example                # 所有可設定項目與說明
-├── .env.codespaces             # Codespaces 用的 .env 範本（3b 模型、TOP_K=4）
+├── .env.codespaces             # Codespaces 用的 .env 範本（3b 模型、TOP_K=4、分類取回）
 ├── scripts/
 │   ├── setup.sh                # 檢查 Ollama、拉模型、啟動 compose
 │   ├── index.sh                # 在容器內執行索引器
@@ -873,6 +878,7 @@ cd frontend && npm install && npm run dev
 │   ├── evaluate.py             # 自動化評估：10 題的延遲、引用命中、關鍵字、簡體字 → JSON + Markdown 報告
 │   ├── compare.py              # 比較兩份評估結果（不同模型或 TOP_K）
 │   ├── calibrate_threshold.py  # 從評估結果建議 SCORE_THRESHOLD（ADR 0014）
+│   ├── build_glossary.py       # 從程式碼與文件產生 QUERY_GLOSSARY 詞彙表草稿，供人工審核（ADR 0020）
 │   ├── benchmark-mac.sh        # Mac 一鍵實測：生成速度、GPU、索引、檢索實驗 → 摘要（ADR 0017）
 │   └── benchmark_summary.py    # benchmark-mac.sh 的摘要產生器（欄位對齊 docs/metrics.md）
 ├── backend/                    # FastAPI + LlamaIndex
@@ -886,8 +892,10 @@ cd frontend && npm install && npm run dev
 │   │   ├── rag.py              # 檢索與回答（附檔案行號引用）
 │   │   ├── retrieval.py        # BM25、識別字比對、RRF、程式碼／文件分類取回（ADR 0013）
 │   │   ├── rerank.py           # 選用的交叉編碼器 rerank，延遲載入（ADR 0015）
+│   │   ├── glossary.py         # 選用的查詢詞彙表：中文詞 → 識別字（ADR 0020）
 │   │   └── services.py         # 建立 Ollama / Qdrant 用戶端、健康檢查
 │   └── tests/
+├── glossary/                   # 查詢詞彙表（目前只有範例專案的 sample-game-frontend.yaml）
 ├── frontend/                   # React + Vite，build 後由 nginx 提供並代理 /api
 │   ├── Dockerfile
 │   ├── nginx.conf.template     # nginx 設定（逾時由環境變數帶入；串流路徑關閉緩衝）
@@ -911,6 +919,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [docs/devlog/2026-11-01-codespace-setup.md](docs/devlog/2026-11-01-codespace-setup.md) | Codespaces 環境建置：踩坑與逾時 / Codespaces setup: pitfalls and timeouts |
 | [docs/devlog/2026-11-02.md](docs/devlog/2026-11-02.md) | 串流回答與 Codespaces 的 dev container / Streaming answers and a dev container for Codespaces |
 | [docs/devlog/2026-11-03.md](docs/devlog/2026-11-03.md) | 檢索開關實驗、門檻校準、git-lfs hook / Retrieval switch experiments, threshold calibration, the git-lfs hook |
+| [docs/devlog/2026-11-05.md](docs/devlog/2026-11-05.md) | Codespaces 預設值、拒答計分修正、查詢詞彙表、收尾摘要 / Codespaces defaults, refusal scoring fix, query glossary, wrap-up |
 | **架構決策紀錄 / ADRs** | |
 | [docs/decisions/TEMPLATE.md](docs/decisions/TEMPLATE.md) | ADR 範本 / ADR template |
 | [0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md) | 採用地端 RAG 而非雲端 API / On-prem RAG instead of a cloud API |
@@ -940,6 +949,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [docs/evaluation/experiment-plan-retrieval.md](docs/evaluation/experiment-plan-retrieval.md) | 檢索改善的實驗計畫：組合、指令、預期指標 / Retrieval experiment plan: runs, commands, expected metrics |
 | [docs/metrics.md](docs/metrics.md) | 成本、索引、查詢時間、評估結果、模型比較 / Cost, indexing, latency, evaluation results, model comparison |
 | **作品集 / Portfolio** | |
-| [docs/portfolio/article-series.md](docs/portfolio/article-series.md) | 5 篇技術文章大綱 / Outlines for 5 technical articles |
+| [docs/portfolio/article-series.md](docs/portfolio/article-series.md) | 6 篇技術文章大綱與進度 / Outlines and progress of 6 technical articles |
 | [docs/portfolio/resume.md](docs/portfolio/resume.md) | 履歷條目草稿（中英文）/ Resume bullet drafts (EN and ZH) |
-| [docs/portfolio/articles/](docs/portfolio/articles/) | 技術文章草稿 / Article drafts |
+| [docs/portfolio/articles/](docs/portfolio/articles/) | 技術文章草稿（第 3、6 篇，中英文分檔）/ Article drafts (articles 3 and 6, one file per language) |
+| [docs/portfolio/interview-qa.md](docs/portfolio/interview-qa.md) | 專案介紹稿、21 題面試問答、一頁式 STAR 摘要（中文為主，附英文）/ Pitches, 21 interview questions, one-page STAR summary (Chinese first, English below) |

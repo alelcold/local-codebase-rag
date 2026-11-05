@@ -188,7 +188,7 @@ ss -ltnp | grep 11434
 4. Qdrant 沒有索引時建立索引。
 5. 執行 `scripts/doctor.sh` 做健康檢查，印出網址。
 
-`devcontainer.json` 也把網路面的決定寫死：`hostRequirements` 要求 4 核心／16GB／32GB；只自動轉發 8080（前端），11434（Ollama）與 6333（Qdrant）設為 `ignore`，永遠不會被轉發，坑 1 的資安提醒因此不用靠人記得。`postCreateCommand` 用 `.env.codespaces` 建立 `.env`（`qwen2.5-coder:3b`、`TOP_K=4`、`LLM_NUM_CTX=8192`）。
+`devcontainer.json` 也把網路面的決定寫死：`hostRequirements` 要求 4 核心／16GB／32GB；只自動轉發 8080（前端），11434（Ollama）與 6333（Qdrant）設為 `ignore`，永遠不會被轉發，坑 1 的資安提醒因此不用靠人記得。`postCreateCommand` 用 `.env.codespaces` 建立 `.env`（`qwen2.5-coder:3b`、`TOP_K=4`、`LLM_NUM_CTX=8192`，以及分類取回 `SPLIT_RETRIEVAL=true`／`DOC_TOP_K=1`，ADR 0018）。
 
 結果：重建（或重新建立）codespace 之後，`scripts/doctor.sh` 11 項全部通過，從瀏覽器問得了第一批問題，不需要輸入任何指令（devlog 2026-11-02）。從建立 codespace 到介面可以回答的時間：{待填}。**停止再啟動後 Ollama 會不會自己回來，也還沒實測**（devlog 2026-11-02 的待辦），所以「坑 2 已解決」目前只有設計上的依據。
 
@@ -394,7 +394,7 @@ RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所�
 
 | 項目 | 數值 |
 | --- | --- |
-| 後端單元測試 | 加入逾時處理後 56 個、加入串流後 70 個（約 2 秒，不需網路）；本文定稿時 main 上是 170 個（約 7 秒，metrics §6） |
+| 後端單元測試 | 加入逾時處理後 56 個、加入串流後 70 個（約 2 秒，不需網路）；本文更新時 main 上是 200 個（約 7 秒，metrics §6） |
 | Codespaces 上發現、單元測試抓不到的問題 | 本文三個坑加上 Git LFS 番外（測試紀錄完整清單 {待填}） |
 
 ### Mac M2（尚未實測）
@@ -449,7 +449,7 @@ Claude Code 的花費：第一個建出初版的工作階段約 **7 美元**（m
 - [ ] 在 Codespaces 從瀏覽器實測**超過 100 秒**的串流查詢，確認不會被轉發切斷（43.8 秒的那次不足以證明）。
 - [ ] 停止再啟動 codespace，確認 Ollama 與服務自己回來（`./scripts/doctor.sh`），並記錄從建立到可回答的時間。
 
-原始碼、ADR 與開發日誌都在 repo 裡：{待填：repo 網址}
+原始碼、ADR 與開發日誌都在 repo 裡：https://github.com/alelcold/local-codebase-rag
 
 ---
 
