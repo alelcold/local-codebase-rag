@@ -874,3 +874,20 @@ def test_rescore_recomputes_metrics_and_keeps_manual_scores_and_notes(backend, t
     # A second rescore changes nothing.
     assert ev.rescore(json_path, log=lambda _: None) == []
     assert md_path.read_text() == new_md
+
+
+def test_report_records_query_glossary(backend, tmp_path, questions):
+    """ADR 0020: the run table names the glossary, each answer shows its expansion."""
+    assert ev.retrieval_label({"hybrid_search": True, "rrf_k": 60, "query_glossary": True,
+                               "query_glossary_active": True}) == "hybrid (RRF k=60) + glossary · prompt v1"
+    assert "glossary (no effect: HYBRID_SEARCH off)" in ev.retrieval_label(
+        {"query_glossary": True, "query_glossary_active": False})
+    write_answers(questions)
+    assert ev.main(["--base-url", backend, "--label", "g", "--only", "1", "--no-warmup",
+                    "--out-dir", str(tmp_path)]) == 0
+    report = json.loads(next(tmp_path.glob("*.json")).read_text())
+    report["health"]["glossary"] = {"enabled": True, "path": "/glossary/x.yaml", "terms": 3}
+    report["results"][0]["metrics"]["server"] = {"glossary": {"terms": ["無敵"], "identifiers": ["INVINCIBLE_MS"]}}
+    md = ev.render_markdown(report)
+    assert "| Query glossary (ADR 0020) | `/glossary/x.yaml`, 3 terms |" in md
+    assert "- **Glossary**: 無敵 → `INVINCIBLE_MS`" in md

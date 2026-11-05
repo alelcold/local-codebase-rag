@@ -663,6 +663,9 @@ def retrieval_label(r: dict | None) -> str:
         parts.append(f"threshold ≥ {r.get('score_threshold')}")
     if r.get("rerank"):
         parts.append(f"rerank ({r.get('rerank_model')}, {r.get('rerank_candidates')} → {r.get('rerank_top_n')})")
+    if r.get("query_glossary"):
+        # ADR 0020: only the keyword and identifier channels use it.
+        parts.append("glossary" if r.get("query_glossary_active") else "glossary (no effect: HYBRID_SEARCH off)")
     return f"{' + '.join(parts) or 'vector only (baseline)'} · prompt {r.get('prompt_variant', 'v1')}"
 
 
@@ -715,6 +718,8 @@ def render_markdown(report: dict, preamble: str = "", manual: dict[int, tuple[st
         f"| Warm-up query | {'yes (model load not counted)' if cfg['warmup'] else 'no (question 1 includes model load)'} |",
         f"| Indexed chunks | {(h.get('qdrant') or {}).get('points', '?')} |",
         f"| Retrieval (ADR 0013) | {retrieval_label(h.get('retrieval'))} |",
+        *([f"| Query glossary (ADR 0020) | `{(h.get('glossary') or {}).get('path')}`, "
+           f"{(h.get('glossary') or {}).get('terms')} terms |"] if (h.get("glossary") or {}).get("enabled") else []),
         "",
         "## Summary / 摘要",
         "",
@@ -774,6 +779,10 @@ def render_markdown(report: dict, preamble: str = "", manual: dict[int, tuple[st
             lines.append("- **SCORE_THRESHOLD**: every excerpt was below the threshold; fixed answer, LLM not called")
         if m.get("rerank_seconds") is not None:
             lines.append(f"- **Rerank**: {m['rerank_seconds']} s")
+        g = (m.get("server") or {}).get("glossary")
+        if g is not None:  # QUERY_GLOSSARY in effect (ADR 0020)
+            added = ", ".join(f"`{x}`" for x in g.get("identifiers", []))
+            lines.append(f"- **Glossary**: {'、'.join(g.get('terms', [])) or 'no term matched'}" + (f" → {added}" if added else ""))
         lines += [
             f"- **Retrieved**: {retrieved or '—'}",
             f"- **Missed expected files**: {', '.join(f'`{x}`' for x in m['files']['all']['missed']) or '—'}",
@@ -989,7 +998,7 @@ def main(argv: list[str] | None = None) -> int:
             "project": str(inventory.root.relative_to(ROOT)) if inventory and inventory.root.is_relative_to(ROOT)
             else (str(inventory.root) if inventory else None),
         },
-        "health": {k: health.get(k) for k in ("status", "ollama", "qdrant", "top_k", "retrieval")},
+        "health": {k: health.get(k) for k in ("status", "ollama", "qdrant", "top_k", "retrieval", "glossary")},
         "summary": summarize(results),
         "results": results,
     }

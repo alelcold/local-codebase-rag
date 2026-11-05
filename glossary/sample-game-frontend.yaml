@@ -1,0 +1,59 @@
+# Query glossary for examples/sample-game-frontend (QUERY_GLOSSARY, ADR 0020).
+# 範例專案的查詢詞彙表（QUERY_GLOSSARY，ADR 0020）。
+#
+# Chinese term → identifiers. When QUERY_GLOSSARY=true and HYBRID_SEARCH=true,
+# every term found in a question adds its identifiers to the BM25 query and the
+# identifier channel (the vector channel and the prompt are unchanged).
+# 中文詞 → 識別字。QUERY_GLOSSARY=true 且 HYBRID_SEARCH=true 時，問題中出現的詞，
+# 會把對應識別字加進 BM25 查詢與識別字通道（向量檢索與提示不變）。
+#
+# How it was made: draft from `python3 scripts/build_glossary.py examples/sample-game-frontend`,
+# reviewed by hand (wrong pairs such as 「再以」 removed), then the domain words a
+# player or developer would type added (連擊, 無敵, 生成…). Longer terms win over
+# shorter ones inside them (連擊倍率 over 連擊). A unit test checks every
+# identifier exists in the sample code.
+# 產生方式：先用 build_glossary.py 產生草稿，人工審核（刪掉「再以」之類的錯誤對應），
+# 再補上玩家或開發者會打的領域詞（連擊、無敵、生成…）。長詞優先於包含在內的短詞。
+# 單元測試會檢查每個識別字都存在於範例程式碼中。
+#
+# Caveat for evaluation: these terms were written by someone who had seen the
+# evaluation questions; group K therefore measures an upper bound (ADR 0020).
+# 評估注意：寫詞彙表的人看過評估題目，所以 K 組量到的是上限（ADR 0020）。
+version: 1
+terms:
+  # Lives, damage, invincibility / 生命、受傷、無敵
+  無敵: [INVINCIBLE_MS, INVINCIBLE_BLINK_MS, isInvincible, invincibleMs, takeDamage]
+  受傷: [takeDamage, onPlayerHit, invincibleMs]
+  被擊中: [takeDamage, onPlayerHit]
+  生命: [PLAYER_MAX_LIVES, lives, isDead]
+  條命: [PLAYER_MAX_LIVES, lives]
+  # Score and combo / 分數與連擊
+  連擊倍率: [MAX_COMBO_MULTIPLIER, COMBO_STEP, multiplier, combo, ScoreSystem]
+  連擊: [combo, COMBO_STEP, COMBO_WINDOW_MS, MAX_COMBO_MULTIPLIER, ScoreSystem]
+  倍率: [multiplier, MAX_COMBO_MULTIPLIER, COMBO_STEP]
+  歸零: [reset, combo, COMBO_WINDOW_MS]
+  分數: [ScoreSystem, score, PACKAGE_SCORE, SURVIVAL_POINTS_PER_SECOND]
+  計分: [ScoreSystem, score, PACKAGE_SCORE]
+  最高分: [HIGH_SCORE_KEY, highScore]
+  # Game loop and state / 主迴圈與狀態
+  主迴圈: [Game, frame, FIXED_DT, MAX_FRAME_TIME, accumulator]
+  固定時間步長: [FIXED_DT, accumulator]
+  畫面更新率: [FIXED_DT, MAX_FRAME_TIME, accumulator]
+  暫停: [paused, setPhase, GamePhase]
+  遊戲狀態: [GamePhase, setPhase, phase]
+  # Entities and systems / 物件與系統
+  小行星: [Asteroid, spawnAsteroid, asteroidTimer]
+  包裹: [Package, packageTimer, onPackageCollected, PACKAGE_SCORE]
+  生成: [Spawner, spawnAsteroid, getLevel, LEVELS]
+  頻率: [Spawner, getLevel, LEVELS]
+  關卡: [LEVELS, getLevel, PACKAGES_PER_LEVEL, levelUp]
+  碰撞: [collision, circlesOverlap, findOverlaps, handleCollisions, Circle]
+  衝刺: [DASH_SPEED, DASH_DURATION_MS, DASH_COOLDOWN_MS, startDash, dashCooldownMs]
+  冷卻: [DASH_COOLDOWN_MS, dashCooldownMs]
+  # Input, UI, sound / 輸入、介面、音效
+  按鍵: [KEY_BINDINGS, InputManager]
+  鍵盤: [KEY_BINDINGS, InputManager]
+  失去焦點: [onBlur, held, InputManager]
+  音效: [SoundManager, play]
+  介面: [Hud, Overlay, createUiStore, UiSnapshot]
+  重新渲染: [useSyncExternalStore, createUiStore, subscribe, syncUi]

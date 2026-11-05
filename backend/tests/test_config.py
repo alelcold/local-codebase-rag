@@ -79,6 +79,7 @@ def test_retrieval_toggles_default_off_and_prompt_variant_is_validated(monkeypat
     s = Settings()
     assert (s.hybrid_search, s.split_retrieval, s.chunk_metadata, s.prompt_variant) == (False, False, False, "v1")
     assert s.doc_top_k == 1 and s.rrf_k == 60
+    assert s.query_glossary is False  # ADR 0020: off by default
 
     monkeypatch.setenv("HYBRID_SEARCH", "true")
     monkeypatch.setenv("SPLIT_RETRIEVAL", "1")
@@ -94,6 +95,9 @@ def test_retrieval_toggles_default_off_and_prompt_variant_is_validated(monkeypat
         "prompt_variant": "v2",
         "rrf_k": 60,
         "retrieval_candidates": 30,
+        "query_glossary": False,
+        "query_glossary_active": False,
+        "query_glossary_path": None,
         "score_threshold": None,
         "rerank": False,
         "rerank_model": None,

@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Ollama (LLM `qwen2.5-coder:14b`, embeddings `nomic-embed-text`) | **Natively on the host** (macOS, for Metal GPU). Never in Docker on a Mac. | — |
 | Qdrant vector DB | Docker, named volume `qdrant_data` | `docker-compose.yml` |
-| Backend: FastAPI + LlamaIndex (`/health`, `/index`, `/index/status`, `/query`, `/query/stream` (SSE, ADR 0010)); optional hybrid / split retrieval, similarity threshold, rerank, prompt variants (`.env` switches, ADR 0013–0016) | Docker | `backend/app/`, `retrieval.py`, `rerank.py` |
+| Backend: FastAPI + LlamaIndex (`/health`, `/index`, `/index/status`, `/query`, `/query/stream` (SSE, ADR 0010)); optional hybrid / split retrieval, similarity threshold, rerank, prompt variants, query glossary (`.env` switches, ADR 0013–0016, 0020) | Docker | `backend/app/`, `retrieval.py`, `rerank.py`, `glossary.py` |
 | Indexer (tree-sitter / Markdown-heading chunking, incremental by content hash; full rebuild when `index_config` changes) | Docker, `python -m app.indexer` | `backend/app/indexer.py`, `chunker.py` |
 | Frontend: React + Vite, served by nginx, proxies `/api` (unbuffered for `/api/query/stream`) | Docker | `frontend/` |
 
@@ -34,6 +34,7 @@ python3 scripts/evaluate.py --label <env-model>  # 10-question evaluation → do
 python3 scripts/evaluate.py --rescore docs/evaluation/results/*.json  # re-score reports with the current rules, no model call (ADR 0019)
 python3 scripts/compare.py A.json B.json         # compare two evaluation runs
 python3 scripts/calibrate_threshold.py           # suggest SCORE_THRESHOLD from evaluation results (ADR 0014)
+python3 scripts/build_glossary.py <project> [--out FILE]  # draft a QUERY_GLOSSARY file from code and docs, for review (ADR 0020)
 ./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2: Ollama speed/GPU, indexing, retrieval groups → summary for docs/metrics.md (ADR 0017)
 ```
 
@@ -78,7 +79,7 @@ Every document under `docs/` and this file is written in English first, followed
 | --- | --- | --- |
 | Ollama（LLM `qwen2.5-coder:14b`、embedding `nomic-embed-text`） | **直接在主機上執行**（macOS，為了使用 Metal GPU）。在 Mac 上絕不放進 Docker | — |
 | Qdrant 向量資料庫 | Docker，具名 volume `qdrant_data` | `docker-compose.yml` |
-| 後端：FastAPI + LlamaIndex（`/health`、`/index`、`/index/status`、`/query`、`/query/stream`（SSE，ADR 0010））；可選的混合檢索／分類取回、相似度門檻、Rerank、提示版本（`.env` 開關，ADR 0013–0016） | Docker | `backend/app/`、`retrieval.py`、`rerank.py` |
+| 後端：FastAPI + LlamaIndex（`/health`、`/index`、`/index/status`、`/query`、`/query/stream`（SSE，ADR 0010））；可選的混合檢索／分類取回、相似度門檻、Rerank、提示版本、查詢詞彙表（`.env` 開關，ADR 0013–0016、0020） | Docker | `backend/app/`、`retrieval.py`、`rerank.py`、`glossary.py` |
 | 索引器（tree-sitter / Markdown 標題切塊，依內容雜湊增量索引；`index_config` 改變時全量重建） | Docker，`python -m app.indexer` | `backend/app/indexer.py`、`chunker.py` |
 | 前端：React + Vite，由 nginx 提供並代理 `/api`（`/api/query/stream` 不緩衝） | Docker | `frontend/` |
 
@@ -100,6 +101,7 @@ python3 scripts/evaluate.py --label <環境-模型>  # 10 題評估 → docs/eva
 python3 scripts/evaluate.py --rescore docs/evaluation/results/*.json  # 以目前的規則重新計分報告，不呼叫模型（ADR 0019）
 python3 scripts/compare.py A.json B.json         # 比較兩次評估結果
 python3 scripts/calibrate_threshold.py           # 從評估結果建議 SCORE_THRESHOLD（ADR 0014）
+python3 scripts/build_glossary.py <專案> [--out 檔案]  # 從程式碼與文件產生 QUERY_GLOSSARY 詞彙表草稿，供人工審核（ADR 0020）
 ./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2：Ollama 速度與 GPU、索引、檢索組別 → 可貼進 docs/metrics.md 的摘要（ADR 0017）
 ```
 
