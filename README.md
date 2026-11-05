@@ -2,12 +2,12 @@
 
 [![CI](https://github.com/alelcold/local-codebase-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/alelcold/local-codebase-rag/actions/workflows/ci.yml)
 
-地端版的 Codebase RAG 系統：讓團隊用自然語言查詢遊戲前端專案的程式碼（適合約 50–300 個檔案的專案）。
+地端版的 Codebase RAG 系統：讓團隊用自然語言查詢遊戲前端專案的程式碼。設計目標是約 50～300 個檔案的專案；評估使用 20 個檔案的範例專案；更大的專案也能使用（索引為增量更新），但建議用實際專案重新評估檢索設定，見[專案規模與擴展](#專案規模與擴展)。
 所有資料與模型都在本機執行，程式碼不會離開你的電腦。
 
 回答會附上引用的**檔案路徑與行號**，例如 `src/entities/Player.ts:16-113`，點開即可看到對應的程式碼。
 
-> **In English:** an on-premises RAG assistant that answers questions about a game front-end codebase with file-and-line citations. Ollama runs natively on the Mac (Metal GPU); Qdrant, a FastAPI + LlamaIndex backend and a React UI run in Docker. Retrieval changes are decided by automated evaluation runs, not by intuition. Design records and measurements are in [`docs/`](docs/) (English first).
+> **In English:** an on-premises RAG assistant that answers questions about a game front-end codebase with file-and-line citations. Ollama runs natively on the Mac (Metal GPU); Qdrant, a FastAPI + LlamaIndex backend and a React UI run in Docker. Retrieval changes are decided by automated evaluation runs, not by intuition. Designed for projects of about 50–300 files and evaluated on a 20-file sample project; larger projects work because indexing is incremental, but re-evaluate the retrieval settings on your own project (see 專案規模與擴展). Design records and measurements are in [`docs/`](docs/) (English first).
 
 ## 目錄
 
@@ -18,6 +18,7 @@
 - [為什麼 Ollama 不放在 Docker 裡](#為什麼-ollama-不放在-docker-裡)
 - [安裝步驟](#安裝步驟)
 - [如何索引專案](#如何索引專案)
+- [專案規模與擴展](#專案規模與擴展)
 - [如何查詢](#如何查詢)
 - [設定](#設定)
 - [常見問題](#常見問題)
@@ -259,6 +260,109 @@ docker compose up -d
 ```
 
 若沒有設定不同的 `QDRANT_COLLECTION`，舊專案的檔案會在這次增量索引中被視為「已刪除」並從索引移除。
+
+## 專案規模與擴展
+
+**設計目標**是約 50～300 個檔案的專案（[ADR 0001](docs/decisions/0001-on-prem-rag-over-cloud-api.md)、[ADR 0003](docs/decisions/0003-qdrant-vector-database.md) 以最多幾千個片段估算）。**評估與實驗**全部使用 20 個檔案、67 個片段的範例專案，所以下面凡是「大專案會怎樣」的說法，除非特別註明有數據，都是依程式行為推論的預期，不是量測結果。更大的專案也能使用，因為索引是增量的；但**建議先用你自己的專案重新評估檢索設定**，不要直接沿用範例專案的結論（做法見[最後一節](#專案明顯變大時的建議流程)）。
+
+### 增量索引：檔案增加時不需要全部重新切片
+
+每個檔案的 `file_hash`（檔案內容加上切塊器版本、`CHUNK_MAX_CHARS`、`EMBED_MODEL` 的 SHA-256）存在 Qdrant 每個片段的 payload 裡。每次執行索引，索引器掃描專案、和 Qdrant 裡記錄的雜湊比對：
+
+| 檔案狀態 | 判斷 | 處理 |
+| --- | --- | --- |
+| 新增 | 專案裡有，索引裡沒有 | 切塊、產生 embedding、寫入（報告的 `added`） |
+| 修改 | 兩邊都有，雜湊不同 | 先為新內容產生完 embedding，再刪掉舊片段、寫入新片段（`updated`）。embedding 失敗時舊版仍可搜尋，下次執行會重試 |
+| 刪除 | 索引裡有，專案裡沒有 | 刪除該檔所有片段（`deleted`）。檔案被新加入的排除規則排除、或超過 `MAX_FILE_BYTES` 時，也會被當成刪除 |
+| 未變動 | 雜湊相同 | 略過，不呼叫 embedding 模型（`unchanged`） |
+
+所以專案成長之後，每次更新的成本只和**有變動的檔案**成正比，不是整個專案。
+
+**BM25 關鍵字索引會自動重建。** 它只在 `HYBRID_SEARCH=true` 時使用，存在後端程序的記憶體裡：第一次混合檢索時由 Qdrant 裡的全部片段建立，之後每次查詢都比對所有片段 id 的簽章（id 內含檔案雜湊），資料有變動就重建。在另一個程序（命令列的索引器）更新索引也會被偵測到，不需要重啟 backend。ADR 0013 估計幾千個片段的建立時間是毫秒等級，範例專案 67 個片段；大專案的實測 {待填}。
+
+### 什麼時候會全量重建
+
+- **自動**：每個片段都記錄建立時的 `index_config`。目前設定與索引中記錄的不同時，下一次執行索引就會清空 collection 並全部重建，同時印出新舊設定（見[執行索引](#執行索引)）。會觸發的有：`CHUNK_MAX_CHARS`、`CHUNK_METADATA`、`EMBED_DOC_PREFIX`、切塊器版本與 embedding 內容格式（程式更新時改變）。`EMBED_MODEL` 也包含在內：更換它會改用另一個 collection，在新的 collection 裡從頭建立索引。
+- **不會觸發**：只影響查詢的設定（`TOP_K`、`DOC_TOP_K`、`HYBRID_SEARCH`、`SPLIT_RETRIEVAL`、`RERANK*`、`SCORE_THRESHOLD`、`PROMPT_VARIANT`），以及 `INDEX_EXTENSIONS`、`EXCLUDE_*`、`MAX_FILE_BYTES`（只會讓相關檔案被新增或刪除）。
+- **手動**：`./scripts/index.sh --full`，或介面上的「完整重建」，或 `POST /index` 帶 `{"full": true}`。
+
+### 規模對各部分的影響
+
+| 部分 | 隨專案大小 | 範例專案的數據（20 檔、67 片段） | 大專案 |
+| --- | --- | --- | --- |
+| Qdrant 儲存 | 隨片段數增加（每個片段一個向量，加上含原始程式碼文字的 payload） | 67 個片段；佔用大小沒有量過 | {待填}（設計假設最多幾千個片段，ADR 0003） |
+| 檢索時間 | 向量搜尋加（選用的）BM25 與 RRF | `retrieval_seconds` 每一組都只有 0.07–0.21 秒（[metrics §4a](docs/metrics.md#4a-retrieval-switches-adr-0013) 註 ¹） | {待填} |
+| 回答生成時間 | **取決於 `TOP_K`、片段長度、模型與硬體，不是專案大小**：提示詞是 `TOP_K` 個片段（每個最多 `CHUNK_MAX_CHARS` 個字元）加問題 | Codespaces CPU、`qwen2.5-coder:3b`：prompt eval 25.3 tokens/s、生成 12.4 tokens/s（[metrics §3](docs/metrics.md#3-query-latency)）；10 題的首字延遲平均 13.0 秒（`TOP_K=4`，基準線）。Mac M2 + 14B：{待填} | 與範例專案相同，除非 `TOP_K` 或模型改變。`rerank` 另加每次查詢數秒（[metrics §4a](docs/metrics.md#4a-retrieval-switches-adr-0013)） |
+| 首次全量索引 | 時間主要花在 embedding，**大致隨片段數線性增加**；之後只處理有變動的檔案 | 21.54 秒（GitHub Actions runner，CPU）；Codespaces（CPU）全量重建 18.8–20.7 秒，升級後第一次 41.9 秒（[metrics §2](docs/metrics.md#2-indexing)、[devlog 2026-11-03](docs/devlog/2026-11-03.md)）。用假 embedding 時整個流程只要 0.39 秒，可見時間幾乎都在 embedding。粗略換算約 0.3 秒／片段（21.54 ÷ 67，**推算值，不是實測**，Mac 與 GPU 會不同） | Mac M2：{待填}；實際專案：{待填}（`./scripts/benchmark-mac.sh` 會量） |
+| 回答品質 | **主要風險**：候選變多，名稱相近的檔案會搶 `TOP_K` 的名額，正確的片段更容易被擠出前幾名 | 20 個檔案裡幾乎沒有這個情形，無法驗證 | 預期風險，尚未量測 {待填} |
+
+### 範例專案只有 20 個檔案的限制
+
+範例專案只有 20 個檔案、67 個片段（其中 3 個是 Markdown，[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)）。這會影響實驗結論的適用範圍：
+
+- 候選池 `RETRIEVAL_CANDIDATES`（30）幾乎是整個索引的一半，所以程式碼與文件兩種片段一定都在候選裡（[ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)）。專案大了以後不一定如此。
+- 在這份資料上，**混合檢索與 rerank 都沒有比單獨的分類取回更好**：混合檢索在分類取回之上沒有額外效果（識別字題組 C、D 都是 3/3，主要題組還擠掉過第 8 題），rerank 的 AI 評分正確性與分類取回同為 17/30，卻多了約 4.8 秒 rerank 與 1.5 GB 映像檔（[ADR 0018](docs/decisions/0018-codespaces-default-retrieval-settings.md)、[metrics §4a](docs/metrics.md#4a-retrieval-switches-adr-0013)）。**在大專案上結果可能不同**：檔案多了，名稱相近的檔案與包含相同識別字的片段變多，關鍵字與識別字通道、rerank 才有更多東西可以挑；ADR 0018 也寫到混合檢索值得在題目含識別字的大專案上重測。這是推論，需要用實際專案驗證。
+- 「文件最多 1 段」（`DOC_TOP_K=1`）在大專案可能需要重新檢視。
+- 所有結論都是 Codespaces、CPU、`qwen2.5-coder:3b`、`TOP_K=4`、每組跑一次的結果，不能直接套用到 Mac、14B 或 `TOP_K=8`。
+
+### 排除不需要的檔案
+
+索引器只處理符合條件的檔案，設定都在 `.env`（預設值見 [`.env.example`](.env.example)）：
+
+| 變數 | 預設值 | 比對方式 |
+| --- | --- | --- |
+| `INDEX_EXTENSIONS` | `.ts,.tsx,.js,.jsx,.mjs,.cjs,.md` | 副檔名，不分大小寫 |
+| `EXCLUDE_DIRS` | `node_modules,.git,dist,build,out,coverage,.next,.nuxt,.turbo,.cache,.vite,vendor` | **資料夾名稱**完全相符，任何深度的同名資料夾都會略過 |
+| `EXCLUDE_PATTERNS` | `*.min.js,*.bundle.js,*.map,*.d.ts,package-lock.json` | 只比對**檔名**（`fnmatch`），不含路徑 |
+| `MAX_FILE_BYTES` | `500000` | 超過的檔案略過，並列在索引結果的 skipped |
+
+索引器**不會讀 `.gitignore`**。建議額外排除這幾類（以下是建議，沒有量測過它們對檢索的影響）：
+
+- **資源檔**：圖片、音效、字型、大型 JSON 資料。不要加進 `INDEX_EXTENSIONS`；預設的副檔名清單本來就不含它們。
+- **自動產生的程式碼**：例如 `*.generated.ts`、`*.pb.ts`、`__generated__` 資料夾。它們很大、重複，又不是人寫的，容易擠掉真正的實作。
+- **測試快照與測試輸出**：例如 `__snapshots__` 資料夾、`*.snap`。
+- 打包或編譯產物：`dist`、`build` 預設已排除；你的專案若用其他名稱（例如 `bundle`、`generated`），自己加進去。
+
+```dotenv
+# 注意：設定 EXCLUDE_DIRS / EXCLUDE_PATTERNS 會「取代」預設值，所以要把預設值一起寫進去
+EXCLUDE_DIRS=node_modules,.git,dist,build,out,coverage,.next,.nuxt,.turbo,.cache,.vite,vendor,__snapshots__,__generated__
+EXCLUDE_PATTERNS=*.min.js,*.bundle.js,*.map,*.d.ts,package-lock.json,*.generated.ts,*.snap
+```
+
+修改後執行 `docker compose up -d` 讓設定生效，再執行 `./scripts/index.sh`。新排除的檔案會被當成「已刪除」從索引移除，其他檔案不受影響，也不會觸發全量重建。
+
+### 保持索引更新
+
+索引是增量的，沒變動時一次只要幾秒，所以可以放心頻繁執行。兩種做法：
+
+**1. git hook：每次 `git pull` 之後自動更新。** 放在**被索引的專案**的 `.git/hooks/post-merge`（記得 `chmod +x`；`git pull --rebase` 觸發的是 `post-rewrite`，可以用同一份腳本）：
+
+```bash
+#!/bin/sh
+# 放在被索引專案的 .git/hooks/post-merge
+# 在背景更新索引，不拖慢 git pull；把 /path/to/local-codebase-rag 換成本 repo 的路徑
+( cd /path/to/local-codebase-rag && ./scripts/index.sh >> "$HOME/rag-index.log" 2>&1 ) &
+```
+
+**2. 排程：** 例如每 30 分鐘執行一次。`INDEX_SKIP_COMPOSE_UP=1` 略過 `index.sh` 開頭的 `docker compose up -d`；cron 的 `PATH` 很短，找不到 `docker` 時要在 crontab 開頭加上 `PATH=...`。
+
+```cron
+*/30 * * * * cd /path/to/local-codebase-rag && INDEX_SKIP_COMPOSE_UP=1 ./scripts/index.sh >> "$HOME/rag-index.log" 2>&1
+```
+
+也可以改用 API（`curl -sS -X POST localhost:8000/index`），它在背景執行並立即回傳；已經有索引在跑時會回 `409`，不會重複執行。上面兩個範例是建議做法，沒有放進 CI 測試；用命令列索引時請避免同時跑兩份。
+
+### 專案明顯變大時的建議流程
+
+1. **準備實際專案的評估題庫。** 照 [`docs/evaluation/questions.yaml`](docs/evaluation/questions.yaml) 的格式寫題目（含 `expected_files`、`definition_files`，以及一兩題專案沒有的功能當陷阱題），並在題目檔設定 `project:` 指向該專案。**題庫和結果放在 repo 外面**：依隱私規則，內部專案的檔名、路徑與回答不能進入本 repo；評估時加上 `--out-dir` 寫到 repo 以外的資料夾（[ADR 0012](docs/decisions/0012-automated-evaluation-metrics.md)）。
+2. **建立索引並跑基準線**（所有檢索開關維持預設）：
+
+   ```bash
+   python3 scripts/evaluate.py --questions /path/to/my-questions.yaml --out-dir /path/to/results --label mine-baseline
+   ```
+
+3. **依結果檢視設定，一次只改一個**，並用同一份題庫重跑、用 `scripts/compare.py` 比較：`TOP_K`、`DOC_TOP_K`（`SPLIT_RETRIEVAL`）、`HYBRID_SEARCH`（題目裡有識別字時特別值得試）、`RERANK`（要先建置 `INSTALL_RERANK=true`，並看多出來的秒數）。`SCORE_THRESHOLD` 要先用 `scripts/calibrate_threshold.py` 校準，沒有建議值就不要設。
+4. **以人工判定正確性為準。** 自動指標只是篩選訊號（關鍵字命中不等於答對，[ADR 0012](docs/decisions/0012-automated-evaluation-metrics.md)）；實驗計畫的決策規則是：定義檔命中或人工正確性變好，而且任何題型的人工正確性都沒有退步，才改預設值（[實驗計畫](docs/evaluation/experiment-plan-retrieval.md)）。
 
 ## 如何查詢
 
