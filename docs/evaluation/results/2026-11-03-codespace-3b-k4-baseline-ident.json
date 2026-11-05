@@ -47,6 +47,8 @@
     "first_token_seconds_median": 17.133,
     "total_seconds_mean": 27.44,
     "tokens_mean": 68.4,
+    "rerank_seconds_mean": null,
+    "threshold_refusals": 0,
     "file_recall_mean": 0.5,
     "code_hit": {
       "hit": 4,
@@ -75,6 +77,16 @@
       "hit": 0,
       "of": 0,
       "rate": null
+    },
+    "false_refusals": {
+      "hit": 0,
+      "of": 5,
+      "rate": 0.0
+    },
+    "suspected_fabrication": {
+      "hit": 1,
+      "of": 5,
+      "rate": 0.2
     },
     "keyword_rate_by_type": {
       "定位設定": 0.472,
@@ -142,6 +154,8 @@
         "first_token_seconds": 17.133,
         "total_seconds": 22.388,
         "tokens": 60,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.091,
           "first_token_seconds": 17.13,
@@ -223,7 +237,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -278,6 +299,8 @@
         "first_token_seconds": 25.569,
         "total_seconds": 34.415,
         "tokens": 100,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.05,
           "first_token_seconds": 25.567,
@@ -352,7 +375,16 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": [
+            "getMultiplier"
+          ]
+        },
+        "suspected_fabrication": true,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -409,6 +441,8 @@
         "first_token_seconds": 16.177,
         "total_seconds": 21.503,
         "tokens": 53,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.098,
           "first_token_seconds": 16.174,
@@ -485,7 +519,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -542,6 +583,8 @@
         "first_token_seconds": 14.584,
         "total_seconds": 18.179,
         "tokens": 40,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.061,
           "first_token_seconds": 14.582,
@@ -616,7 +659,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -671,6 +721,8 @@
         "first_token_seconds": 32.397,
         "total_seconds": 40.717,
         "tokens": 89,
+        "rerank_seconds": null,
+        "no_relevant": false,
         "server": {
           "retrieval_seconds": 0.057,
           "first_token_seconds": 32.395,
@@ -739,9 +791,20 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     }
-  ]
+  ],
+  "rescored": {
+    "at": "2026-11-05T05:21:40+00:00",
+    "scoring": 2
+  }
 }

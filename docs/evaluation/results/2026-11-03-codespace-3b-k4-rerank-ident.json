@@ -83,6 +83,16 @@
       "of": 0,
       "rate": null
     },
+    "false_refusals": {
+      "hit": 0,
+      "of": 5,
+      "rate": 0.0
+    },
+    "suspected_fabrication": {
+      "hit": 1,
+      "of": 5,
+      "rate": 0.2
+    },
     "keyword_rate_by_type": {
       "定位設定": 0.75,
       "解釋邏輯": 0.75,
@@ -255,7 +265,16 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [
+            "src/game/Player.ts"
+          ],
+          "symbols": []
+        },
+        "suspected_fabrication": true,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 0
     },
@@ -410,7 +429,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -563,7 +589,14 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -717,7 +750,14 @@
         "simplified_chars": [
           "体"
         ],
-        "has_simplified": true
+        "has_simplified": true,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     },
@@ -867,9 +907,20 @@
           "forbidden_hits": []
         },
         "simplified_chars": [],
-        "has_simplified": false
+        "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_phrases": [],
+        "falsely_refused": false
       },
       "manual_correctness": 2
     }
-  ]
+  ],
+  "rescored": {
+    "at": "2026-11-05T05:21:40+00:00",
+    "scoring": 2
+  }
 }

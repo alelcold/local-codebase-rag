@@ -9,12 +9,18 @@ through the streaming endpoint and score what can be scored automatically.
     python3 scripts/evaluate.py --label mac-14b --top-k 8
     python3 scripts/evaluate.py --label quick --only 1,9 --base-url http://localhost:8000
     python3 scripts/evaluate.py --apply-manual docs/evaluation/results/2026-11-03-codespace-3b.md
+    python3 scripts/evaluate.py --rescore docs/evaluation/results/*.json
 
 Per question: time to first token, total time, tokens (client-side timing), file
 hit rate of the retrieved sources (code and documentation separately, plus the
 file that defines a setting for 定位設定 questions), keyword hit rate, whether
 the answer contains Simplified Chinese characters, refusals for 陷阱題
 (拒答率) and "not found" answers to answerable questions (誤拒率, ADR 0016).
+Refusal phrases match in Traditional and Simplified (REFUSAL_TRAD_SIMP), and
+files or symbols an answer names that do not exist in the indexed project are
+flagged as 疑似編造 (suspected fabrication); a trick question is not counted as
+refused when flagged (ADR 0019). --rescore recomputes these metrics for
+existing reports without asking the model again.
 
 Writes docs/evaluation/results/<YYYY-MM-DD>-<label>.json and .md. The Markdown
 report has an empty 「人工判定正確性」 column: keyword hits are not correctness
@@ -48,7 +54,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_QUESTIONS = ROOT / "docs" / "evaluation" / "questions.yaml"
 DEFAULT_OUT_DIR = ROOT / "docs" / "evaluation" / "results"
 DOC_EXTENSIONS = {".md", ".mdx", ".markdown", ".txt", ".rst"}
-WARMUP_QUESTION = "這個專案主要用什麼程式語言寫的？"
+# Version of the scoring rules, recorded by --rescore. 2: Simplified refusal
+# phrases (REFUSAL_TRAD_SIMP) and suspected fabrication (unknown files / symbols).
+SCORING_VERSION = 2
+WARMUP_QUESTION ="這個專案主要用什麼程式語言寫的？"
 # Per-source fields kept in the JSON report.
 SOURCE_FIELDS = (
     "ref", "file_path", "start_line", "end_line", "symbol", "score",
@@ -62,9 +71,136 @@ SOURCE_FIELDS = (
 # sentence of PROMPT_VARIANT=v3 and the backend's canned NO_RELEVANT /
 # NO_MATCH answers (all contain 「找不到」).
 REFUSAL_PHRASES = (
-    "找不到", "沒找到", "没找到", "不存在", "沒有提到", "未提及", "沒有相關", "没有相关", "無法回答",
+    "找不到", "沒找到", "沒有找到", "未找到", "不存在", "沒有提到", "未提及", "沒有相關", "無法回答",
     "not found", "cannot find", "can't find", "could not find", "couldn't find", "no relevant",
 )
+
+# 繁簡對照清單: every Chinese refusal phrase, Traditional form first, then the
+# Simplified forms an answer may use instead. The 3B model often answers a
+# Traditional question in Simplified (「我无法提供…」, devlog 2026-11-03), so
+# refusal matching — the trick questions' refusal keywords in the question
+# files and REFUSAL_PHRASES above — always tries these forms too. Character
+# swaps (沒 → 没) and word swaps (支援 → 支持) are both listed here.
+# A unit test fails if a Chinese refusal keyword in any question file, or in
+# REFUSAL_PHRASES, is missing from this list, or if a Simplified form does not
+# match TRAD_TO_SIMP_CHARS below: add new phrases here first.
+REFUSAL_TRAD_SIMP: tuple[tuple[str, ...], ...] = (
+    ("找不到", "找不到"),
+    ("沒找到", "没找到"),
+    ("沒有找到", "没有找到"),
+    ("未找到", "未找到"),
+    ("沒有", "没有"),
+    ("不存在", "不存在"),
+    ("未包含", "未包含"),
+    ("無法", "无法"),
+    ("無法回答", "无法回答"),
+    ("沒有提到", "没有提到"),
+    ("未提及", "未提及"),
+    ("沒有相關", "没有相关"),
+    ("只支援鍵盤", "只支援键盘", "只支持键盘"),
+)
+# Character-level Traditional → Simplified map for the phrases above. Only used
+# to check REFUSAL_TRAD_SIMP (the first Simplified form must equal the
+# character-by-character conversion); matching uses the list itself.
+TRAD_TO_SIMP_CHARS = str.maketrans("沒無關鍵盤", "没无关键盘")
+_SIMPLIFIED_FORMS: dict[str, tuple[str, ...]] = {row[0]: row[1:] for row in REFUSAL_TRAD_SIMP}
+
+
+def with_simplified(phrases: Iterable[str]) -> list[str]:
+    """``phrases`` plus the Simplified forms from REFUSAL_TRAD_SIMP, in order, without duplicates."""
+    out: list[str] = []
+    for p in phrases:
+        for form in (p, *_SIMPLIFIED_FORMS.get(p, ())):
+            if form not in out:
+                out.append(form)
+    return out
+
+
+# ── Suspected fabrication (陷阱題 and every other answer) ─────────────────
+# An answer that names a file or a code symbol that does not exist anywhere in
+# the indexed project is probably invented (devlog 2026-11-03: Q23 「透過
+# `syncUi` 同步到雲端」, H Q7 `checkCollisions()`). The check is a screen for
+# a person to confirm, like the keywords: it flags, it does not judge.
+
+# File references: a path or file name with a known extension.
+FILE_REF_RE = re.compile(
+    r"(?<![\w./-])((?:[\w-]+/)*[\w-]+(?:\.[\w-]+)*\.(?:tsx|ts|jsx|js|mjs|cjs|json|md|css|scss|html|vue|py|yaml|yml))(?![\w/])",
+    re.ASCII,  # 「在Game.ts中」: Chinese text around a name is not part of it
+)
+# Library and product names that look like file names.
+NOT_FILE_REFS = {"node.js", "next.js", "nuxt.js", "vue.js", "three.js", "pixi.js", "phaser.js", "p5.js",
+                 "d3.js", "chart.js", "express.js", "socket.io"}
+IDENT_RE = re.compile(r"[A-Za-z_$][\w$]*", re.ASCII)
+# Names that are code-shaped but belong to the language, the browser or the
+# tools, not to the project: never reported as missing.
+KNOWN_NAMES = set(
+    """
+    console log warn error info Math JSON parse stringify Object Array String Number Boolean Promise Map Set
+    Date now keys values entries assign freeze from isArray push pop shift unshift splice slice concat join
+    map filter reduce forEach find findIndex some every includes indexOf sort reverse fill toFixed toString
+    parseInt parseFloat isNaN floor ceil round min max abs sqrt random hypot atan2 sin cos
+    has get set add delete clear then catch finally resolve reject
+    setTimeout clearTimeout setInterval clearInterval requestAnimationFrame cancelAnimationFrame
+    addEventListener removeEventListener dispatchEvent preventDefault stopPropagation
+    querySelector querySelectorAll getElementById createElement appendChild getContext
+    localStorage sessionStorage getItem setItem removeItem performance window document
+    useState useEffect useRef useMemo useCallback useContext useReducer createRoot render
+    JavaScript TypeScript GitHub macOS iOS README
+    """.split()
+)
+
+
+def code_shaped(name: str, followed_by_paren: bool) -> bool:
+    """Whether ``name`` reads as a code symbol rather than a word: called with (),
+    snake_case / CONSTANT_CASE, or camelCase / PascalCase with an inner capital."""
+    return followed_by_paren or ("_" in name.strip("_$") and len(name) > 2) or bool(re.search(r"[a-z][A-Z]", name))
+
+
+@dataclass
+class ProjectInventory:
+    """File paths and every identifier-like token of the indexed project."""
+
+    root: Path
+    files: set[str] = field(default_factory=set)  # posix paths relative to root
+    names: set[str] = field(default_factory=set)  # casefolded: GameOver matches gameOver
+
+    @classmethod
+    def scan(cls, root: Path) -> "ProjectInventory":
+        inv = cls(root=root)
+        for p in sorted(root.rglob("*")):
+            rel = p.relative_to(root)
+            if not p.is_file() or any(part.startswith(".") or part == "node_modules" for part in rel.parts):
+                continue
+            inv.files.add(rel.as_posix())
+            try:
+                inv.names.update(n.casefold() for n in IDENT_RE.findall(p.read_text(encoding="utf-8")))
+            except (UnicodeDecodeError, OSError):
+                continue
+        return inv
+
+    def has_file(self, ref: str) -> bool:
+        ref = ref.removeprefix("./")
+        return any(f == ref or f.endswith("/" + ref) for f in self.files)
+
+    def unknown_refs(self, answer: str) -> dict:
+        """Files and code-shaped symbols in ``answer`` that exist nowhere in the project."""
+        files: list[str] = []
+        for m in FILE_REF_RE.finditer(answer):
+            ref = m.group(1)
+            if ref.casefold() not in NOT_FILE_REFS and not self.has_file(ref) and ref not in files:
+                files.append(ref)
+        # Symbols outside the file references (Game.ts is a file, not the symbol "ts").
+        rest = FILE_REF_RE.sub(" ", answer)
+        symbols: list[str] = []
+        for m in IDENT_RE.finditer(rest):
+            name = m.group(0)
+            if m.start() > 0 and rest[m.start() - 1].isdigit():
+                continue  # 1500ms, 0x1f
+            paren = rest[m.end():m.end() + 1] == "("
+            if (code_shaped(name, paren) and name.casefold() not in self.names and name not in KNOWN_NAMES
+                    and name not in symbols):
+                symbols.append(name)
+        return {"files": files, "symbols": symbols}
 
 # Characters that exist only in Simplified Chinese (their Traditional forms are
 # different code points). A hit means the model slipped into Simplified, which
@@ -124,6 +260,22 @@ def load_questions(path: Path) -> list[Question]:
             )
         )
     return questions
+
+
+def question_set_project(path: Path) -> Path | None:
+    """The project a question file is about (its ``project:`` field, relative to the repo)."""
+    import yaml
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    project = data.get("project")
+    return (ROOT / project) if project else None
+
+
+def load_inventory(project: Path | None, log: Callable[[str], None] = print) -> ProjectInventory | None:
+    if project is None or not project.is_dir():
+        log(f"! project folder {project} not found: files and symbols in answers are not checked")
+        return None
+    return ProjectInventory.scan(project)
 
 
 def parse_only(value: str | None) -> set[int] | None:
@@ -286,7 +438,9 @@ def keyword_metrics(q: Question, answer: str) -> dict:
     text = answer.casefold()
     matched, missed = [], []
     for alternatives in q.keywords:
-        if any(a.casefold() in text for a in alternatives):
+        # A trick question's keywords are refusal phrases: Simplified forms count too.
+        candidates = with_simplified(alternatives) if q.expect_no_answer else alternatives
+        if any(a.casefold() in text for a in candidates):
             matched.append(alternatives[0])
         else:
             missed.append(" / ".join(alternatives))
@@ -312,15 +466,17 @@ def simplified_chars(text: str) -> list[str]:
 
 
 def refusal_phrases(text: str) -> list[str]:
-    """REFUSAL_PHRASES found in ``text`` (case-insensitive)."""
+    """REFUSAL_PHRASES (and their Simplified forms) found in ``text`` (case-insensitive)."""
     folded = text.casefold()
-    return [p for p in REFUSAL_PHRASES if p.casefold() in folded]
+    return [p for p in with_simplified(REFUSAL_PHRASES) if p.casefold() in folded]
 
 
-def score(q: Question, r: StreamResult) -> dict:
+def score(q: Question, r: StreamResult, inventory: ProjectInventory | None = None) -> dict:
     files = file_metrics(q, r.sources, r.answer)
     keywords = keyword_metrics(q, r.answer)
     simp = simplified_chars(r.answer)
+    # None = not checked (no project folder); a fixed threshold answer invents nothing.
+    unknown = inventory.unknown_refs(r.answer) if inventory is not None and not r.error else None
     out: dict[str, Any] = {
         "first_token_seconds": r.first_token_seconds,
         "total_seconds": r.total_seconds,
@@ -335,10 +491,19 @@ def score(q: Question, r: StreamResult) -> dict:
         "keywords": keywords,
         "simplified_chars": simp,
         "has_simplified": bool(simp),
+        "unknown_refs": unknown,
+        # 疑似編造: names a file or symbol the project does not have, or a forbidden
+        # word. A screen for a person to confirm, not a verdict.
+        "suspected_fabrication": None
+        if r.error
+        else bool(keywords["forbidden_hits"]) or bool(unknown and (unknown["files"] or unknown["symbols"])),
     }
     if q.expect_no_answer:
-        # Refusal = a refusal phrase (the keywords) and no sign of invented code.
-        out["refused"] = bool(keywords["hit"]) and not keywords["forbidden_hits"]
+        # Refusal = a refusal phrase (the keywords) and no sign of invented code:
+        # no forbidden word and no file or symbol that is not in the project.
+        # "沒有找到多人連線，但可用 WebSocket 實作…" is not a pass; it is flagged for a person.
+        out["refusal_keyword_hit"] = bool(keywords["hit"])
+        out["refused"] = bool(keywords["hit"]) and not out["suspected_fabrication"]
     else:
         # False refusal (ADR 0016) = says "not found" and gives none of the expected
         # facts. "沒有音效檔，音效由 SoundManager 合成" says 沒有 but hits a keyword: not a refusal.
@@ -388,6 +553,8 @@ def summarize(results: list[dict]) -> dict:
         # 拒答率: trick questions refused. 誤拒率: answerable questions answered "not found" (ADR 0016).
         "no_answer_refused": _rate(no_answer),
         "false_refusals": _rate(answerable),
+        # 疑似編造 over every answer (None = not checked).
+        "suspected_fabrication": _rate(x.get("suspected_fabrication") for x in m),
         "keyword_rate_by_type": {t: _mean(x["keywords"]["rate"] for x in xs) for t, xs in by_type.items()},
     }
 
@@ -404,6 +571,7 @@ def run(
     warmup: bool,
     log: Callable[[str], None] = print,
     query: Callable[..., StreamResult] = stream_query,
+    inventory: ProjectInventory | None = None,
 ) -> list[dict]:
     if warmup:
         log(f"warm-up: {WARMUP_QUESTION} (loads the model; not scored)")
@@ -427,7 +595,7 @@ def run(
             # the excerpt): scripts/calibrate_threshold.py reads it (ADR 0014).
             "sources": [{k: s.get(k) for k in SOURCE_FIELDS} for s in r.sources],
             "error": r.error,
-            "metrics": score(q, r),
+            "metrics": score(q, r, inventory),
             "manual_correctness": None,  # 0–2, filled in by a person
         }
         results.append(entry)
@@ -442,6 +610,7 @@ def run(
                 + f"files {mt['files']['all']['hit']}/{mt['files']['all']['expected']} · "
                 f"keywords {mt['keywords']['hit']}/{mt['keywords']['total']}"
                 + (f" · Simplified: {''.join(mt['simplified_chars'])}" if mt["has_simplified"] else "")
+                + (" · suspected fabrication" if mt["suspected_fabrication"] else "")
             )
     return results
 
@@ -497,7 +666,28 @@ def retrieval_label(r: dict | None) -> str:
     return f"{' + '.join(parts) or 'vector only (baseline)'} · prompt {r.get('prompt_variant', 'v1')}"
 
 
-def render_markdown(report: dict) -> str:
+def _tags(r: dict) -> str:
+    """Status after the keyword ratio in the per-question table."""
+    m = r["metrics"]
+    tags = []
+    if r["expect_no_answer"]:
+        if m.get("refused"):
+            tags.append("refused")
+        elif m.get("refusal_keyword_hit") and m.get("suspected_fabrication"):
+            tags.append("**not refused**: refusal phrase, but suspected fabrication")
+        else:
+            tags.append("**not refused**")
+    elif m.get("falsely_refused"):
+        tags.append("**falsely refused**")
+    if m.get("suspected_fabrication") and not (r["expect_no_answer"] and m.get("refusal_keyword_hit")):
+        tags.append("**suspected fabrication**")
+    return "".join(f" ({t})" for t in tags)
+
+
+def render_markdown(report: dict, preamble: str = "", manual: dict[int, tuple[str, str]] | None = None) -> str:
+    """The report. ``preamble`` (Markdown before the generated header) and ``manual``
+    ({id: (score cell, notes cell)}) keep what a person added when a report is re-scored."""
+    manual = manual or {}
     s = report["summary"]
     cfg = report["config"]
     h = report.get("health") or {}
@@ -506,6 +696,7 @@ def render_markdown(report: dict) -> str:
     lines = [
         f"# Evaluation {report['date']} · {cfg['label']}",
         "",
+        *([preamble.strip("\n"), ""] if preamble.strip() else []),
         "> Generated by `scripts/evaluate.py`. Automatic metrics are proxies, not correctness (ADR 0012):",
         "> fill in 「人工判定正確性」 (0–2) for every question after reading the answer.",
         "> 由 `scripts/evaluate.py` 產生。自動指標只是代理指標，不等於回答正確（ADR 0012）：",
@@ -544,6 +735,8 @@ def render_markdown(report: dict) -> str:
         f"| Answers with Simplified characters / 混入簡體字的回答 | {s['simplified_answers']} |",
         f"| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | {_rate_str(s['no_answer_refused'])} |",
         f"| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | {_rate_str(s.get('false_refusals') or {'of': 0})} |",
+        "| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / "
+        f"疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | {_rate_str(s.get('suspected_fabrication') or {'of': 0})} |",
         f"| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | {s.get('threshold_refusals', 0)} |",
         "| Manual correctness / 人工判定正確性 | ___ / " + str(2 * s["questions"]) + " |",
         "",
@@ -561,15 +754,12 @@ def render_markdown(report: dict) -> str:
         if r["error"]:
             lines.append(f"| {r['id']} | {r['type']} | ✗ | | | | | | | | | | {_cell(r['error'][:80])} |")
             continue
-        kw = f"{m['keywords']['hit']}/{m['keywords']['total']}"
-        if r["expect_no_answer"]:
-            kw += " (refused)" if m.get("refused") else " (**not refused**)"
-        elif m.get("falsely_refused"):
-            kw += " (**falsely refused**)"
+        kw = f"{m['keywords']['hit']}/{m['keywords']['total']}" + _tags(r)
+        score_cell, notes_cell = manual.get(r["id"], ("", ""))
         lines.append(
             f"| {r['id']} | {r['type']} | {_fmt(m['first_token_seconds'], ' s')} | {_fmt(m['total_seconds'], ' s')} | "
             f"{_fmt(m['tokens'])} | {_ratio(f['all'])} | {_ratio(f['code'])} | {_ratio(f['doc'])} | "
-            f"{_ratio(f['definition'])} | {kw} | {''.join(m['simplified_chars']) or '—'} |  |  |"
+            f"{_ratio(f['definition'])} | {kw} | {''.join(m['simplified_chars']) or '—'} | {score_cell} | {notes_cell} |"
         )
     lines += ["", "Files / Code / Doc / Def. = expected files found among the retrieved sources.", ""]
     lines += ["## Answers / 回答", ""]
@@ -591,6 +781,11 @@ def render_markdown(report: dict) -> str:
         ]
         if m["keywords"]["forbidden_hits"]:
             lines.append(f"- **Forbidden keywords found**: {', '.join(m['keywords']['forbidden_hits'])}")
+        unknown = m.get("unknown_refs") or {}
+        if unknown.get("files") or unknown.get("symbols"):
+            found = [f"files {', '.join(f'`{x}`' for x in unknown['files'])}" if unknown.get("files") else "",
+                     f"symbols {', '.join(f'`{x}`' for x in unknown['symbols'])}" if unknown.get("symbols") else ""]
+            lines.append(f"- **Suspected fabrication (not in the project, check)**: {'; '.join(x for x in found if x)}")
         if m.get("falsely_refused"):
             lines.append(f"- **False refusal**: says {', '.join(m['refusal_phrases'])} and hits no keyword")
         if m["has_simplified"]:
@@ -624,6 +819,68 @@ def read_manual_scores(markdown: str) -> dict[int, int]:
                 raise ValueError(f"question {cells[0]}: 人工判定正確性 must be 0, 1 or 2, got {value!r}")
             scores[int(cells[0])] = int(value)
     return scores
+
+
+def read_manual_cells(markdown: str) -> dict[int, tuple[str, str]]:
+    """Raw 「人工判定正確性」 and Notes cells of the per-question table: {id: (score, notes)}."""
+    cells_by_id: dict[int, tuple[str, str]] = {}
+    in_table = False
+    for line in markdown.splitlines():
+        if line.startswith("| # | Type |"):
+            in_table = True
+            continue
+        if in_table and not line.startswith("|"):
+            break
+        if not in_table:
+            continue
+        cells = [c.strip() for c in re.split(r"(?<!\\)\|", line.strip()[1:-1])]
+        if cells[0].isdigit() and len(cells) > MANUAL_COLUMN + 1 and cells[2] != "✗":
+            cells_by_id[int(cells[0])] = (cells[MANUAL_COLUMN], cells[MANUAL_COLUMN + 1])
+    return cells_by_id
+
+
+def read_preamble(markdown: str) -> str:
+    """What a person added between the title and the generated header."""
+    lines = markdown.splitlines()
+    out = []
+    for line in lines[1:]:
+        if line.startswith("> Generated by `scripts/evaluate.py`"):
+            return "\n".join(out).strip("\n")
+        out.append(line)
+    return ""
+
+
+def rescore(json_path: Path, log: Callable[[str], None] = print) -> list[str]:
+    """Recompute the automatic metrics of an existing report from its stored answers and
+    sources (no model call), with the current rules and question files. Keeps timing,
+    server data and manual scores; rewrites the JSON and the Markdown next to it,
+    keeping the manual column, the notes and any preamble. Returns the summary changes."""
+    report = json.loads(json_path.read_text(encoding="utf-8"))
+    qfile = ROOT / report["config"]["questions_file"]
+    by_id = {q.id: q for q in load_questions(qfile)}
+    inventory = load_inventory(question_set_project(qfile), log)
+    for r in report["results"]:
+        q = by_id[r["id"]]
+        old = r["metrics"]
+        sr = StreamResult(
+            answer=r["answer"], sources=r["sources"], first_token_seconds=old.get("first_token_seconds"),
+            total_seconds=old.get("total_seconds"), server=old.get("server"), heartbeats=old.get("heartbeats", 0),
+            error=r.get("error"),
+        )
+        r["metrics"] = score(q, sr, inventory)
+    old_summary = report["summary"]
+    summary = summarize(report["results"])
+    if "manual_correctness" in old_summary:
+        summary["manual_correctness"] = old_summary["manual_correctness"]
+    report["summary"] = summary
+    report["rescored"] = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                          "scoring": SCORING_VERSION}
+    changes = [f"{k}: {old_summary.get(k)!r} → {v!r}" for k, v in summary.items() if old_summary.get(k) != v]
+    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    md_path = json_path.with_suffix(".md")
+    old_md = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+    md_path.write_text(render_markdown(report, read_preamble(old_md), read_manual_cells(old_md)), encoding="utf-8")
+    return changes
 
 
 def apply_manual(md_path: Path) -> dict:
@@ -662,7 +919,23 @@ def main(argv: list[str] | None = None) -> int:
                    help="skip the unscored warm-up query (then question 1 includes model load)")
     p.add_argument("--apply-manual", type=Path, metavar="REPORT.md",
                    help="copy the filled-in 人工判定正確性 column of a report into its JSON, then exit")
+    p.add_argument("--rescore", type=Path, nargs="+", metavar="REPORT.json",
+                   help="recompute the automatic metrics of existing reports with the current rules "
+                        "(no model call; keeps timing, manual scores and notes), then exit")
+    p.add_argument("--project", type=Path,
+                   help="the indexed project, for checking files and symbols named in answers "
+                        "(default: the question file's project:, i.e. the sample project)")
     args = p.parse_args(argv)
+
+    if args.rescore:
+        for path in args.rescore:
+            try:
+                changes = rescore(path)
+            except (OSError, ValueError, KeyError) as exc:
+                print(f"✗ {path}: {exc}", file=sys.stderr)
+                return 2
+            print(f"{path}: " + ("; ".join(changes) if changes else "summary unchanged"))
+        return 0
 
     if args.apply_manual:
         try:
@@ -684,6 +957,7 @@ def main(argv: list[str] | None = None) -> int:
             p.error(f"unknown question ids: {sorted(unknown)}")
         questions = [q for q in questions if q.id in only]
 
+    inventory = load_inventory(args.project or question_set_project(args.questions))
     health = get_health(args.base_url)
     if "error" in health:
         print(f"✗ {args.base_url}/health: {health['error']}", file=sys.stderr)
@@ -698,9 +972,10 @@ def main(argv: list[str] | None = None) -> int:
         print("! The index was built with other settings (e.g. CHUNK_METADATA); run ./scripts/index.sh first", file=sys.stderr)
 
     started = datetime.now(timezone.utc)
-    results = run(questions, args.base_url, args.top_k, args.lang, args.timeout, args.warmup)
+    results = run(questions, args.base_url, args.top_k, args.lang, args.timeout, args.warmup, inventory=inventory)
     report = {
         "schema": 1,
+        "scoring": SCORING_VERSION,
         "date": started.astimezone().date().isoformat(),
         "started_at": started.isoformat(timespec="seconds"),
         "config": {
@@ -711,6 +986,8 @@ def main(argv: list[str] | None = None) -> int:
             "warmup": args.warmup,
             "only": sorted(only) if only else None,
             "questions_file": str(args.questions.relative_to(ROOT)) if args.questions.is_relative_to(ROOT) else str(args.questions),
+            "project": str(inventory.root.relative_to(ROOT)) if inventory and inventory.root.is_relative_to(ROOT)
+            else (str(inventory.root) if inventory else None),
         },
         "health": {k: health.get(k) for k in ("status", "ollama", "qdrant", "top_k", "retrieval")},
         "summary": summarize(results),
@@ -728,7 +1005,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"first token mean {s['first_token_seconds_mean']}s · total mean {s['total_seconds_mean']}s · "
           f"code hit {_rate_str(s['code_hit'])} · keywords {_pct(s['keyword_rate_mean'])} · "
           f"Simplified {s['simplified_answers']} · refused {_rate_str(s['no_answer_refused'])} · "
-          f"falsely refused {_rate_str(s['false_refusals'])} · errors {s['errors']}")
+          f"falsely refused {_rate_str(s['false_refusals'])} · "
+          f"suspected fabrication {_rate_str(s['suspected_fabrication'])} · errors {s['errors']}")
     print(f"→ {json_path}")
     print(f"→ {md_path}  (fill in 人工判定正確性)")
     return 1 if s["errors"] else 0

@@ -20,6 +20,10 @@
 #                    Retrieving only the docs that mention it is not enough.
 #   expect_no_answer (陷阱題) the answer should say the feature cannot be found
 #   forbidden_keywords (陷阱題) words that suggest an invented implementation
+#                    (a refusal that names one is not counted as refused; ADR 0019).
+#                    The refusal keywords of a 陷阱題 also match their Simplified forms
+#                    (REFUSAL_TRAD_SIMP in scripts/evaluate.py, 繁簡對照清單); a new
+#                    Chinese refusal keyword must be added there too (a unit test checks).
 #
 # Paths and facts come from the sample project only (CLAUDE.md, privacy).
 

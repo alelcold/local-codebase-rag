@@ -716,3 +716,161 @@ def test_compare_false_refusal_rate_lower_is_better():
     text = compare.compare(a, b)
     assert "| Refusal rate, trick questions / 拒答率 | 0% | 80% | +80 pt ▲ |" in text
     assert "| False refusal rate / 誤拒率 | 0% | 33% | +33 pt ▼ |" in text
+
+
+# ── Simplified refusals and suspected fabrication (scoring 2, devlog 2026-11-05) ─
+
+
+QUESTION_FILES = [QUESTIONS, ROOT / "docs" / "evaluation" / "questions-identifiers.yaml", OUT_OF_SCOPE]
+CJK = re.compile(r"[一-鿿]")
+
+
+@pytest.fixture(scope="module")
+def sample_inventory() -> ev.ProjectInventory:
+    return ev.ProjectInventory.scan(SAMPLE)
+
+
+def _trick(forbidden: list[str] | None = None) -> ev.Question:
+    q10 = next(q for q in ev.load_questions(QUESTIONS) if q.id == 10)
+    return ev.Question(id=10, type="陷阱題", question="?", expect_no_answer=True,
+                       keywords=q10.keywords, forbidden_keywords=forbidden or q10.forbidden_keywords)
+
+
+def test_refusal_list_covers_every_chinese_refusal_keyword():
+    """繁簡對照清單 must list every Chinese refusal phrase, so a new keyword cannot
+    silently miss its Simplified form again (Q22 「我无法提供…」, devlog 2026-11-03)."""
+    listed = {form for row in ev.REFUSAL_TRAD_SIMP for form in row}
+    used = [p for p in ev.REFUSAL_PHRASES if CJK.search(p)]
+    for path in QUESTION_FILES:
+        for q in ev.load_questions(path):
+            if q.expect_no_answer:
+                used += [kw for alternatives in q.keywords for kw in alternatives if CJK.search(kw)]
+    missing = sorted(set(used) - listed)
+    assert not missing, f"add these to REFUSAL_TRAD_SIMP with their Simplified forms: {missing}"
+
+
+def test_refusal_list_simplified_forms_are_correct():
+    for trad, *simplified in ev.REFUSAL_TRAD_SIMP:
+        assert simplified, trad
+        # The Traditional form is really Traditional, and the first Simplified form is its
+        # character-by-character conversion; later forms are word swaps (支援 → 支持).
+        assert not ev.simplified_chars(trad), trad
+        assert simplified[0] == trad.translate(ev.TRAD_TO_SIMP_CHARS), trad
+    assert ev.with_simplified(["無法", "WebSocket", "无法"]) == ["無法", "无法", "WebSocket"]
+
+
+@pytest.mark.parametrize("answer", [
+    "我无法提供关于付款流程的详细信息。",  # D-oos Q22, 2026-11-03
+    "在提供的代码中没有找到多人模式。",
+    "代码中没有相关的多人连线功能。",
+])
+def test_simplified_refusal_counts_as_refused(answer, sample_inventory):
+    m = ev.score(_trick(), ev.StreamResult(answer=answer, server={}), sample_inventory)
+    assert m["refused"] is True and m["suspected_fabrication"] is False
+
+
+def test_simplified_refusal_phrases_count_for_false_refusals():
+    assert ev.refusal_phrases("无法回答这个问题") == ["无法回答"]
+    assert ev.refusal_phrases("没有找到相关内容") == ["沒有找到".translate(ev.TRAD_TO_SIMP_CHARS)]
+    q = ev.Question(id=27, type="對照題", question="?", keywords=[["SoundManager"]])
+    assert ev.score(q, ev.StreamResult(answer="代码中没有找到音效。", server={}))["falsely_refused"] is True
+
+
+def test_refusal_that_names_a_forbidden_word_is_not_a_pass(sample_inventory):
+    """「沒有找到」 + WebSocket: not counted as refused, flagged for a person to check."""
+    answer = "專案中沒有找到多人連線的程式碼，不過可以用 WebSocket 同步玩家位置。"
+    m = ev.score(_trick(), ev.StreamResult(answer=answer, server={}), sample_inventory)
+    assert m["refusal_keyword_hit"] is True
+    assert m["refused"] is False and m["suspected_fabrication"] is True
+    assert m["keywords"]["forbidden_hits"] == ["WebSocket"]
+    # Also without a project to check against: the forbidden word alone is enough.
+    assert ev.score(_trick(), ev.StreamResult(answer=answer, server={}))["refused"] is False
+
+
+def test_refusal_that_cites_a_file_not_in_the_project_is_not_a_pass(sample_inventory):
+    answer = "找不到多人模式的說明，但 `src/net/MultiplayerSync.ts` 的 `syncPlayers()` 會同步位置 [1]。"
+    m = ev.score(_trick(), ev.StreamResult(answer=answer, server={}), sample_inventory)
+    assert m["refused"] is False and m["suspected_fabrication"] is True
+    assert m["unknown_refs"] == {"files": ["src/net/MultiplayerSync.ts"], "symbols": ["syncPlayers"]}
+
+
+def test_answer_that_cites_a_missing_file_is_flagged_but_still_scored(sample_inventory):
+    """Answerable question: flagged for a person, the other metrics are unchanged."""
+    q = next(q for q in ev.load_questions(QUESTIONS) if q.id == 1)
+    answer = "無敵時間在 src/game/Player.ts 的 invincibilityTime 設定，INVINCIBLE_MS = 1500 毫秒。"
+    m = ev.score(q, ev.StreamResult(answer=answer, server={}), sample_inventory)
+    assert m["unknown_refs"] == {"files": ["src/game/Player.ts"], "symbols": ["invincibilityTime"]}
+    assert m["suspected_fabrication"] is True and m["falsely_refused"] is False
+    assert "INVINCIBLE_MS" in m["keywords"]["matched"]
+
+
+def test_real_files_and_symbols_are_not_flagged(sample_inventory):
+    answer = (
+        "`INVINCIBLE_MS = 1500` 定義在 `src/config/gameConfig.ts`；Player.ts 的 `takeDamage()` 設定 "
+        "`isInvincible`，Game.ts 呼叫 `this.syncUi()`，用 `Math.max(0, x)` 與 `requestAnimationFrame` 跑 1500ms。"
+        "在Game.ts中，GameOver 時寫入 localStorage 的 HIGH_SCORE_KEY；用 TypeScript 與 Node.js。"
+    )
+    assert sample_inventory.unknown_refs(answer) == {"files": [], "symbols": []}
+
+
+def test_unknown_refs_are_not_checked_without_a_project():
+    m = ev.score(_trick(), ev.StreamResult(answer="找不到。", server={}))
+    assert m["unknown_refs"] is None and m["refused"] is True
+    assert ev.load_inventory(Path("/nonexistent"), log=lambda _: None) is None
+
+
+def test_report_flags_suspected_fabrication(backend, tmp_path):
+    oos = {q.id: q for q in ev.load_questions(OUT_OF_SCOPE)}
+    MockBackend.answers[oos[21].question] = {"sources": [], "tokens": ["我无法找到，", "也不存在多人房间。"]}
+    MockBackend.answers[oos[23].question] = {
+        "sources": [], "tokens": ["沒有雲端同步，但 `CloudSave.ts` 的 `uploadSave()` 會上傳。"]}
+    MockBackend.answers[oos[26].question] = {"sources": [], "tokens": ["HIGH_SCORE_KEY 存在 localStorage。"]}
+    code = ev.main(["--base-url", backend, "--label", "fab", "--questions", str(OUT_OF_SCOPE),
+                    "--only", "21,23,26", "--no-warmup", "--out-dir", str(tmp_path)])
+    assert code == 0
+    report = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert report["scoring"] == ev.SCORING_VERSION and report["config"]["project"] == "examples/sample-game-frontend"
+    r21, r23, r26 = report["results"]
+    assert r21["metrics"]["refused"] is True
+    assert r23["metrics"]["refused"] is False and r23["metrics"]["suspected_fabrication"] is True
+    assert r26["metrics"]["suspected_fabrication"] is False
+    assert report["summary"]["no_answer_refused"] == {"hit": 1, "of": 2, "rate": 0.5}
+    assert report["summary"]["suspected_fabrication"] == {"hit": 1, "of": 3, "rate": 0.333}
+    md = next(tmp_path.glob("*.md")).read_text()
+    assert "疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 1/3 (33%) |" in md
+    assert "(**not refused**: refusal phrase, but suspected fabrication)" in md
+    assert "- **Suspected fabrication (not in the project, check)**: files `CloudSave.ts`; symbols `uploadSave`" in md
+
+
+def test_rescore_recomputes_metrics_and_keeps_manual_scores_and_notes(backend, tmp_path):
+    oos = {q.id: q for q in ev.load_questions(OUT_OF_SCOPE)}
+    MockBackend.answers[oos[22].question] = {"sources": [], "tokens": ["我无法提供关于付款流程的详细信息。"]}
+    assert ev.main(["--base-url", backend, "--label", "old", "--questions", str(OUT_OF_SCOPE),
+                    "--only", "22", "--no-warmup", "--out-dir", str(tmp_path)]) == 0
+    json_path = next(tmp_path.glob("*.json"))
+    md_path = json_path.with_suffix(".md")
+    # Pretend it was scored by the old rules, then judged by a person.
+    report = json.loads(json_path.read_text())
+    report["results"][0]["metrics"]["refused"] = False
+    report["summary"]["no_answer_refused"] = {"hit": 0, "of": 1, "rate": 0.0}
+    report["results"][0]["manual_correctness"] = 1
+    report["summary"]["manual_correctness"] = {"judged": 1, "of": 1, "total": 1, "max": 2}
+    json_path.write_text(json.dumps(report, ensure_ascii=False))
+    md = re.sub(r"^(\| 22 \| 陷阱題 \|.*\|)  \|  \|$", r"\1 1 | AI：簡體 \\| 沒有明說 |", md_path.read_text(), flags=re.M)
+    md = md.replace("\n\n> Generated by", "\n\n> Judged by AI.\n\n> Generated by", 1)
+    md_path.write_text(md)
+
+    changes = ev.rescore(json_path, log=lambda _: None)
+    assert any(c.startswith("no_answer_refused") for c in changes)
+    report = json.loads(json_path.read_text())
+    assert report["results"][0]["metrics"]["refused"] is True
+    assert report["results"][0]["metrics"]["first_token_seconds"] is not None  # timing kept
+    assert report["results"][0]["manual_correctness"] == 1
+    assert report["summary"]["manual_correctness"]["total"] == 1
+    assert report["rescored"]["scoring"] == ev.SCORING_VERSION
+    new_md = md_path.read_text()
+    assert "> Judged by AI." in new_md
+    assert "1/1 (refused) | 无关于细 | 1 | AI：簡體 \\| 沒有明說 |" in new_md
+    # A second rescore changes nothing.
+    assert ev.rescore(json_path, log=lambda _: None) == []
+    assert md_path.read_text() == new_md

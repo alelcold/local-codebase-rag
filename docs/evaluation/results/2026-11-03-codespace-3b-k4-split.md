@@ -30,6 +30,7 @@
 | Time to first token, mean / median / 首字延遲 平均／中位數 | 15.9 s / 12.5 s |
 | Total time, mean / 總耗時平均 | 25.7 s |
 | Tokens, mean / 平均 token 數 | 109.0 |
+| Rerank time, mean / rerank 耗時平均 | — |
 | Expected-file recall, mean / 預期檔案命中率平均 | 40% |
 | Code file retrieved / 程式碼檔命中 | 6/9 (67%) |
 | Doc file retrieved / 文件檔命中 | 2/4 (50%) |
@@ -38,7 +39,10 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 25% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 28% |
 | Answers with Simplified characters / 混入簡體字的回答 | 3 |
-| Trick question refused / 陷阱題正確拒答 | 0/1 (0%) |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 0/1 (0%) |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/9 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 5/10 (50%) |
+| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 20 |
 
 Keyword hit rate by type / 各題型關鍵字命中率：定位設定 7%、解釋邏輯 35%、跨檔案流程 50%、陷阱題 0%
@@ -47,16 +51,16 @@ Keyword hit rate by type / 各題型關鍵字命中率：定位設定 7%、解�
 
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 定位設定 | 16.8 s | 23.0 s | 68 | 0/3 | 0/2 | 0/1 | 0/1 | 0/5 | 体码 | 0 | AI：編造 src/game/Player.ts 的 invincibilityTime = 2 秒，原始碼沒有。 |
-| 2 | 解釋邏輯 | 9.3 s | 14.2 s | 60 | 0/3 | 0/2 | 0/1 | — | 1/4 | — | 0 | AI：編造 Player.calculateHitMultiplier()，歸零條件也錯。 |
+| 1 | 定位設定 | 16.8 s | 23.0 s | 68 | 0/3 | 0/2 | 0/1 | 0/1 | 0/5 (**suspected fabrication**) | 体码 | 0 | AI：編造 src/game/Player.ts 的 invincibilityTime = 2 秒，原始碼沒有。 |
+| 2 | 解釋邏輯 | 9.3 s | 14.2 s | 60 | 0/3 | 0/2 | 0/1 | — | 1/4 (**suspected fabrication**) | — | 0 | AI：編造 Player.calculateHitMultiplier()，歸零條件也錯。 |
 | 3 | 解釋邏輯 | 47.2 s | 59.6 s | 118 | 2/2 | 1/1 | 1/1 | — | 4/5 | — | 2 | AI：requestAnimationFrame→frame、累加、FIXED_DT 步進 update、render 一次皆正確（未提 MAX_FRAME_TIME 上限）。 |
-| 4 | 跨檔案流程 | 13.1 s | 18.9 s | 69 | 0/2 | 0/2 | — | — | 0/5 | 义为这个随关变过后频会 | 0 | AI：編造 ASTEROID_SPAWN_RATE=1000 且說不隨關卡變。 |
+| 4 | 跨檔案流程 | 13.1 s | 18.9 s | 69 | 0/2 | 0/2 | — | — | 0/5 (**suspected fabrication**) | 义为这个随关变过后频会 | 0 | AI：編造 ASTEROID_SPAWN_RATE=1000 且說不隨關卡變。 |
 | 5 | 跨檔案流程 | 13.1 s | 25.3 s | 143 | 1/2 | 1/2 | — | — | 3/4 | — | 2 | AI：引用 handleGlobalInput：playing→paused，paused 時 accumulator=0 再回 playing，正確（未提 Overlay、不呼叫 update）。 |
 | 6 | 跨檔案流程 | 19.9 s | 32.4 s | 135 | 3/4 | 2/3 | 1/1 | — | 3/4 | — | 2 | AI：createUiStore 的 get／subscribe／set、值改變才通知，正確（未提 syncUi）。 |
-| 7 | 解釋邏輯 | 7.5 s | 21.4 s | 154 | 1/2 | 1/2 | — | — | 0/4 | — | 0 | AI：說在 Player.ts，並大談 Hud，與 collision.ts 的圓形碰撞無關。 |
+| 7 | 解釋邏輯 | 7.5 s | 21.4 s | 154 | 1/2 | 1/2 | — | — | 0/4 (**suspected fabrication**) | — | 0 | AI：說在 Player.ts，並大談 Hud，與 collision.ts 的圓形碰撞無關。 |
 | 8 | 定位設定 | 9.2 s | 17.8 s | 96 | 1/3 | 1/3 | — | 1/2 | 1/5 | — | 1 | AI：只答對 Shift 與「有冷卻」，明說資訊未提供，沒有數值。 |
 | 9 | 定位設定 | 11.9 s | 14.4 s | 29 | 1/2 | 1/2 | — | 0/1 | 0/3 | 于体来说储当 | 0 | AI：說 UiStore.score 存最高得分，沒答到 localStorage。 |
-| 10 | 陷阱題 | 11.2 s | 30.0 s | 218 | — | — | — | — | 0/1 (**not refused**) | — | 0 | AI：沒有拒答，聲稱 syncUi 同步玩家位置並提到 WebSocket。 |
+| 10 | 陷阱題 | 11.2 s | 30.0 s | 218 | — | — | — | — | 0/1 (**not refused**) (**suspected fabrication**) | — | 0 | AI：沒有拒答，聲稱 syncUi 同步玩家位置並提到 WebSocket。 |
 
 Files / Code / Doc / Def. = expected files found among the retrieved sources.
 
@@ -69,6 +73,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `src/game/Game.ts:66-84`, [2] `src/game/Game.ts:86-100`, [3] `src/utils/math.js:7-9`, [4] `README.md:26-32`
 - **Missed expected files**: `src/config/gameConfig.ts`, `src/entities/Player.ts`, `docs/gameplay.md`
 - **Missed keywords**: `INVINCIBLE_MS`, `1500 / 1.5 秒 / 1.5秒 / 1.5 s / 1.5s`, `gameConfig`, `takeDamage`, `isInvincible`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`; symbols `invincibilityTime`
 - **Simplified characters**: 体码
 
 <details><summary>Answer</summary>
@@ -92,6 +97,7 @@ private invincibilityTime = 2; // 2 秒
 - **Retrieved**: [1] `src/game/Game.ts:51-54`, [2] `src/game/GameState.ts:1-1`, [3] `src/utils/math.js:7-9`, [4] `docs/architecture.md:11-20`
 - **Missed expected files**: `src/systems/ScoreSystem.ts`, `src/config/gameConfig.ts`, `docs/gameplay.md`
 - **Missed keywords**: `0.25 / COMBO_STEP`, `MAX_COMBO_MULTIPLIER / 4 倍 / 4倍 / 4x`, `COMBO_WINDOW_MS / 2500 / 2.5 秒 / 2.5秒`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`; symbols `calculateHitMultiplier`
 
 <details><summary>Answer</summary>
 
@@ -133,6 +139,7 @@ private invincibilityTime = 2; // 2 秒
 - **Retrieved**: [1] `src/game/GameState.ts:14-14`, [2] `src/game/GameState.ts:1-1`, [3] `src/game/Game.ts:86-100`, [4] `README.md:26-32`
 - **Missed expected files**: `src/config/levels.js`, `src/systems/Spawner.ts`
 - **Missed keywords**: `asteroidInterval`, `getLevel`, `0.9`, `0.15`, `Spawner`
+- **Suspected fabrication (not in the project, check)**: symbols `ASTEROID_SPAWN_RATE`
 - **Simplified characters**: 义为这个随关变过后频会
 
 <details><summary>Answer</summary>
@@ -194,6 +201,7 @@ React 的 HUD 取得遊戲資料的方式是通過 `useSyncExternalStore` 函數
 - **Retrieved**: [1] `src/ui/Hud.tsx:8-28`, [2] `src/game/GameState.ts:1-1`, [3] `src/game/Game.ts:61-64`, [4] `README.md:26-32`
 - **Missed expected files**: `src/systems/collision.ts`
 - **Missed keywords**: `圓 / circle`, `平方 / squared / sqrt / 開根號`, `findOverlaps`, `handleCollisions`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`
 
 <details><summary>Answer</summary>
 
@@ -250,6 +258,7 @@ React 的 HUD 取得遊戲資料的方式是通過 `useSyncExternalStore` 函數
 - **Missed expected files**: —
 - **Missed keywords**: `找不到 / 沒有 / 没有 / 不存在 / 未包含 / 無法 / 沒找到 / not found / no multiplayer / does not / doesn't / cannot find / can't find`
 - **Forbidden keywords found**: WebSocket
+- **Suspected fabrication (not in the project, check)**: symbols `WebSocket`
 
 <details><summary>Answer</summary>
 

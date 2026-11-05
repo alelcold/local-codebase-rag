@@ -30,6 +30,7 @@
 | Time to first token, mean / median / 首字延遲 平均／中位數 | 19.6 s / 16.4 s |
 | Total time, mean / 總耗時平均 | 42.8 s |
 | Tokens, mean / 平均 token 數 | 241.0 |
+| Rerank time, mean / rerank 耗時平均 | — |
 | Expected-file recall, mean / 預期檔案命中率平均 | 40% |
 | Code file retrieved / 程式碼檔命中 | 5/9 (56%) |
 | Doc file retrieved / 文件檔命中 | 2/4 (50%) |
@@ -38,7 +39,10 @@
 | Share of retrieved chunks that are docs / 取回片段中文件的比例 | 25% |
 | Keyword hit rate, mean / 關鍵字命中率平均 | 31% |
 | Answers with Simplified characters / 混入簡體字的回答 | 2 |
-| Trick question refused / 陷阱題正確拒答 | 0/1 (0%) |
+| Refusal rate, trick questions / 拒答率（陷阱題正確拒答） | 0/1 (0%) |
+| False refusal rate, answerable questions / 誤拒率（可回答的題目答「找不到」） | 0/9 (0%) |
+| Suspected fabrication: names a file or symbol not in the project, or a forbidden word (check) / 疑似編造：提到專案中不存在的檔案或符號，或禁用字（需人工確認） | 4/10 (40%) |
+| Refused by SCORE_THRESHOLD (LLM not called) / 因門檻直接拒答 | 0 |
 | Manual correctness / 人工判定正確性 | ___ / 20 |
 
 Keyword hit rate by type / 各題型關鍵字命中率：定位設定 27%、解釋邏輯 27%、跨檔案流程 50%、陷阱題 0%
@@ -47,16 +51,16 @@ Keyword hit rate by type / 各題型關鍵字命中率：定位設定 27%、解�
 
 | # | Type | First token | Total | Tokens | Files | Code | Doc | Def. | Keywords | Simplified | 人工判定正確性 (0–2) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 定位設定 | 14.0 s | 17.8 s | 39 | 0/3 | 0/2 | 0/1 | 0/1 | 0/5 | — | 0 | AI：編造 Player.ts、2 秒。 |
+| 1 | 定位設定 | 14.0 s | 17.8 s | 39 | 0/3 | 0/2 | 0/1 | 0/1 | 0/5 (**suspected fabrication**) | — | 0 | AI：編造 Player.ts、2 秒。 |
 | 2 | 解釋邏輯 | 7.7 s | 23.1 s | 173 | 0/3 | 0/2 | 0/1 | — | 0/4 | — | 0 | AI：數值全錯（+0.1、上限 1.5、10 次歸零），實為 +0.25、上限 4。 |
 | 3 | 解釋邏輯 | 17.5 s | 28.4 s | 119 | 2/2 | 1/1 | 1/1 | — | 4/5 | — | 2 | AI：與文件一致：累加器、FIXED_DT 步進、render 一次、MAX_FRAME_TIME 上限（未提 requestAnimationFrame）。 |
-| 4 | 跨檔案流程 | 15.2 s | 64.2 s | 532 | 0/2 | 0/2 | — | — | 0/5 | 体 | 0 | AI：貼了不相關的程式碼，並推測在不存在的檔案，沒有答出生成頻率。 |
+| 4 | 跨檔案流程 | 15.2 s | 64.2 s | 532 | 0/2 | 0/2 | — | — | 0/5 (**suspected fabrication**) | 体 | 0 | AI：貼了不相關的程式碼，並推測在不存在的檔案，沒有答出生成頻率。 |
 | 5 | 跨檔案流程 | 31.4 s | 46.9 s | 163 | 2/2 | 2/2 | — | — | 3/4 | — | 1 | AI：步驟與 accumulator=0 正確，但把邏輯歸給 Overlay.tsx（Overlay 只負責顯示）。 |
 | 6 | 跨檔案流程 | 21.3 s | 46.3 s | 261 | 3/4 | 2/3 | 1/1 | — | 3/4 | — | 2 | AI：createUiStore 外部 store、set 只在值改變時通知、Hud 用 useSyncExternalStore，正確（未提 syncUi）。 |
-| 7 | 解釋邏輯 | 9.8 s | 23.5 s | 147 | 0/2 | 0/2 | — | — | 0/4 | — | 0 | AI：編造 CollisionDetector 類別與檔案。 |
+| 7 | 解釋邏輯 | 9.8 s | 23.5 s | 147 | 0/2 | 0/2 | — | — | 0/4 (**suspected fabrication**) | — | 0 | AI：編造 CollisionDetector 類別與檔案。 |
 | 8 | 定位設定 | 47.2 s | 91.3 s | 403 | 1/3 | 1/3 | — | 0/2 | 4/5 | 冲 | 1 | AI：Shift 與 DASH_SPEED／DASH_DURATION_MS／DASH_COOLDOWN_MS 常數名稱正確，但沒給任何數值。 |
 | 9 | 定位設定 | 19.7 s | 26.5 s | 71 | 1/2 | 1/2 | — | 0/1 | 0/3 | — | 0 | AI：說存在 UiStore 並用 ui.score 顯示最高分，沒答到 localStorage。 |
-| 10 | 陷阱題 | 12.3 s | 59.6 s | 502 | — | — | — | — | 0/1 (**not refused**) | — | 0 | AI：給了一堆多人同步做法，沒有說專案無此功能。 |
+| 10 | 陷阱題 | 12.3 s | 59.6 s | 502 | — | — | — | — | 0/1 (**not refused**) (**suspected fabrication**) | — | 0 | AI：給了一堆多人同步做法，沒有說專案無此功能。 |
 
 Files / Code / Doc / Def. = expected files found among the retrieved sources.
 
@@ -69,6 +73,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `src/utils/math.js:7-9`, [2] `src/utils/math.js:1-3`, [3] `src/game/Game.ts:86-100`, [4] `README.md:26-32`
 - **Missed expected files**: `src/config/gameConfig.ts`, `src/entities/Player.ts`, `docs/gameplay.md`
 - **Missed keywords**: `INVINCIBLE_MS`, `1500 / 1.5 秒 / 1.5秒 / 1.5 s / 1.5s`, `gameConfig`, `takeDamage`, `isInvincible`
+- **Suspected fabrication (not in the project, check)**: files `src/game/Player.ts`
 
 <details><summary>Answer</summary>
 
@@ -135,6 +140,7 @@ Files / Code / Doc / Def. = expected files found among the retrieved sources.
 - **Retrieved**: [1] `src/ui/Hud.tsx:8-28`, [2] `src/game/GameState.ts:14-14`, [3] `src/game/GameState.ts:1-1`, [4] `README.md:26-32`
 - **Missed expected files**: `src/config/levels.js`, `src/systems/Spawner.ts`
 - **Missed keywords**: `asteroidInterval`, `getLevel`, `0.9`, `0.15`, `Spawner`
+- **Suspected fabrication (not in the project, check)**: files `src/game/PlanetGenerator.ts`, `src/game/LevelManager.ts`
 - **Simplified characters**: 体
 
 <details><summary>Answer</summary>
@@ -254,6 +260,7 @@ store 只有在數值改變時才通知，避免每幀重新 render React。這�
 - **Retrieved**: [1] `src/ui/Hud.tsx:8-28`, [2] `src/ui/Hud.tsx:4-6`, [3] `src/ui/Hud.tsx:30-38`, [4] `README.md:26-32`
 - **Missed expected files**: `src/systems/collision.ts`, `src/game/Game.ts`
 - **Missed keywords**: `圓 / circle`, `平方 / squared / sqrt / 開根號`, `findOverlaps`, `handleCollisions`
+- **Suspected fabrication (not in the project, check)**: files `src/game/CollisionDetector.ts`; symbols `CollisionDetector`, `detectCollision`
 
 <details><summary>Answer</summary>
 
@@ -341,6 +348,7 @@ class CollisionDetector {
 - **Missed expected files**: —
 - **Missed keywords**: `找不到 / 沒有 / 没有 / 不存在 / 未包含 / 無法 / 沒找到 / not found / no multiplayer / does not / doesn't / cannot find / can't find`
 - **Forbidden keywords found**: WebSocket
+- **Suspected fabrication (not in the project, check)**: symbols `WebSockets`
 
 <details><summary>Answer</summary>
 

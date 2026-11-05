@@ -76,20 +76,25 @@
       "rate": 0.333
     },
     "retrieved_doc_share_mean": 0.25,
-    "keyword_rate_mean": 0.125,
+    "keyword_rate_mean": 0.25,
     "simplified_answers": 7,
     "no_answer_refused": {
-      "hit": 1,
+      "hit": 2,
       "of": 5,
-      "rate": 0.2
+      "rate": 0.4
     },
     "false_refusals": {
       "hit": 0,
       "of": 3,
       "rate": 0.0
     },
+    "suspected_fabrication": {
+      "hit": 0,
+      "of": 8,
+      "rate": 0.0
+    },
     "keyword_rate_by_type": {
-      "陷阱題": 0.2,
+      "陷阱題": 0.4,
       "對照題": 0.0
     },
     "manual_correctness": {
@@ -240,6 +245,12 @@
           "档"
         ],
         "has_simplified": true,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_keyword_hit": false,
         "refused": false
       },
       "manual_correctness": 0
@@ -372,12 +383,12 @@
         },
         "keywords": {
           "total": 1,
-          "hit": 0,
-          "rate": 0.0,
-          "matched": [],
-          "missed": [
-            "找不到 / 沒有 / 没有 / 不存在 / 未包含 / 無法 / 沒找到 / not found / does not / doesn't / cannot find / can't find"
+          "hit": 1,
+          "rate": 1.0,
+          "matched": [
+            "找不到"
           ],
+          "missed": [],
           "forbidden_hits": []
         },
         "simplified_chars": [
@@ -401,7 +412,13 @@
           "获"
         ],
         "has_simplified": true,
-        "refused": false
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_keyword_hit": true,
+        "refused": true
       },
       "manual_correctness": 1
     },
@@ -545,6 +562,12 @@
           "数"
         ],
         "has_simplified": true,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_keyword_hit": false,
         "refused": false
       },
       "manual_correctness": 0
@@ -696,6 +719,12 @@
           "档"
         ],
         "has_simplified": true,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_keyword_hit": true,
         "refused": true
       },
       "manual_correctness": 2
@@ -838,6 +867,12 @@
         },
         "simplified_chars": [],
         "has_simplified": false,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
+        "refusal_keyword_hit": false,
         "refused": false
       },
       "manual_correctness": 0
@@ -1000,6 +1035,11 @@
           "没"
         ],
         "has_simplified": true,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [],
         "falsely_refused": false
       },
@@ -1156,6 +1196,11 @@
           "体"
         ],
         "has_simplified": true,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [],
         "falsely_refused": false
       },
@@ -1326,10 +1371,19 @@
           "数"
         ],
         "has_simplified": true,
+        "unknown_refs": {
+          "files": [],
+          "symbols": []
+        },
+        "suspected_fabrication": false,
         "refusal_phrases": [],
         "falsely_refused": false
       },
       "manual_correctness": 0
     }
-  ]
+  ],
+  "rescored": {
+    "at": "2026-11-05T05:21:40+00:00",
+    "scoring": 2
+  }
 }

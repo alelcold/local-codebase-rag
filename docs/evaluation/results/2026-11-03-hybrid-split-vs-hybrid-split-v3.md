@@ -24,7 +24,8 @@
 | Keyword hit rate / 關鍵字命中率 | 28% | 18% | -10 pt ▼ |
 | Answers with Simplified / 混入簡體字的回答 | 4 | 0 | -4 ▲ |
 | Refusal rate, trick questions / 拒答率 | 0% | 100% | +100 pt ▲ |
-| False refusal rate / 誤拒率 | — | 89% | — |
+| False refusal rate / 誤拒率 | 0% | 89% | +89 pt ▼ |
+| Suspected fabrication / 疑似編造 | 4 | 0 | -4 ▲ |
 | Refused by SCORE_THRESHOLD / 因門檻直接拒答 | 0 | 0 | 0 |
 | Manual correctness / 人工判定正確性 | 7 | 3 | -4 |
 | Errors / 失敗題數 | 0 | 0 | 0 |
