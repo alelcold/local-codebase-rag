@@ -41,7 +41,7 @@
   5. Where a human still mattered: the architecture constraints, reviewing the PR, running on real hardware.
   6. Cost breakdown and what I would prompt differently next time.
 - **Screenshots**: PR #1 file list; the test run output (50 passed); the devlog problem section.
-- **Data**: development cost ≈ USD 7 (M§1); 50 unit tests (M§6); bugs caught only by end-to-end (M§6); lines of code {待填}.
+- **Data**: development cost ≈ USD 7 for the initial build, ≈ USD 100 for all sessions (M§1); 50 unit tests (M§6); bugs caught only by end-to-end (M§6); lines of code {待填}.
 
 ## Article 3 — Docker on a Mac can't use the GPU? Lessons from deploying a local LLM
 
@@ -149,7 +149,7 @@
   5. 仍然需要人的地方：架構限制、審查 PR、在真實硬體上執行。
   6. 成本拆解，以及下次會怎麼改寫提示詞。
 - **截圖**：PR #1 的檔案清單；測試結果（50 passed）；devlog 的問題段落。
-- **數據**：開發成本約 7 美元（M§1）；50 個單元測試（M§6）；只有端到端抓到的問題數（M§6）；程式碼行數 {待填}。
+- **數據**：開發成本：初版約 7 美元，所有工作階段合計約 100 美元（M§1）；50 個單元測試（M§6）；只有端到端抓到的問題數（M§6）；程式碼行數 {待填}。
 
 ## 第 3 篇 — Mac Docker 用不到 GPU？地端 LLM 部署踩坑紀錄
 

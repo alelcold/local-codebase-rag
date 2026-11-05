@@ -1,4 +1,4 @@
-# 0016. One-command benchmark on the Mac M2
+# 0017. One-command benchmark on the Mac M2
 
 - **Status**: Accepted
 - **Date**: 2026-11-03
@@ -64,7 +64,7 @@ Why `20 → 8` for rerank: `RERANK_TOP_N` equals `TOP_K`, so the model gets as m
 
 ---
 
-# 0016. Mac M2 一鍵實機測試
+# 0017. Mac M2 一鍵實機測試
 
 - **狀態**：已接受
 - **日期**：2026-11-03

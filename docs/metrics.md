@@ -10,10 +10,10 @@
 | Claude Code cloud session (initial build: design → code → tests → PR #1) | **≈ USD 7** | 2026-10-30 | One session |
 | Claude Code (docs / learning structure) | {待填} | 2026-10-31 | |
 | GitHub Codespaces usage | {待填} | 2026-11-01 | Core-hours |
-| Claude Code (timeouts, CI, docs PR) | {待填} | 2026-11-02 | |
+| Claude Code (timeouts, CI, docs PR #3) | **≈ USD 10** | 2026-11-02 | PR #3 (as reported by the owner) |
 | GitHub Actions minutes | {待填} | | Public repo on GitHub-hosted runners: check the billing page |
 | GPU instance for 32B benchmark | {待填} | | Instance type, USD/h × hours |
-| **Total** | {待填} | | |
+| **Total (all Claude Code sessions)** | **≈ USD 100** | up to 2026-11-05 | As reported by the owner: the credit was used up. The rows above are only the sessions recorded separately; the rest (later PRs, experiments, judging) is not itemised |
 
 ## 2. Indexing
 
@@ -38,8 +38,9 @@ Measure from the "送出" click until the answer appears (or with `time curl …
 | Date | Environment | Model | top_k | First query (s) | Avg of 10 queries (s) | p90 (s) | Time to first token, avg (s) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-01 | Codespaces (CPU) | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | — | **Estimated ≈ 1.5–2 min per query** (not measured over 10 queries). The UI returned 504 before the timeout fix; see ADR 0009 |
-| 2026-11-02 | Codespaces (CPU), `curl` through nginx inside the codespace | qwen2.5-coder:3b | {待填} | 54.7 | — | — | — | One query, non-streaming `/query`. The same query from the browser through the port forwarder failed with 504 after about 100 s (test log #9; ADR 0010) |
+| 2026-11-02 | Codespaces (CPU), `curl` through nginx inside the codespace | qwen2.5-coder:3b | 4 | 54.7 | — | — | — | One query, non-streaming `/query`. The same query from the browser through the port forwarder failed with 504 after about 100 s (test log #9; ADR 0010) |
 | 2026-11-02 | Codespaces (CPU), browser through the forwarding URL, streaming | qwen2.5-coder:3b | 4 | 43.8 | — | — | 30.4 (first query) | Single query by hand: 「玩家受傷後的無敵時間在哪裡設定？」, first after model load, 129 tokens. All 4 retrieved chunks were docs; the answer named the wrong file and mixed in Simplified characters (devlog 2026-11-02) |
+| 2026-11-02 | Codespaces (CPU, 4 cores), `ollama run --verbose` | qwen2.5-coder:3b | — | — | — | — | — | Ollama's own counters, one run: **prompt eval 25.3 tokens/s, eval (generation) 12.4 tokens/s, model load ≈ 3.5 s**. Prompt eval is about twice as fast as generation, but a RAG prompt is hundreds to thousands of tokens, so it dominates the first token (e.g. 1,000 prompt tokens ≈ 40 s: arithmetic from the rate, not a measurement) |
 | 2026-11-02 | Same | qwen2.5-coder:3b | 4 | — | — | — | 0.8 (prompt cache) | Same question asked again: 14.3 s total, 134 tokens. Ollama reused the cached prompt, so this is **not** normal latency. Generation speed both times ≈ 10 tokens/s |
 | {待填} | Codespaces (CPU), `scripts/evaluate.py` | qwen2.5-coder:3b | 4 | — | {待填} | {待填} | {待填} | 10 questions; check that nothing is cut off at about 100 s |
 | 2026-11-02 | GitHub Actions runner (CPU) | qwen2.5-coder:0.5b | 4 | 8 | — | — | — | CI smoke test (PR #3), one query, `LLM_NUM_CTX=4096`. Pipeline check only: the answer text had no `[n]` citation (sources were correct) |
@@ -114,7 +115,7 @@ J retrieved exactly the same excerpts as D on all 23 questions, so every differe
 
 | Model | Download size | Memory in use (`ollama ps`) | Runs on GPU? | Tokens/s (generation) | Avg query (s) | Eval score (/20) | Citation accuracy | Subjective quality notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| qwen2.5-coder:3b | ≈ 1.9 GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| qwen2.5-coder:3b | ≈ 1.9 GB | {待填} | No (Codespaces, CPU only) | 12.4 (Codespaces, 4 cores; prompt eval 25.3) | {待填} | 3–9 / 20 by retrieval group (AI-judged, §4a); baseline 5 | {待填} | Often cites the wrong file or invents code when the right code is not retrieved |
 | qwen2.5-coder:14b | ≈ 9 GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | qwen2.5-coder:32b | ≈ 20 GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
@@ -137,7 +138,7 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 
 ## How to measure
 
-On the Mac M2, one command measures §2, §3, §4, §4a and §5 and writes a summary whose tables have the same columns as this file (ADR 0016; README「在 Mac 實機測試（一鍵量測）」):
+On the Mac M2, one command measures §2, §3, §4, §4a and §5 and writes a summary whose tables have the same columns as this file (ADR 0017; README「在 Mac 實機測試（一鍵量測）」):
 
 ```bash
 ./scripts/benchmark-mac.sh
@@ -183,10 +184,10 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | Claude Code 雲端工作階段（初版建置：設計 → 程式 → 測試 → PR #1） | **約 7 美元** | 2026-10-30 | 單一工作階段 |
 | Claude Code（文件與學習紀錄結構） | {待填} | 2026-10-31 | |
 | GitHub Codespaces 用量 | {待填} | 2026-11-01 | 核心小時數 |
-| Claude Code（逾時、CI、文件 PR） | {待填} | 2026-11-02 | |
+| Claude Code（逾時、CI、文件 PR #3） | **約 10 美元** | 2026-11-02 | PR #3（擁有者回報的數字） |
 | GitHub Actions 分鐘數 | {待填} | | 公開 repo 使用 GitHub 提供的 runner：請查看帳單頁面 |
 | 32B 測試用的 GPU 機器 | {待填} | | 機型、每小時美元 × 時數 |
-| **總計** | {待填} | | |
+| **總計（所有 Claude Code 工作階段）** | **約 100 美元** | 截至 2026-11-05 | 擁有者回報：額度已用完。上面各列只是有單獨記錄的工作階段，其餘（後續 PR、實驗、評分）沒有逐項列出 |
 
 ## 2. 索引
 
@@ -211,8 +212,9 @@ ollama run qwen2.5-coder:14b --verbose "Explain a fixed-timestep game loop in 3 
 | 日期 | 環境 | 模型 | top_k | 第一次查詢（秒） | 10 次平均（秒） | p90（秒） | 首字延遲平均（秒） | 備註 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-01 | Codespaces（CPU） | qwen2.5-coder:3b | 8 | {待填} | {待填} | {待填} | — | **推算每次約 1.5～2 分鐘**（不是 10 次查詢的實測平均）。修正逾時前介面回傳 504，見 ADR 0009 |
-| 2026-11-02 | Codespaces（CPU），在 codespace 內用 `curl` 經 nginx | qwen2.5-coder:3b | {待填} | 54.7 | — | — | — | 單次查詢，非串流的 `/query`。同樣的查詢從瀏覽器經連接埠轉發，約 100 秒後回傳 504（測試紀錄 #9；ADR 0010） |
+| 2026-11-02 | Codespaces（CPU），在 codespace 內用 `curl` 經 nginx | qwen2.5-coder:3b | 4 | 54.7 | — | — | — | 單次查詢，非串流的 `/query`。同樣的查詢從瀏覽器經連接埠轉發，約 100 秒後回傳 504（測試紀錄 #9；ADR 0010） |
 | 2026-11-02 | Codespaces（CPU），瀏覽器經轉發網址，串流 | qwen2.5-coder:3b | 4 | 43.8 | — | — | 30.4（第一次查詢） | 手動單次查詢：「玩家受傷後的無敵時間在哪裡設定？」，模型載入後的第一次，129 個 token。取回的 4 段全是文件；回答說錯檔案，並混入簡體字（devlog 2026-11-02） |
+| 2026-11-02 | Codespaces（CPU，4 核心），`ollama run --verbose` | qwen2.5-coder:3b | — | — | — | — | — | Ollama 自己的計數，單次：**prompt eval 25.3 tokens/s、eval（生成）12.4 tokens/s、模型載入約 3.5 秒**。Prompt eval 大約是生成速度的兩倍，但 RAG 的提示詞有數百到數千個 token，所以首字延遲主要由它決定（例如 1,000 個提示詞 token 約 40 秒：由速度推算，不是實測） |
 | 2026-11-02 | 同上 | qwen2.5-coder:3b | 4 | — | — | — | 0.8（提示詞快取） | 同一題再問一次：總耗時 14.3 秒，134 個 token。Ollama 重用了快取的提示詞，所以**不是**一般的延遲。兩次的生成速度都約每秒 10 個 token |
 | {待填} | Codespaces（CPU），`scripts/evaluate.py` | qwen2.5-coder:3b | 4 | — | {待填} | {待填} | {待填} | 10 題；確認不會在約 100 秒時被中斷 |
 | 2026-11-02 | GitHub Actions runner（CPU） | qwen2.5-coder:0.5b | 4 | 8 | — | — | — | CI 冒煙測試（PR #3），單次查詢，`LLM_NUM_CTX=4096`。只用來驗證流程：回答文字沒有 `[n]` 引用（來源正確） |
@@ -287,7 +289,7 @@ J 組在全部 23 題取回的片段都與 D 組完全相同，所以所有差�
 
 | 模型 | 下載大小 | 實際記憶體（`ollama ps`） | 是否在 GPU 上執行 | 生成速度（tokens/s） | 平均查詢（秒） | 評估分數（/20） | 引用正確率 | 主觀品質備註 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| qwen2.5-coder:3b | 約 1.9GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
+| qwen2.5-coder:3b | 約 1.9GB | {待填} | 否（Codespaces，只有 CPU） | 12.4（Codespaces 4 核心；prompt eval 25.3） | {待填} | 依檢索組別 3～9 / 20（AI 判讀，§4a）；基準線 5 | {待填} | 沒取回正確程式碼時，常引用錯的檔案或編造程式碼 |
 | qwen2.5-coder:14b | 約 9GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 | qwen2.5-coder:32b | 約 20GB | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} | {待填} |
 
@@ -310,7 +312,7 @@ J 組在全部 23 題取回的片段都與 D 組完全相同，所以所有差�
 
 ## 量測方式
 
-在 Mac M2 上，一個指令就能量完 §2、§3、§4、§4a、§5，並輸出欄位與本檔案相同的摘要（ADR 0016；README「在 Mac 實機測試（一鍵量測）」）：
+在 Mac M2 上，一個指令就能量完 §2、§3、§4、§4a、§5，並輸出欄位與本檔案相同的摘要（ADR 0017；README「在 Mac 實機測試（一鍵量測）」）：
 
 ```bash
 ./scripts/benchmark-mac.sh

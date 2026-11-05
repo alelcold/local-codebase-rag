@@ -33,7 +33,7 @@ cd frontend && npm run build         # type-check + build the UI
 python3 scripts/evaluate.py --label <env-model>  # 10-question evaluation → docs/evaluation/results/ (ADR 0012)
 python3 scripts/compare.py A.json B.json         # compare two evaluation runs
 python3 scripts/calibrate_threshold.py           # suggest SCORE_THRESHOLD from evaluation results (ADR 0014)
-./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2: Ollama speed/GPU, indexing, retrieval groups → summary for docs/metrics.md (ADR 0016)
+./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2: Ollama speed/GPU, indexing, retrieval groups → summary for docs/metrics.md (ADR 0017)
 ```
 
 ## Rules
@@ -98,7 +98,7 @@ cd frontend && npm run build         # 型別檢查並 build 前端
 python3 scripts/evaluate.py --label <環境-模型>  # 10 題評估 → docs/evaluation/results/（ADR 0012）
 python3 scripts/compare.py A.json B.json         # 比較兩次評估結果
 python3 scripts/calibrate_threshold.py           # 從評估結果建議 SCORE_THRESHOLD（ADR 0014）
-./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2：Ollama 速度與 GPU、索引、檢索組別 → 可貼進 docs/metrics.md 的摘要（ADR 0016）
+./scripts/benchmark-mac.sh [--quick] [--with-rerank]  # Mac M2：Ollama 速度與 GPU、索引、檢索組別 → 可貼進 docs/metrics.md 的摘要（ADR 0017）
 ```
 
 ## 規則

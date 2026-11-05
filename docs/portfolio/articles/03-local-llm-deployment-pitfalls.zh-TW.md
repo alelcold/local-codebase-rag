@@ -10,7 +10,7 @@
 - 我做了一套地端的 codebase RAG：Ollama 跑在主機上，Qdrant、FastAPI + LlamaIndex 後端、React 前端跑在 Docker 裡。
 - 手邊沒有 Mac，所以先在 GitHub Codespaces（Linux、只有 CPU）上測。踩到三個坑，每個都不是程式邏輯的 bug，而是**環境與網路**的問題，單元測試全部通過也抓不到。
 - 三個坑的除錯方法都一樣：**從呼叫端的位置、一段一段驗證**，每次只排除一層。
-- CPU 上跑 3B 模型，在 codespace 內用 `curl` 經 nginx 的單次非串流查詢是 54.7 秒（當時的 `top_k` {待填}）。最後的 504 是 Codespaces 的連接埠轉發在約 100 秒時切斷連線，調高我們自己的逾時沒有用；改成串流回應後，同一類查詢從瀏覽器經轉發網址完成了（首字延遲 30.4 秒、總耗時 43.8 秒、129 個 token）。這一次只有 43.8 秒，**還沒有驗證超過 100 秒的查詢**。
+- CPU 上跑 3B 模型，在 codespace 內用 `curl` 經 nginx 的單次非串流查詢是 54.7 秒（`top_k` 為 4）。最後的 504 是 Codespaces 的連接埠轉發在約 100 秒時切斷連線，調高我們自己的逾時沒有用；改成串流回應後，同一類查詢從瀏覽器經轉發網址完成了（首字延遲 30.4 秒、總耗時 43.8 秒、129 個 token）。這一次只有 43.8 秒，**還沒有驗證超過 100 秒的查詢**。
 - 番外：第四個問題不在服務裡，而是 `git push` 被 Git LFS 的 hook 擋下（見「番外」）。
 
 ---
@@ -279,7 +279,7 @@ time curl -sS localhost:8080/api/query -H 'Content-Type: application/json' -d '{
 
 nginx、後端、Ollama 這三段已經被第一條路徑證明沒問題，差別只有連接埠轉發，範圍縮到只剩一層。
 
-（瀏覽器那次為什麼比 54.7 秒久、久到撞上 100 秒——模型還沒載入、`top_k` 不同，或是排在另一個請求後面——目前還沒確認，{待填}。）
+（瀏覽器那次為什麼比 54.7 秒久、久到撞上 100 秒——模型還沒載入、`top_k` 不同（`curl` 那次是 4，瀏覽器那次的值沒有記錄），或是排在另一個請求後面——目前還沒確認，{待填}。）
 
 [截圖：瀏覽器 DevTools Network 面板，/api/query 約 100 秒後 504]
 
@@ -361,9 +361,9 @@ This repository is configured for Git LFS but 'git-lfs' was not found on your pa
 | --- | --- | --- |
 | 機型 | 4 核心（devlog 2026-11-03） | `devcontainer.json` 的 `hostRequirements` 要求 4 核心／16GB；實際機型名稱 {待填} |
 | 範例專案完整索引 | 20 個檔案 → 67 個片段，**41.9 秒**（升級後第一次全量重建）；18.8～20.7 秒（切換 `CHUNK_METADATA` 後的全量重建） | CPU 產生 embedding；2026-11-01 第一次索引的耗時沒有記錄，{待填} |
-| Prompt eval 速度 | {待填} | 尚未用 `ollama run --verbose` 或 API 回傳量測 |
+| Prompt eval 速度 | **25.3 tokens/s** | `ollama run --verbose`，單次，Codespaces 4 核心（CPU），`qwen2.5-coder:3b`。同一次：生成（eval）12.4 tokens/s，模型載入約 3.5 秒（metrics §3） |
 | 生成（eval）速度 | **約 10 tokens/s** | 兩次手動串流查詢（metrics §3），不是獨立量測 |
-| 一次查詢（非串流 `/query`，`curl` 經 nginx） | **54.7 秒** | 單次查詢；當時的 `top_k` {待填} |
+| 一次查詢（非串流 `/query`，`curl` 經 nginx） | **54.7 秒** | 單次查詢，`top_k` 為 4 |
 | 瀏覽器經連接埠轉發（非串流） | 約 100 秒後 504 | |
 | 串流查詢（瀏覽器經轉發網址）：首字延遲／總耗時 | **30.4 秒／43.8 秒**（129 個 token） | `TOP_K=4`，模型載入後第一次查詢；同一題再問：0.8 秒／14.3 秒，是提示詞快取 |
 | `scripts/evaluate.py` 的 10 題平均（`TOP_K=4`） | 首字延遲 13.0 秒、總耗時 20.9 秒（基準線 A 組） | 10 個不同問題、先暖機，主要題組；見 metrics §4a 與第 6 篇 |
@@ -375,7 +375,7 @@ This repository is configured for Git LFS but 'git-lfs' was not found on your pa
 總時間 ≈ 檢索 + 提示詞 token 數 ÷ prompt eval 速度 + 回答 token 數 ÷ eval 速度
 ```
 
-RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所以**首字延遲主要由 prompt eval 決定**，這也是把 `TOP_K` 從 8 降到 4 的原因。串流那次查詢的回答是 129 個 token：以約 10 tokens/s 計，生成約 13 秒，與總耗時 43.8 秒減首字延遲 30.4 秒 = 13.4 秒吻合；其餘 30.4 秒是模型載入加提示詞處理。提示詞的 token 數：{待填}。
+RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所以**首字延遲主要由 prompt eval 決定**，這也是把 `TOP_K` 從 8 降到 4 的原因。串流那次查詢的回答是 129 個 token：以約 10 tokens/s 計，生成約 13 秒，與總耗時 43.8 秒減首字延遲 30.4 秒 = 13.4 秒吻合（Ollama 自己的計數後來量到生成速度是 12.4 tokens/s，所以實際速度稍快一點）。其餘 30.4 秒是模型載入加提示詞處理；在 `ollama run --verbose` 那次，載入只花約 3.5 秒，所以大部分是以 25.3 tokens/s 處理提示詞。提示詞的 token 數：{待填}。
 
 ### CI（GitHub Actions runner，CPU，第一次執行、沒有快取）
 
@@ -426,7 +426,7 @@ RAG 的提示詞裡塞了 `TOP_K` 段程式碼，通常比回答長得多，所�
 
 ### 成本
 
-Claude Code 的花費：第一個建出初版的工作階段約 **7 美元**（metrics §1）；之後各工作階段的花費與總計 {待填}（`metrics.md` 尚未記錄）。Codespaces 核心時數 {待填}，GitHub Actions 是公開 repo，使用 GitHub 提供的 runner。
+Claude Code 的花費：第一個建出初版的工作階段約 **7 美元**（metrics §1）；PR #3 的工作階段約 **10 美元**，所有工作階段合計約 **100 美元**，額度就此用完（metrics §1；其餘約 83 美元沒有逐項列出）。Codespaces 核心時數 {待填}，GitHub Actions 是公開 repo，使用 GitHub 提供的 runner。
 
 心得一句話：**AI agent 把「寫程式」的成本壓得很低，但「在真實環境驗證」的成本沒有變。** 真正省時間的做法，是把驗證結果寫成具體的紀錄（現象、指令、錯誤訊息、數字），再交給 agent。
 
