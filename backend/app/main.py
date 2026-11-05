@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from .config import get_settings
 from .rag import OllamaTimeoutError, RagService
-from .services import Services, build_services, check_ollama, check_qdrant, check_reranker
+from .services import Services, build_services, check_ollama, check_qdrant, check_glossary, check_reranker
 
 log = logging.getLogger(__name__)
 
@@ -178,9 +178,11 @@ def create_app(services: Services | None = None) -> FastAPI:
         ollama = check_ollama(svc())
         qdrant = check_qdrant(svc())
         reranker = check_reranker(svc())
+        glossary = check_glossary(svc())
         s = svc().settings
+        healthy = ollama["ok"] and qdrant["ok"] and reranker.get("ok", True) and glossary.get("ok", True)
         return {
-            "status": "ok" if ollama["ok"] and qdrant["ok"] and reranker.get("ok", True) else "degraded",
+            "status": "ok" if healthy else "degraded",
             "ollama": ollama,
             "qdrant": qdrant,
             "codebase_path": s.codebase_path,
@@ -189,6 +191,8 @@ def create_app(services: Services | None = None) -> FastAPI:
             # Query-time retrieval settings (ADR 0013, 0014, 0015); scripts/evaluate.py records them.
             "retrieval": s.retrieval_summary(),
             "reranker": reranker,
+            # ADR 0020: terms loaded, whether it is in effect (needs HYBRID_SEARCH), load errors.
+            "glossary": glossary,
             "index_job": app.state.index_job.state,
         }
 

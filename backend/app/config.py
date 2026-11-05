@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     # TOP_K goes to code. A type with too few hits leaves its slots to the other.
     split_retrieval: bool = False
     doc_top_k: int = 1
+    # Query glossary (ADR 0020): Chinese terms in the question add the code
+    # identifiers listed for them in QUERY_GLOSSARY_PATH to the BM25 query and
+    # the identifier channel. Only those channels use it, so it does nothing
+    # without HYBRID_SEARCH=true (/health says so). Query time only.
+    query_glossary: bool = False
+    query_glossary_path: str = "/glossary/sample-game-frontend.yaml"
     # Similarity threshold (ADR 0014): vector hits whose cosine similarity is
     # below this are dropped before fusion. Empty = no filtering. No universal
     # default: calibrate per embedding model with scripts/calibrate_threshold.py.
@@ -195,6 +201,10 @@ class Settings(BaseSettings):
             "prompt_variant": self.prompt_variant,
             "rrf_k": self.rrf_k if self.hybrid_search else None,
             "retrieval_candidates": self.retrieval_candidates,
+            # ADR 0020: in effect only together with hybrid_search.
+            "query_glossary": self.query_glossary,
+            "query_glossary_active": self.query_glossary and self.hybrid_search,
+            "query_glossary_path": self.query_glossary_path if self.query_glossary else None,
             # ADR 0014 / 0015
             "score_threshold": self.score_threshold,
             "rerank": self.rerank,

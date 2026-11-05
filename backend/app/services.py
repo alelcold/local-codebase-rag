@@ -137,6 +137,28 @@ def check_qdrant(services: Services) -> dict:
     }
 
 
+def check_glossary(services: Services) -> dict:
+    """QUERY_GLOSSARY state for /health (ADR 0020). Loads (or re-reads) the file."""
+    s = services.settings
+    if not s.query_glossary:
+        return {"enabled": False}
+    glossary = services.rag.glossary()
+    gf = services.rag.glossary_file
+    out: dict = {
+        "enabled": True,
+        "path": gf.path,
+        "terms": len(glossary) if glossary is not None else None,
+        # Only the keyword and identifier channels use the glossary.
+        "active": glossary is not None and s.hybrid_search,
+        "ok": glossary is not None,
+    }
+    if gf.error:
+        out["error"] = gf.error
+    if not s.hybrid_search:
+        out["note"] = "QUERY_GLOSSARY has no effect without HYBRID_SEARCH=true"
+    return out
+
+
 def check_reranker(services: Services) -> dict:
     """RERANK state for /health. Never loads the model (that happens on the first query)."""
     s = services.settings

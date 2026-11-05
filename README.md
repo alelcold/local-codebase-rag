@@ -367,6 +367,7 @@ data: {"retrieval_seconds": 0.21, "first_token_seconds": 3.4, "total_seconds": 9
 | `TOP_K` | `8` | 預設取回的片段數 |
 | `HYBRID_SEARCH` | `false` | 混合檢索：向量 + BM25 + 識別字定義比對，以 RRF 合併（[ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)） |
 | `SPLIT_RETRIEVAL` / `DOC_TOP_K` | `false` / `1` | 程式碼與文件分開取回：文件最多 `DOC_TOP_K` 段，其餘給程式碼 |
+| `QUERY_GLOSSARY` / `QUERY_GLOSSARY_PATH` / `GLOSSARY_DIR` | `false` / `/glossary/sample-game-frontend.yaml` / `./glossary` | 查詢詞彙表：問題中的中文詞（例如「連擊」）把對應識別字加進 BM25 與識別字通道。**需要 `HYBRID_SEARCH=true` 才有作用**；草稿用 `scripts/build_glossary.py` 產生（[ADR 0020](docs/decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md)） |
 | `CHUNK_METADATA` | `false` | 把路徑、類型、符號、定義／export 的名稱放進 embedding 內容（**需重新索引**，會自動全量重建） |
 | `PROMPT_VARIANT` | `v1` | `v2` = 一律繁體中文回答，並先說明程式碼位置（檔案與行號）；`v3` = 以 v1 為基礎，片段沒有直接提到問題主題時明確回答找不到，並一律使用繁體中文（[ADR 0016](docs/decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md)） |
 | `SCORE_THRESHOLD` | （空值 = 不過濾） | 向量檢索 cosine 低於此值的片段在 RRF 前丟掉；全部被丟掉時不呼叫 LLM，直接回答「找不到」。數值用 `scripts/calibrate_threshold.py` 決定（[ADR 0014](docs/decisions/0014-similarity-threshold.md)） |
@@ -827,6 +828,7 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0017](docs/decisions/0017-one-command-mac-benchmark.md) | Mac M2 一鍵實機測試 / One-command benchmark on the Mac M2 |
 | [0018](docs/decisions/0018-codespaces-default-retrieval-settings.md) | Codespaces 的預設檢索設定：只開分類取回 / Default retrieval settings for Codespaces: split retrieval only |
 | [0019](docs/decisions/0019-refusal-scoring-simplified-and-fabrication-check.md) | 拒答計分：簡體拒答字句與編造檢查 / Refusal scoring: Simplified refusal phrases and a fabrication check |
+| [0020](docs/decisions/0020-query-glossary-instead-of-chinese-word-segmentation.md) | 查詢詞彙表（中文詞 → 識別字），不用中文斷詞 / Query glossary (Chinese terms → identifiers) instead of Chinese word segmentation |
 | **學習與評估 / Learning & evaluation** | |
 | [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 23 個主題的解釋、程式碼位置、面試題、自我檢核 / 23 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |

@@ -1,3 +1,2 @@
 -r requirements.txt
 pytest==9.2.0
-pyyaml==6.0.3  # scripts/evaluate.py tests (docs/evaluation/questions.yaml)

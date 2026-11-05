@@ -13,6 +13,7 @@ from llama_index.core.llms import LLM
 from llama_index.core.schema import BaseNode
 
 from .config import Settings, is_doc_path
+from .glossary import GlossaryFile, GlossaryHit
 from .rerank import Reranker, rerank_order
 from .retrieval import KeywordIndex, contains_identifier, extract_identifiers, rrf, split_select
 from .store import CodeVectorStore
@@ -179,6 +180,9 @@ class Retrieval:
     no_relevant: bool = False
     rerank_seconds: float | None = None
     rerank_load_seconds: float | None = None
+    # QUERY_GLOSSARY (ADR 0020): terms found in the question and the identifiers
+    # added to the keyword and identifier channels. None when not in effect.
+    glossary: GlossaryHit | None = None
 
 
 class RagService:
@@ -199,6 +203,14 @@ class RagService:
         self._keyword_lock = threading.Lock()
         self._keyword_index: KeywordIndex | None = None
         self._keyword_signature: str | None = None
+        # Only read when QUERY_GLOSSARY=true; reloaded when the file changes.
+        self.glossary_file = GlossaryFile(settings.query_glossary_path)
+
+    def glossary(self):
+        """The QUERY_GLOSSARY file's glossary, or None when it cannot be loaded (error in ``glossary_file.error``)."""
+        if self.glossary_file.path != self.settings.query_glossary_path:
+            self.glossary_file = GlossaryFile(self.settings.query_glossary_path)
+        return self.glossary_file.get()
 
     def keyword_index(self) -> KeywordIndex:
         """The BM25 index, rebuilt whenever the stored points changed (also when
@@ -261,21 +273,32 @@ class RagService:
             vector_hits = kept
         vector_ranking = [note(h.node, "vector") for h in vector_hits]
 
+        glossary_hit: GlossaryHit | None = None
         if s.hybrid_search:
             index = self.keyword_index()
             identifiers = extract_identifiers(question)
-            keyword_hits = [n for n, _ in index.search(question, pool)]
+            keyword_query = question
+            # Identifiers for the identifier channel: the question's own, then the glossary's.
+            lookup = list(identifiers)
+            if s.query_glossary:
+                glossary = self.glossary()
+                glossary_hit = glossary.match(question) if glossary is not None else GlossaryHit()
+                if glossary_hit.identifiers:
+                    keyword_query = f"{question} {' '.join(glossary_hit.identifiers)}"
+                    lookup += [i for i in glossary_hit.identifiers if i not in lookup]
+            keyword_hits = [n for n, _ in index.search(keyword_query, pool)]
             if threshold is not None:
                 # A keyword hit must either be semantically close (its vector hit
                 # passed the threshold) or contain an exact identifier from the
                 # question; otherwise common words ("player") would let anything through.
+                # Glossary identifiers do not exempt: they are inferred, not spelled out.
                 passed = set(vector_ranking)
                 keyword_hits = [
                     n for n in keyword_hits if n.node_id in passed or contains_identifier(n.get_content(), identifiers)
                 ]
             keyword_ranking = [note(n, "keyword") for n in keyword_hits]
             # Identifier hits define a name the question spells out: exact evidence, never filtered.
-            ident_ranking = [note(n, "identifier") for n in index.identifier_matches(identifiers, pool)]
+            ident_ranking = [note(n, "identifier") for n in index.identifier_matches(lookup, pool)]
             fused = rrf([vector_ranking, keyword_ranking, ident_ranking], k=s.rrf_k)
             ranked = [node_id for node_id, _ in fused]
             scores = {node_id: score for node_id, score in fused}
@@ -284,7 +307,7 @@ class RagService:
             scores = {nid: cosine[nid] for nid in vector_ranking}
 
         if threshold is not None and not ranked:
-            return Retrieval(sources=[], below_threshold=below, no_relevant=bool(below))
+            return Retrieval(sources=[], below_threshold=below, no_relevant=bool(below), glossary=glossary_hit)
 
         def is_doc(nid: str) -> bool:
             return is_doc_path(str(nodes[nid].metadata.get("file_path", "")))
@@ -328,6 +351,7 @@ class RagService:
             below_threshold=below,
             rerank_seconds=rerank_seconds,
             rerank_load_seconds=rerank_load_seconds,
+            glossary=glossary_hit,
         )
 
     def _rerank(
@@ -393,6 +417,8 @@ class RagService:
             # ADR 0015: cross-encoder time (None with RERANK=false); model load on first use.
             "rerank_seconds": None,
             "rerank_load_seconds": None,
+            # ADR 0020: {"terms": [...], "identifiers": [...]} when QUERY_GLOSSARY is in effect, else None.
+            "glossary": None,
         }
 
         def finish() -> StreamEvent:
@@ -416,6 +442,7 @@ class RagService:
         stats["no_relevant"] = found.no_relevant
         stats["rerank_seconds"] = found.rerank_seconds
         stats["rerank_load_seconds"] = found.rerank_load_seconds
+        stats["glossary"] = found.glossary.to_dict() if found.glossary is not None else None
         if not sources:
             yield from canned(NO_RELEVANT_ANSWER if found.no_relevant else NO_MATCH_ANSWER)
             return

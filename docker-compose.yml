@@ -59,6 +59,10 @@ services:
       RETRIEVAL_CANDIDATES: ${RETRIEVAL_CANDIDATES:-30}
       SPLIT_RETRIEVAL: ${SPLIT_RETRIEVAL:-false}
       DOC_TOP_K: ${DOC_TOP_K:-1}
+      # Query glossary (ADR 0020): Chinese terms -> identifiers for BM25 and the
+      # identifier channel. Needs HYBRID_SEARCH=true. The file is read from GLOSSARY_DIR below.
+      QUERY_GLOSSARY: ${QUERY_GLOSSARY:-false}
+      QUERY_GLOSSARY_PATH: ${QUERY_GLOSSARY_PATH:-/glossary/sample-game-frontend.yaml}
       PROMPT_VARIANT: ${PROMPT_VARIANT:-v1}
       # Anti-hallucination switches (ADR 0014, 0015); empty / false = off.
       SCORE_THRESHOLD: ${SCORE_THRESHOLD:-}
@@ -72,6 +76,9 @@ services:
     volumes:
       # The project being indexed, mounted read-only.
       - ${PROJECT_PATH:-./examples/sample-game-frontend}:/codebase:ro
+      # Query glossaries (QUERY_GLOSSARY, ADR 0020), read-only. Keep a real
+      # project's glossary outside this repo and point GLOSSARY_DIR at its folder.
+      - ${GLOSSARY_DIR:-./glossary}:/glossary:ro
       # Reranker model cache (HF_HOME): downloaded once on the first RERANK query,
       # kept across container rebuilds. Stays empty with RERANK=false.
       - reranker_models:/models

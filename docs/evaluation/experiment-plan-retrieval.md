@@ -1,4 +1,4 @@
-# Experiment plan: hybrid retrieval, split retrieval, chunk metadata, prompt v2, threshold, rerank, prompt v3
+# Experiment plan: hybrid retrieval, split retrieval, chunk metadata, prompt v2, threshold, rerank, prompt v3, query glossary
 
 > English first; 繁體中文版本在下方.
 > Privacy: only the sample project (`examples/sample-game-frontend/`) is indexed and evaluated.
@@ -50,6 +50,7 @@ Run them in this order: groups A–D, then G and H, share one index; E, F and I 
 | H. + rerank | `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4` (ADR 0015; image built with `INSTALL_RERANK=true`) | Does a cross-encoder put the defining code into the top 4, and how many seconds does it cost on CPU? |
 | I. hybrid + split + rerank | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 RERANK=true RERANK_TOP_N=4` (`RERANK_CANDIDATES` default 10). **Redefined on 2026-11-03**, see [I](#i-hybrid--split--rerank-redefined-2026-11-03) | Does rerank, with hybrid, improve on C (split), the best main-set retrieval so far? |
 | J. D + prompt v3 | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 PROMPT_VARIANT=v3` (ADR 0016) | Does an explicit "not found" rule make the 3B model refuse features that do not exist (Q10, ids 21–25), without refusing real questions (ids 26–28, main set)? |
+| K. C + hybrid + glossary | `SPLIT_RETRIEVAL=true DOC_TOP_K=1 HYBRID_SEARCH=true QUERY_GLOSSARY=true` (ADR 0020) | Do Chinese terms mapped to identifiers let BM25 and the identifier channel help Chinese questions (main Q2: `ScoreSystem.ts`, `gameConfig.ts`)? |
 
 `RERANK_TOP_N=4` (not the default 3) in H and I keeps the number of excerpts sent to the model equal to the other groups' `TOP_K=4`, so only the choice of excerpts changes. Run H once more with `RERANK_TOP_N=3` if you want to measure the default.
 
@@ -283,6 +284,48 @@ python3 scripts/compare.py docs/evaluation/results/<date>-codespace-3b-k4-hybrid
 
 Read every answer flagged `(**falsely refused**)` and every trick-question answer: the automatic refusal check is a keyword screen (a 「沒有」 next to invented code would still need the forbidden-word check to catch it).
 
+### K. C + hybrid + glossary (ADR 0020)
+
+The questions are Chinese and BM25 indexes ASCII identifiers only, so hybrid search did little for the main set (Code file retrieved: A 1/9 → B 3/9, C 6/9 → D 6/9). Main Q2 (連擊倍率) retrieved neither `ScoreSystem.ts` nor `gameConfig.ts` in any of the 8 groups run (A–D, F, H–J). K adds the query glossary (`glossary/sample-game-frontend.yaml`): the Chinese terms in a question add their identifiers to the BM25 query and the identifier channel. It needs `HYBRID_SEARCH=true`, so K is D (C + hybrid) plus `QUERY_GLOSSARY=true`, and **D is its reference**. Query time only: the A–D index (no `CHUNK_METADATA`) is used as is.
+
+```bash
+SPLIT_RETRIEVAL=true DOC_TOP_K=1 HYBRID_SEARCH=true QUERY_GLOSSARY=true docker compose up -d backend
+```
+
+Check that `/health` reports `"query_glossary_active": true` under `retrieval`, and `glossary.ok: true` with the number of terms, then run all three sets:
+
+```bash
+python3 scripts/evaluate.py --label codespace-3b-k4-hybrid-split-glossary
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-identifiers.yaml --label codespace-3b-k4-hybrid-split-glossary-ident
+```
+
+```bash
+python3 scripts/evaluate.py --questions docs/evaluation/questions-out-of-scope.yaml --label codespace-3b-k4-hybrid-split-glossary-oos
+```
+
+Compare D → K (the glossary alone) and C → K:
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-glossary.json --out docs/evaluation/results/<date>-hybrid-split-vs-hybrid-split-glossary.md
+```
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-ident.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-glossary-ident.json --out docs/evaluation/results/<date>-hybrid-split-vs-hybrid-split-glossary-ident.md
+```
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-hybrid-split-oos.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-glossary-oos.json --out docs/evaluation/results/<date>-hybrid-split-vs-hybrid-split-glossary-oos.md
+```
+
+```bash
+python3 scripts/compare.py docs/evaluation/results/2026-11-03-codespace-3b-k4-split.json docs/evaluation/results/<date>-codespace-3b-k4-hybrid-split-glossary.json --out docs/evaluation/results/<date>-split-vs-hybrid-split-glossary.md
+```
+
+The sample glossary was written by someone who had read the evaluation questions, so K measures an **upper bound** for a hand-made glossary. A fairer test, not planned yet: new questions written after the glossary, or a glossary made only from `scripts/build_glossary.py`'s draft with obvious errors removed.
+
 ### Back to the baseline afterwards
 
 ```bash
@@ -322,6 +365,7 @@ Metric names are those in the report summary and `compare.py`. "Retrieval" metri
 | H. rerank | Defining file retrieved ↑, Expected file cited with [n] ↑, Manual correctness ↑; **Rerank time, mean** | Rerank time vs. first-token time: is the gain worth the seconds on CPU? |
 | I. hybrid + split + rerank | vs. C: Defining file retrieved (main) ↑, Code file retrieved ≥ C; `-ident`: Defining file retrieved stays 3/3; **Rerank time, mean** | Rerank time vs. first-token time; whether rerank pushes the one allowed doc excerpt out (Docs among retrieved chunks should stay ≤ 25 %) |
 | J. D + prompt v3 | vs. D: **Refusal rate** ↑ (main: Q10; `-oos`: ids 21–25), **False refusal rate = 0** (main, `-ident`, `-oos` ids 26–28), **Answers with Simplified = 0**; retrieval metrics unchanged (same retrieval) | Answers that refuse *and* explain something anyway; whether the fixed sentence is copied exactly; any real question now answered with 「找不到」; Manual correctness on the main set must not drop |
+| K. C + hybrid + glossary | vs. **D** (same switches without the glossary) and C: **Code file retrieved, main ↑** and **Defining file retrieved, main ↑** (Q1, Q2 and Q8 in particular); `-ident` stays 3/3; `-oos` refusal rate and false refusal rate unchanged | The `- **Glossary**:` line under each answer: which terms matched and what was added. A term that pulls in a wrong file (e.g. 分數 → `ScoreSystem` for a question about the HUD) is a glossary problem, not a retrieval one. The glossary was written by someone who had seen the questions: read K as an upper bound (ADR 0020) |
 
 Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row per group, with the report link). Never fill in numbers that were not measured.
 
@@ -331,11 +375,12 @@ Record the summary rows in [`docs/metrics.md`](../metrics.md) section 4 (one row
 - If C alone gives most of the gain, keep hybrid optional (it then mainly helps questions that name identifiers).
 - Threshold (G): turn on only with the calibrated value, and only if no answerable question was refused. The value is tied to the embedding model; a new model needs a new calibration.
 - Rerank (H): turn on by default only if Manual correctness improves **and** the rerank time is acceptable next to the first-token time on the target machine.
+- Query glossary (K): worth turning on for Codespaces only if D → K raises Code file retrieved or Defining file retrieved on the main set without lowering Manual correctness on any set, and the gain should also be checked with questions written after the glossary (ADR 0020).
 - Prompt v3 (J): make it the default only if the refusal rate rises (at least Q10 and most of 21–25), the false refusal rate stays 0 on every set, and main-set Manual correctness does not drop. A single false refusal of a real question outweighs one more refused trick question: a wrong "not found" hides code that exists. Write a new ADR for the change of default; do not edit `.env.codespaces` until then.
 
 ---
 
-# 實驗計畫：混合檢索、分類取回、切塊 metadata、提示 v2、相似度門檻、Rerank、提示 v3
+# 實驗計畫：混合檢索、分類取回、切塊 metadata、提示 v2、相似度門檻、Rerank、提示 v3、查詢詞彙表
 
 > 隱私：只索引與評估範例專案（`examples/sample-game-frontend/`）。
 > 設計：[ADR 0013](../decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[ADR 0014](../decisions/0014-similarity-threshold.md)（門檻）、[ADR 0015](../decisions/0015-rerank.md)（Rerank）、[ADR 0016](../decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md)（提示 v3，拒答範圍外的問題）。指標：[ADR 0012](../decisions/0012-automated-evaluation-metrics.md)。
@@ -386,6 +431,7 @@ curl -s localhost:8000/health | python3 -m json.tool | grep -A8 '"retrieval"'
 | H. + Rerank | `RERANK=true RERANK_CANDIDATES=10 RERANK_TOP_N=4`（ADR 0015；映像檔以 `INSTALL_RERANK=true` 建置） | 交叉編碼器能否把定義的程式碼排進前 4 段？在 CPU 上要多花幾秒？ |
 | I. 混合 + 分類 + Rerank | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 RERANK=true RERANK_TOP_N=4`（`RERANK_CANDIDATES` 用預設 10）。**2026-11-03 重新定義**，原因見下方 I 組說明 | 加上混合檢索與 Rerank，能否勝過目前主要題組檢索最好的 C（分類取回）？ |
 | J. D + 提示 v3 | `HYBRID_SEARCH=true SPLIT_RETRIEVAL=true DOC_TOP_K=1 PROMPT_VARIANT=v3`（ADR 0016） | 明確的「找不到」規則能否讓 3B 模型拒答不存在的功能（第 10 題、21–25 題），同時不拒答真實問題（26–28 題、主要題組）？ |
+| K. C + 混合 + 詞彙表 | `SPLIT_RETRIEVAL=true DOC_TOP_K=1 HYBRID_SEARCH=true QUERY_GLOSSARY=true`（ADR 0020） | 把中文詞對應到識別字後，BM25 與識別字通道能否幫上中文問題（主要題組第 2 題：`ScoreSystem.ts`、`gameConfig.ts`）？ |
 
 H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片段數與其他組的 `TOP_K=4` 相同，只改變「選哪些片段」。想量測預設值時，可以再以 `RERANK_TOP_N=3` 跑一次 H 組。
 
@@ -412,6 +458,11 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
   3. 三個題組各跑一次，label 為 `codespace-3b-k4-hybrid-split-v3`、`-v3-ident`（`--questions docs/evaluation/questions-identifiers.yaml`）、`-v3-oos`（`--questions docs/evaluation/questions-out-of-scope.yaml`）。
   4. 三個題組各以 `compare.py` 比較 D → J（指令見英文版）。
   5. 每一個標示 `(**falsely refused**)` 的回答與每一題陷阱題的回答都要讀過：自動拒答判定只是關鍵字篩選（編造程式碼時旁邊寫了「沒有」，要靠禁用字才抓得到）。
+- **K 組：C + 混合 + 詞彙表（ADR 0020）**。題目是中文，BM25 只索引英文識別字，所以混合檢索對主要題組作用不大（程式碼檔命中：A 1/9 → B 3/9、C 6/9 → D 6/9）；主要題組第 2 題（連擊倍率）在跑過的 8 組（A–D、F、H–J）都沒有取回 `ScoreSystem.ts` 或 `gameConfig.ts`。K 組加上查詢詞彙表（`glossary/sample-game-frontend.yaml`）：問題中的中文詞，會把對應識別字加進 BM25 查詢與識別字通道。它需要 `HYBRID_SEARCH=true`，所以 K = D（C + 混合）再加 `QUERY_GLOSSARY=true`，**以 D 為參考**。只影響查詢，沿用 A–D 的索引（不開 `CHUNK_METADATA`）。指令（與英文版相同）：
+  1. `SPLIT_RETRIEVAL=true DOC_TOP_K=1 HYBRID_SEARCH=true QUERY_GLOSSARY=true docker compose up -d backend`，確認 `/health` 的 `retrieval` 顯示 `"query_glossary_active": true`，`glossary` 顯示 `ok: true` 與詞數。
+  2. 三個題組各跑一次，label 為 `codespace-3b-k4-hybrid-split-glossary`、`-glossary-ident`、`-glossary-oos`。
+  3. 以 `compare.py` 比較 D → K（只有詞彙表的差別，三個題組各一份）與 C → K（主要題組）。
+  4. 範例詞彙表是看過評估題目的人寫的，所以 K 組量到的是人工詞彙表的**上限**。較公平的測法（尚未規劃）：在詞彙表完成後另寫新題目，或只用 `scripts/build_glossary.py` 的草稿（刪掉明顯錯誤）來測。
 - 全部跑完後，執行 `docker compose up -d backend` 與 `./scripts/index.sh` 回到基準線。
 - 每份 `.md` 報告都要填寫「人工判定正確性」並執行 `--apply-manual`，再用 `compare.py` 把每一組與 A 比較。
 
@@ -434,6 +485,7 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
 | H. Rerank | 定義檔命中 ↑、回答引用預期檔案 ↑、人工判定正確性 ↑；**rerank 耗時平均** | rerank 耗時與首字延遲相比：在 CPU 上多花的秒數值得嗎？ |
 | I. 混合 + 分類 + Rerank | 與 C 相比：定義檔命中（主要）↑、程式碼檔命中 ≥ C；識別字題組：定義檔命中維持 3/3；**rerank 耗時平均** | rerank 耗時與首字延遲相比；rerank 是否把唯一的文件名額擠掉（取回片段中文件比例應維持 ≤ 25%） |
 | J. D + 提示 v3 | 與 D 相比：**拒答率** ↑（主要：第 10 題；`-oos`：21–25 題）、**誤拒率 = 0**（主要、`-ident`、`-oos` 的 26–28 題）、**混入簡體字的回答 = 0**；取回類指標不變（檢索相同） | 拒答之後又自己補充說明的回答；固定句子是否被完整照抄；有沒有真實問題變成回答「找不到」；主要題組的人工判定正確性不能下降 |
+| K. C + 混合 + 詞彙表 | 與 **D**（同樣的開關、沒有詞彙表）及 C 相比：**程式碼檔命中（主要）↑**、**定義檔命中（主要）↑**（特別是第 1、2、8 題）；`-ident` 維持 3/3；`-oos` 的拒答率與誤拒率不變 | 每個回答下方的「- **Glossary**:」：比對到哪些詞、加了哪些識別字。詞把錯的檔案帶進來（例如問 HUD 卻因「分數」加入 `ScoreSystem`）是詞彙表的問題，不是檢索的問題。寫詞彙表的人看過題目：K 組的結果要視為上限（ADR 0020） |
 
 把摘要數據記到 [`docs/metrics.md`](../metrics.md) 第 4 節（每組一列，附報告連結）。沒有量測的數字不要填。
 
