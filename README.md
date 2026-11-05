@@ -76,7 +76,7 @@ flowchart LR
 | **串流回應** | `POST /query/stream`（SSE）：檢索完先送引用、再逐 token 送回答，閒置時每 10 秒送 heartbeat，避開轉發代理約 100 秒切斷沒有回應的連線；nginx 對串流路徑關閉緩衝 | [ADR 0010](docs/decisions/0010-streaming-responses.md) |
 | **混合檢索與分類取回** | 向量 + BM25 + 識別字定義比對，以 RRF 合併；程式碼與文件分開取回，避免文件擠掉程式碼；另有相似度門檻與 cross-encoder rerank。全部是開關，預設關閉 | [ADR 0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md)、[0014](docs/decisions/0014-similarity-threshold.md)、[0015](docs/decisions/0015-rerank.md) |
 | **語法感知切塊、增量索引** | tree-sitter 依函式／class 切塊（過大的 class 依 method 再切）、Markdown 依標題切；以內容雜湊做增量索引，切塊設定改變時自動全量重建 | [ADR 0004](docs/decisions/0004-chunking-by-file-type.md) |
-| **自動化評估與實驗** | `evaluate.py` 用 10 題主要題組＋5 題識別字題組量測延遲、引用命中、定義檔命中、簡體字、陷阱題拒答；`compare.py` 比較兩次執行；`calibrate_threshold.py` 從結果校準門檻；`benchmark-mac.sh` 一鍵完成 Mac 實測 | [ADR 0012](docs/decisions/0012-automated-evaluation-metrics.md)、[0016](docs/decisions/0016-one-command-mac-benchmark.md)、[實驗計畫](docs/evaluation/experiment-plan-retrieval.md) |
+| **自動化評估與實驗** | `evaluate.py` 用 10 題主要題組＋5 題識別字題組量測延遲、引用命中、定義檔命中、簡體字、陷阱題拒答；`compare.py` 比較兩次執行；`calibrate_threshold.py` 從結果校準門檻；`benchmark-mac.sh` 一鍵完成 Mac 實測 | [ADR 0012](docs/decisions/0012-automated-evaluation-metrics.md)、[0017](docs/decisions/0017-one-command-mac-benchmark.md)、[實驗計畫](docs/evaluation/experiment-plan-retrieval.md) |
 | **CI** | GitHub Actions：單元測試（Ollama、Qdrant 皆以假物件取代，157 個測試約 7 秒）、compose 設定檢查、映像檔 build、對 `main` 的 PR 跑端到端冒煙測試（runner 上的 Ollama + `qwen2.5-coder:0.5b`） | [ADR 0008](docs/decisions/0008-ci-design.md)、[metrics §6](docs/metrics.md#6-engineering-quality) |
 | **Dev Container** | 開啟 GitHub Codespace 就自動安裝 Ollama、拉模型、啟動服務、建立索引；`scripts/doctor.sh` 依序做 12 項檢查並印出修正指令 | [ADR 0011](docs/decisions/0011-devcontainer-for-codespaces.md) |
 
@@ -491,7 +491,7 @@ git pull && docker compose up -d --build
 
 ## 在 Mac 實機測試（一鍵量測）
 
-拿到目標機器（Apple Silicon Mac，以 M2 32GB 為準）時，一個指令完成所有量測，輸出一份可以直接貼進 [`docs/metrics.md`](docs/metrics.md) 的摘要。設計考量見 [ADR 0016](docs/decisions/0016-one-command-mac-benchmark.md)。
+拿到目標機器（Apple Silicon Mac，以 M2 32GB 為準）時，一個指令完成所有量測，輸出一份可以直接貼進 [`docs/metrics.md`](docs/metrics.md) 的摘要。設計考量見 [ADR 0017](docs/decisions/0017-one-command-mac-benchmark.md)。
 
 先確認：已完成[安裝步驟](#安裝步驟)（Ollama、Docker Desktop），`.env` 的 `PROJECT_PATH` 是範例專案（預設值），Mac 接上電源，並關閉其他吃記憶體的程式。第一次建議先跑 `--quick` 確認流程：
 
@@ -768,7 +768,7 @@ cd frontend && npm install && npm run dev
 │   ├── evaluate.py             # 自動化評估：10 題的延遲、引用命中、關鍵字、簡體字 → JSON + Markdown 報告
 │   ├── compare.py              # 比較兩份評估結果（不同模型或 TOP_K）
 │   ├── calibrate_threshold.py  # 從評估結果建議 SCORE_THRESHOLD（ADR 0014）
-│   ├── benchmark-mac.sh        # Mac 一鍵實測：生成速度、GPU、索引、檢索實驗 → 摘要（ADR 0016）
+│   ├── benchmark-mac.sh        # Mac 一鍵實測：生成速度、GPU、索引、檢索實驗 → 摘要（ADR 0017）
 │   └── benchmark_summary.py    # benchmark-mac.sh 的摘要產生器（欄位對齊 docs/metrics.md）
 ├── backend/                    # FastAPI + LlamaIndex
 │   ├── Dockerfile
@@ -823,7 +823,9 @@ The `docs/` folder records decisions, problems and measurements made during deve
 | [0013](docs/decisions/0013-hybrid-retrieval-and-split-retrieval.md) | 混合檢索、分類取回、切塊 metadata / Hybrid retrieval, split code/doc retrieval, chunk metadata |
 | [0014](docs/decisions/0014-similarity-threshold.md) | 相似度門檻與固定的「找不到」回答 / Similarity threshold and a fixed "not found" answer |
 | [0015](docs/decisions/0015-rerank.md) | Cross-encoder rerank：選用、延遲載入 / Cross-encoder rerank, optional and lazily loaded |
-| [0016](docs/decisions/0016-one-command-mac-benchmark.md) | Mac M2 一鍵實機測試 / One-command benchmark on the Mac M2 |
+| [0016](docs/decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md) | 在提示中拒答範圍外的問題（提示 v3，未採用）/ Refuse out-of-scope questions in the prompt (prompt v3, not adopted) |
+| [0017](docs/decisions/0017-one-command-mac-benchmark.md) | Mac M2 一鍵實機測試 / One-command benchmark on the Mac M2 |
+| [0018](docs/decisions/0018-codespaces-default-retrieval-settings.md) | Codespaces 的預設檢索設定：只開分類取回 / Default retrieval settings for Codespaces: split retrieval only |
 | **學習與評估 / Learning & evaluation** | |
 | [docs/learning/knowledge-checklist.md](docs/learning/knowledge-checklist.md) | 23 個主題的解釋、程式碼位置、面試題、自我檢核 / 23 topics: explanation, code pointers, interview questions, self-check |
 | [docs/evaluation/questions.md](docs/evaluation/questions.md) | 範例專案的 10 題評估與計分表 / 10 evaluation questions on the sample project, with a score sheet |

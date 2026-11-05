@@ -2,8 +2,8 @@
 
 > **Status**: draft, not published. `[Screenshot: …]` and `[Chart: …]` mark where a figure should go; `{待填}` marks numbers not measured yet.
 > **Language**: English version. The Traditional Chinese version is [`06-data-driven-rag-retrieval.zh-TW.md`](06-data-driven-rag-retrieval.zh-TW.md). The two match section by section; update both together (a documented exception to the bilingual rule, see [`../article-series.md`](../article-series.md)).
-> **Important limitation**: every retrieval and answer metric in this article is **automatic metrics only; manual correctness not judged yet**. None of the experiment groups has had its "manual correctness" column filled in, so every "works" or "doesn't help" below means **what was retrieved**, not **what was answered correctly**.
-> **Plan**: Article 6 in [`../article-series.md`](../article-series.md). Sources: [devlog 2026-11-02](../../devlog/2026-11-02.md), [devlog 2026-11-03](../../devlog/2026-11-03.md), [`metrics.md`](../../metrics.md) §4a / §4b / §4c, the [experiment plan](../../evaluation/experiment-plan-retrieval.md), the [threshold calibration output](../../evaluation/results/2026-11-03-threshold-calibration.md), ADRs [0012](../../decisions/0012-automated-evaluation-metrics.md), [0013](../../decisions/0013-hybrid-retrieval-and-split-retrieval.md), [0014](../../decisions/0014-similarity-threshold.md), [0015](../../decisions/0015-rerank.md), [0016](../../decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md).
+> **Important limitation**: retrieval and latency numbers are automatic metrics. Correctness scores (section 4.7) were judged by **AI (Claude), not a person**; a person re-checked only the 5 least certain ones. Everything was measured on a 20-file sample project, one run per group, with a 3B model on CPU.
+> **Plan**: Article 6 in [`../article-series.md`](../article-series.md). Sources: [devlog 2026-11-02](../../devlog/2026-11-02.md), [devlog 2026-11-03](../../devlog/2026-11-03.md), [`metrics.md`](../../metrics.md) §4a / §4b / §4c, the [experiment plan](../../evaluation/experiment-plan-retrieval.md), the [threshold calibration output](../../evaluation/results/2026-11-03-threshold-calibration.md), ADRs [0012](../../decisions/0012-automated-evaluation-metrics.md), [0013](../../decisions/0013-hybrid-retrieval-and-split-retrieval.md), [0014](../../decisions/0014-similarity-threshold.md), [0015](../../decisions/0015-rerank.md), [0016](../../decisions/0016-refuse-out-of-scope-questions-in-the-prompt.md), [0018](../../decisions/0018-codespaces-default-retrieval-settings.md) and PR #20 (correctness scoring).
 > **Privacy**: every file name, symbol and question comes from `examples/sample-game-frontend/` or this repo.
 
 ## TL;DR
@@ -12,7 +12,8 @@
 - I built the evaluation tool first (`evaluate.py`: a 10-question main set, a 5-question identifier set and an 8-question out-of-scope set), then tried 7 approaches in turn: hybrid retrieval, split retrieval, chunk metadata, prompt v2, a similarity threshold, rerank and an anti-hallucination prompt v3. Conditions were fixed (Codespaces, CPU, 3B model, `TOP_K=4`) and one switch changed at a time.
 - Result: **only split retrieval (`SPLIT_RETRIEVAL`) earns a default-on recommendation.** Docs among the retrieved chunks went from 95% to 25%, code-file retrieval from 1/9 to 6/9, and retrieval time stayed at 0.07–0.21 s. The other six stay off by default: hybrid adds nothing on top of split; metadata and prompt v2 did not help; the usual 0.70 similarity threshold would drop 93% of the correct excerpts; rerank costs +4.8 s and about +10 s to first token; prompt v3 falsely refuses 8 of 9 answerable questions.
 - The biggest lesson is not which trick works. It is that **looking at group B (hybrid) alone made it look very effective, until a control group D showed that split retrieval had already done the job.**
-- **None of these conclusions has been confirmed by manual correctness scoring, and all were measured on a 20-file sample project, one run per group, with a 3B model on CPU.**
+- Correctness scoring (by AI, 5 least certain re-checked by a person) agrees: split retrieval takes correct answers from 11 to 17 of 30. The rerank setup I scores the same 17 and costs about 10 s more per query, and question 2 scores 0 in all 8 groups because the right file is never retrieved. **Better retrieval did not always mean better answers.**
+- **All of this was measured on a 20-file sample project, one run per group, with a 3B model on CPU, and most correctness scores are unconfirmed by a person.**
 
 ---
 
@@ -122,24 +123,24 @@ There are 10 group labels, and 8 groups were actually run (A, B, C, D, F, H, I, 
 
 ## 4. The experiments, one by one
 
-Each section follows "expectation → result → why". Every result is **automatic metrics only; manual correctness not judged yet**.
+Each section follows "expectation → result → why". Results are automatic metrics; correctness (AI-judged) is added in the overview and in section 4.7.
 
 ### The overview first
 
 [Chart: bar chart per group A → J of "defining file retrieved (main)", "code file retrieved" and "doc share"]
 
-| Group | Defining file, main | Defining file, ident. | Code file, main | Docs among retrieved chunks, main |
-| --- | --- | --- | --- | --- |
-| A baseline | 0/3 | 1/3 | 1/9 | 95% |
-| B + hybrid | 0/3 | 3/3 | 3/9 | 88% |
-| C + split | 1/3 | 3/3 | 6/9 | 25% |
-| D hybrid + split | 0/3 | 3/3 | 6/9 | 25% |
-| F all on (+ metadata, v2) | 0/3 | 3/3 | 5/9 | 25% |
-| H + rerank | 0/3 | 2/3 | 2/9 | 85% |
-| I D + rerank | 3/3 | 3/3 | 7/9 | 23% |
-| J D + prompt v3 | 0/3 | 3/3 | 6/9 | 25% |
+| Group | Defining file, main | Defining file, ident. | Code file, main | Docs among retrieved chunks, main | Correctness (AI), main / ident. |
+| --- | --- | --- | --- | --- | --- |
+| A baseline | 0/3 | 1/3 | 1/9 | 95% | 5 / 6 |
+| B + hybrid | 0/3 | 3/3 | 3/9 | 88% | 9 / 7 |
+| C + split | 1/3 | 3/3 | 6/9 | 25% | 7 / 10 |
+| D hybrid + split | 0/3 | 3/3 | 6/9 | 25% | 7 / 9 |
+| F all on (+ metadata, v2) | 0/3 | 3/3 | 5/9 | 25% | 6 / 10 |
+| H + rerank | 0/3 | 2/3 | 2/9 | 85% | 6 / 8 |
+| I D + rerank | 3/3 | 3/3 | 7/9 | 23% | 8 / 9 |
+| J D + prompt v3 | 0/3 | 3/3 | 6/9 | 25% | 3 / 5 |
 
-Source: metrics §4a. One run per cell; manual correctness is not judged for any group.
+Source: metrics §4a. One run per cell. Correctness is out of 20 (main) and 10 (ident.), judged by AI.
 
 ### 4.1 Hybrid retrieval (B)
 
@@ -194,9 +195,9 @@ If I had stopped after A and B, I would have put hybrid search into the defaults
 - More Simplified-character answers: 3 in C against 1 in A. My hypothesis (**untested**): with mostly code in the prompt, the 3B model drifts to Simplified more often.
 - Longer time to first token (15.9 s against A's 13.0 s) because the retrieved code excerpts are longer than doc sections (for example 146 lines for question 3 → 47 s). Latency comparisons are unreliable because of the cache effect (4.1), so this is "it looks like".
 
-**Open risk**: with docs capped at 1, questions whose point is in the docs (2, 3 and 6) may have gotten worse. Only manual correctness scoring can tell. This is the one prerequisite before C goes on by default.
+**The risk I checked**: with docs capped at 1, questions whose point is in the docs (2, 3 and 6) might have gotten worse. They did not: 0 / 2 / 2 in the baseline, 0 / 2 / 2 in C (AI-judged, section 4.7).
 
-**Conclusion**: the best return on cost in the whole experiment, and **the only switch recommended for default-on** (pending manual scoring to confirm that questions 2, 3 and 6 did not regress).
+**Conclusion**: the best return on cost in the whole experiment, and **the only switch turned on by default** (`.env.codespaces`, ADR 0018). Questions 2, 3 and 6 did not regress.
 
 ### 4.3 Chunk metadata and prompt v2 (F)
 
@@ -320,22 +321,49 @@ One more detail: time to first token did not drop (20.3 s against 17.2 s, though
 
 ---
 
+### 4.7 Does better retrieval mean better answers? Correctness scores
+
+**How it was scored**: all 136 answers (8 groups × 15 questions, plus 16 out-of-scope answers) were read against the sample project's source and given 0 (wrong or invented), 1 (partly right) or 2 (all key facts right). They were shuffled per question with no group name, so the same standard applies to every group. **The scoring is by AI (Claude), not a person.** A person re-checked the 5 least certain scores and the conclusions did not change; the other scores are unconfirmed.
+
+| Group | Main (/20) | Ident. (/10) | Total (/30) |
+| --- | --- | --- | --- |
+| A baseline | 5 | 6 | 11 |
+| B + hybrid | 9 ¹ | 7 | 16 |
+| **C + split** | **7** | **10** | **17** |
+| D hybrid + split | 7 | 9 | 16 |
+| F all on (+ metadata, v2) | 6 | 10 | 16 |
+| H + rerank | 6 | 8 | 14 |
+| **I D + rerank** | **8** | 9 | **17** |
+| J D + prompt v3 | 3 | 5 | 8 |
+
+¹ B's first place on the main set rests on three answers scored 1 that could be 0; with 0 it is 6, below C.
+
+Three things the scores say:
+
+1. **C = I = 17 of 30, but I costs about 10 s more per query.** I has rerank (+4.8 s) on top of D, and its first token is 26.8 s against D's 17.2 s, plus a 2.15 GB image. It gains questions 1 and 9 over C and loses 3 and 8. Paying that for no more correct answers is a bad trade, so rerank stays off.
+2. **Question 2 (combo multiplier) is 0 in all 8 groups, and that is a retrieval gap, not a switch effect.** In no group did the top 4 contain `ScoreSystem.ts` or `gameConfig.ts`, and the Chinese question has no identifier (`COMBO_STEP`) for the keyword channel to catch. With nothing relevant in front of it, the 3B model invents a `Player.ts` combo with the wrong numbers. No switch in this article fixes it; a Chinese → identifier glossary is the next thing to try.
+3. **Better retrieval does not mean better answers.** I retrieves best (defining file 3/3, code 7/9, keyword hit 45%) and scores only 1 point more than C on the main set and 1 less on the identifier set. In C and D, questions 7 and 9 stay 0 although an expected code file was retrieved: the 3B model answers from the wrong file (`Player.ts`, `Hud`, `UiStore.score`) instead of the excerpt. Retrieval metrics tell you what the model was shown, not whether it read it.
+
+The check I was waiting for: split retrieval did not hurt the questions whose point is in the docs. Questions 2 / 3 / 6 score 0 / 2 / 2 in the baseline and 0 / 2 / 2 in C.
+
+**Caveat**: one run per group, and a 3B model that words every answer differently (C and D have different answer text on all 10 main questions and the same total). One point is noise; only the large gaps (split against baseline, v3 last) are safe to read.
+
 ## 5. Final defaults
 
-Following the recommendation in [devlog 2026-11-03](../../devlog/2026-11-03.md) (**automatic metrics only; manual correctness not judged yet; this is a recommendation, not an applied change** — `.env.codespaces` and `.env.example` have not been touched):
+The recommendation in [devlog 2026-11-03](../../devlog/2026-11-03.md), confirmed by the correctness scores and **applied to `.env.codespaces`** ([ADR 0018](../../decisions/0018-codespaces-default-retrieval-settings.md)). `.env.example` (Mac) is unchanged:
 
 | Switch | Recommendation (Codespaces, 3B, CPU, `TOP_K=4`) | Reason |
 | --- | --- | --- |
-| `SPLIT_RETRIEVAL=true`, `DOC_TOP_K=1` | **On** (once manual scoring shows no drop on questions 2, 3 and 6) | Biggest gain for milliseconds: code file 1/9 → 6/9, docs 95% → 25%, ident. defining file 1/3 → 3/3 |
+| `SPLIT_RETRIEVAL=true`, `DOC_TOP_K=1` | **On** (applied; no drop on questions 2, 3 and 6) | Biggest gain for milliseconds: code file 1/9 → 6/9, docs 95% → 25%, ident. defining file 1/3 → 3/3 |
 | `HYBRID_SEARCH` | Keep off (optional) | Nothing on top of split; pushed out question 8 on the main set (D 0/3 vs C 1/3); costs milliseconds |
 | `RERANK` | Keep off | Best retrieval (I: defining file 3/3) but +4.8 s, about +10 s to first token and +1.5 GB of image, and the gain rests on scores of 0.003–0.07; C + rerank not run yet |
 | `CHUNK_METADATA` | Keep off | F: no gain, and it lost C's question 8 hit; changing it forces a full re-index |
 | `SCORE_THRESHOLD` | Leave empty | No value can be calibrated (correct 0.616 vs. irrelevant 0.604) |
 | `PROMPT_VARIANT` | Keep `v1` | v2: no retrieval gain, Simplified still 2; v3: main-set false refusals 8/9 |
 
-The plan's own decision rule says: "turn a switch on by default when it improves defining file retrieved or manual correctness and does not lower manual correctness on any question type; write a new ADR for the change of defaults." No group has manual correctness yet, so this table **cannot** become configuration yet.
+The plan's own decision rule says: "turn a switch on by default when it improves defining file retrieved or manual correctness and does not lower manual correctness on any question type; write a new ADR for the change of defaults." Split retrieval meets it (correctness 11 → 17 of 30, no drop on questions 2, 3 and 6), and the change of defaults is recorded in ADR 0018, together with the reasons each other switch stays off and the limits of the evidence.
 
-The Mac `.env.example` (14B, `TOP_K=8`) is unchanged: the direction is the same (split on, v1), but `DOC_TOP_K` with `TOP_K=8` is untested.
+The Mac `.env.example` (14B, `TOP_K=8`) is unchanged and waits for `./scripts/benchmark-mac.sh`: `DOC_TOP_K` with `TOP_K=8` is untested.
 
 ---
 
@@ -351,6 +379,7 @@ The Mac `.env.example` (14B, `TOP_K=8`) is unchanged: the direction is the same 
    - None of this touches J's numbers (its refusals are the exact fixed sentence), but it does affect the control group D.
 5. **Latency numbers fool you easily.** B's "twice as fast" was the prompt cache; asking the same question twice differs by 40×. Compare latency between groups with care, and do not credit it to the technique.
 6. **Rebuild the backend image after merging backend code.** When I ran J, the backend would not start (`PROMPT_VARIANT must be one of ['v1', 'v2'], got 'v3'`) because the image had been built for H and I, before the v3 code. That failure was loud; a change that does not fail at startup would not have been noticed.
+7. **Better retrieval does not mean better answers.** Rerank gave the best retrieval of the whole experiment and the same 17 correct-answer points as the cheapest switch. A retrieval metric measures what the model was shown, not what it did with it; keep a correctness column next to it, and keep it from the start.
 
 ---
 
@@ -359,7 +388,7 @@ The Mac `.env.example` (14B, `TOP_K=8`) is unchanged: the direction is the same 
 - **A 20-file, 67-chunk sample project.** A real project has 50–300 files; the candidate pool, BM25 behaviour and cosine distributions may differ.
 - **One run per group.** A difference of one question is noise, and there are no repeat runs to estimate variance.
 - **A 3B model on CPU** (`qwen2.5-coder:3b`, `TOP_K=4`, 4 cores). Production is 14B on a Mac M2 with `TOP_K=8`; v3 may behave differently on 14B. That gap has not been measured.
-- **No group has manual correctness yet.** Every conclusion here is about automatic metrics; a keyword hit rate is not accuracy.
+- **Correctness is AI-judged.** Claude scored the answers; a person re-checked only the 5 least certain (conclusion unchanged). Scoring was lenient where the main mechanism was right and a secondary fact missing. A keyword hit rate is still not accuracy.
 - **Both question sets are mine**, and so are the expected-file lists.
 - Simplified-character detection uses a conservative 200-character list and only catches clear drift.
 - Latency is affected by the prompt cache and by run order, and was not measured repeatedly.
@@ -368,9 +397,9 @@ The Mac `.env.example` (14B, `TOP_K=8`) is unchanged: the direction is the same 
 
 ## 8. Next steps
 
-- [ ] **Manual correctness**: fill in the manual column of the 8 reports (`--apply-manual`), confirm that C did not hurt doc-heavy questions (2, 3 and 6), then decide the defaults by the decision rule and write a new ADR.
+- [x] **Correctness scoring**: done by AI with the 5 least certain re-checked by a person; C did not hurt questions 2, 3 and 6; defaults recorded in ADR 0018. Still open: a person confirming the other scores.
 - [ ] **Mac 14B**: run `./scripts/benchmark-mac.sh --with-rerank` and record the results in metrics; also check whether v3 still refuses almost everything on 14B, and `DOC_TOP_K` with `TOP_K=8`.
-- [ ] **Chinese tokenization for BM25**: BM25 indexes ASCII only, so a Chinese question gives it nothing. A Chinese → identifier glossary (for example 無敵 → `INVINCIBLE`) might finally retrieve `gameConfig.ts` for question 1 (missed in every group except I).
+- [ ] **Chinese tokenization for BM25**: BM25 indexes ASCII only, so a Chinese question gives it nothing. A Chinese → identifier glossary (for example 無敵 → `INVINCIBLE`) might finally retrieve `gameConfig.ts` for question 1 (missed in every group except I) and `ScoreSystem.ts` for question 2 (0 points in every group).
 - [ ] **C + rerank**: check whether, without hybrid, the same rerank cost gives I's main-set result.
 - [ ] Fix the evaluation script: add 「无法」 to the trick-question refusal keywords and re-score D's out-of-scope report.
 - [ ] If refusal is retried: a v4 prompt without the trailing reminder, or a rule tied to something checkable (the question's identifier or file is in no excerpt).
@@ -387,13 +416,14 @@ Source code, ADRs, devlogs and every evaluation report are in the repo: {待填:
 
 ## Appendix B: LinkedIn summary (about 150 words)
 
-Asked where the invincibility time is configured, my on-prem codebase RAG retrieved four excerpts, all Markdown, and none of them the code that defines it. I built an evaluation tool first, then fixed the conditions and changed one switch at a time: hybrid search, rerank, a similarity threshold, a metadata header and an anti-hallucination prompt. Only split code/doc retrieval earned a default-on recommendation: docs among retrieved chunks 95% to 25%, code-file retrieval 1/9 to 6/9, at about 0.1 s. The usual 0.70 threshold would drop 93% of correct excerpts, and the refusal prompt falsely refused 8 of 9 answerable questions. A control group also overturned my first conclusion about hybrid search. Caveats: automatic metrics only, manual correctness not scored, 20-file sample project, one run per group, 3B model on CPU.
+Asked where the invincibility time is configured, my on-prem codebase RAG retrieved four excerpts, all Markdown, and none of them the code that defines it. I built an evaluation tool first, then fixed the conditions and changed one switch at a time: hybrid search, rerank, a similarity threshold, a metadata header and an anti-hallucination prompt. Only split code/doc retrieval earned a default-on recommendation: docs among retrieved chunks 95% to 25%, code-file retrieval 1/9 to 6/9, at about 0.1 s. The usual 0.70 threshold would drop 93% of correct excerpts, and the refusal prompt falsely refused 8 of 9 answerable questions. A control group also overturned my first conclusion about hybrid search. Scoring the answers agreed: split retrieval took correct answers from 11 to 17 of 30, the same as a rerank setup that costs 10 s more, and better retrieval did not always mean better answers. Caveats: answers scored by AI, 20-file sample project, one run per group, 3B model on CPU.
 
 ## Publishing checklist
 
 - [ ] Every path, symbol and screenshot comes from `examples/sample-game-frontend/` or this repo.
 - [ ] Every number is checked against `docs/metrics.md` §4a / §4b / §4c, devlog 2026-11-02 / 03 and the evaluation reports, with its environment stated (Codespaces, CPU, 3B, `TOP_K=4`, one run per group).
-- [ ] When manual correctness is done, update sections 4.x and 5 and remove the "automatic metrics only" warnings, or rewrite any conclusion the scores contradict.
+- [x] Correctness scores are in (sections 4.7 and 5) and no conclusion was contradicted.
+- [ ] Say in the published text that the correctness scores are AI-judged, unless a person has confirmed the rest by then.
 - [ ] Fill in every `[Screenshot: …]`, `[Chart: …]` and `{待填}`.
 - [ ] Keep the Chinese version in sync with any change.
 - [ ] After cross-posting, add the links back to `article-series.md`.

@@ -305,7 +305,7 @@ Same for `-split`, `-all`, and the `-ident` pairs.
 
 ## Mac M2 run (`scripts/benchmark-mac.sh`)
 
-The Codespaces conditions above do not apply on the Mac. There, `scripts/benchmark-mac.sh` (ADR 0016) runs groups **A** (`baseline`) and **D** (`hybrid-split`), and with `--with-rerank` also **I** (`hybrid-split-rerank`, `RERANK_CANDIDATES=20 RERANK_TOP_N=8`), on both question sets, with `qwen2.5-coder:14b` and `TOP_K=8`. Labels: `mac-m2-14b-k8-<group>[-ident]`. Switches are exported per group as shown in [How switches are set](#how-switches-are-set), `/health` is checked before each group, and the model is unloaded before each run so no group reuses another's cached prompt. It ends with `compare.py` (A → D, D → I) and a summary in the column layout of `docs/metrics.md`.
+The Codespaces conditions above do not apply on the Mac. There, `scripts/benchmark-mac.sh` (ADR 0017) runs groups **A** (`baseline`) and **D** (`hybrid-split`), and with `--with-rerank` also **I** (`hybrid-split-rerank`, `RERANK_CANDIDATES=20 RERANK_TOP_N=8`), on both question sets, with `qwen2.5-coder:14b` and `TOP_K=8`. Labels: `mac-m2-14b-k8-<group>[-ident]`. Switches are exported per group as shown in [How switches are set](#how-switches-are-set), `/health` is checked before each group, and the model is unloaded before each run so no group reuses another's cached prompt. It ends with `compare.py` (A → D, D → I) and a summary in the column layout of `docs/metrics.md`.
 
 ## What to look at, per group
 
@@ -417,7 +417,7 @@ H、I 組使用 `RERANK_TOP_N=4`（不是預設的 3），讓送進模型的片�
 
 ## Mac M2 上的執行（`scripts/benchmark-mac.sh`）
 
-上方的 Codespaces 固定條件不適用於 Mac。在 Mac 上由 `scripts/benchmark-mac.sh`（ADR 0016）以 `qwen2.5-coder:14b`、`TOP_K=8` 執行 **A** 組（`baseline`）與 **D** 組（`hybrid-split`），加上 `--with-rerank` 時另跑 **I** 組（`hybrid-split-rerank`，`RERANK_CANDIDATES=20 RERANK_TOP_N=8`），兩個題組都跑。label 為 `mac-m2-14b-k8-<組別>[-ident]`。開關依[如何設定開關](#如何設定開關)的方式逐組 export，每組執行前檢查 `/health`，每次評估前卸載模型，避免各組重用彼此的提示快取。最後執行 `compare.py`（A → D、D → I），並輸出欄位與 `docs/metrics.md` 相同的摘要。
+上方的 Codespaces 固定條件不適用於 Mac。在 Mac 上由 `scripts/benchmark-mac.sh`（ADR 0017）以 `qwen2.5-coder:14b`、`TOP_K=8` 執行 **A** 組（`baseline`）與 **D** 組（`hybrid-split`），加上 `--with-rerank` 時另跑 **I** 組（`hybrid-split-rerank`，`RERANK_CANDIDATES=20 RERANK_TOP_N=8`），兩個題組都跑。label 為 `mac-m2-14b-k8-<組別>[-ident]`。開關依[如何設定開關](#如何設定開關)的方式逐組 export，每組執行前檢查 `/health`，每次評估前卸載模型，避免各組重用彼此的提示快取。最後執行 `compare.py`（A → D、D → I），並輸出欄位與 `docs/metrics.md` 相同的摘要。
 
 ## 各組要看的指標
 

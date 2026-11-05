@@ -10,7 +10,7 @@
 - I built an on-prem codebase RAG system: Ollama runs on the host; Qdrant, a FastAPI + LlamaIndex backend and a React UI run in Docker.
 - I had no Mac to test on, so I tested in GitHub Codespaces first (Linux, CPU only). I hit three problems. None was a logic bug. All three came from the **environment and the network**, and passing unit tests could not catch them.
 - I debugged all three the same way: **test from where the caller sits, one hop at a time**, ruling out one layer per step.
-- On CPU with a 3B model, one non-streaming query from inside the codespace (`curl` through nginx) took 54.7 seconds (the `top_k` then: {待填}). The final 504 came from the Codespaces port forwarder cutting the connection at about 100 seconds. Raising our own timeouts did nothing; after switching to a streamed response the same kind of query completed from the browser through the forwarded URL (time to first token 30.4 s, total 43.8 s, 129 tokens). That run was only 43.8 seconds, so **a query longer than 100 seconds is still untested**.
+- On CPU with a 3B model, one non-streaming query from inside the codespace (`curl` through nginx) took 54.7 seconds (`top_k` 4). The final 504 came from the Codespaces port forwarder cutting the connection at about 100 seconds. Raising our own timeouts did nothing; after switching to a streamed response the same kind of query completed from the browser through the forwarded URL (time to first token 30.4 s, total 43.8 s, 129 tokens). That run was only 43.8 seconds, so **a query longer than 100 seconds is still untested**.
 - Bonus: a fourth problem was not in the services at all: `git push` was blocked by a Git LFS hook (see "Bonus").
 
 ---
@@ -279,7 +279,7 @@ The same query from the browser through the forwarded URL: **504 after about 100
 
 The first path proves nginx, the backend and Ollama are fine. The only difference is the port forwarder, so the scope is down to a single layer.
 
-(Why the browser request took longer than 54.7 seconds, long enough to hit 100: the model not being loaded yet, a different `top_k`, or queuing behind another request. Not confirmed yet: {待填}.)
+(Why the browser request took longer than 54.7 seconds, long enough to hit 100: the model not being loaded yet, a different `top_k` (the `curl` query used 4; the browser request's value was not recorded), or queuing behind another request. Not confirmed yet: {待填}.)
 
 [Screenshot: browser DevTools Network panel, /api/query returning 504 after about 100 s]
 
@@ -361,9 +361,9 @@ All numbers come from [`docs/metrics.md`](../../metrics.md) and the devlogs, wit
 | --- | --- | --- |
 | Machine type | 4 cores (devlog 2026-11-03) | `hostRequirements` in `devcontainer.json` asks for 4 cores / 16 GB; the actual machine type name: {待填} |
 | Full index of the sample project | 20 files → 67 chunks, **41.9 s** (first full rebuild after an upgrade); 18.8–20.7 s (full rebuild after toggling `CHUNK_METADATA`) | Embeddings on CPU; the time of the very first index on 2026-11-01 was not recorded: {待填} |
-| Prompt eval rate | {待填} | Not yet measured with `ollama run --verbose` or the API response |
+| Prompt eval rate | **25.3 tokens/s** | `ollama run --verbose`, one run, Codespaces 4 cores (CPU), `qwen2.5-coder:3b`. Same run: generation (eval) 12.4 tokens/s, model load ≈ 3.5 s (metrics §3) |
 | Generation (eval) rate | **About 10 tokens/s** | From two manual streaming queries (metrics §3), not a separate measurement |
-| One query (non-streaming `/query`, `curl` through nginx) | **54.7 s** | One query; the `top_k` then: {待填} |
+| One query (non-streaming `/query`, `curl` through nginx) | **54.7 s** | One query, `top_k` 4 |
 | Browser through the port forwarder (non-streaming) | 504 after about 100 s | |
 | Streaming query (browser through the forwarded URL): time to first token / total | **30.4 s / 43.8 s** (129 tokens) | `TOP_K=4`, first query after model load; same question again: 0.8 s / 14.3 s, which is the prompt cache |
 | `scripts/evaluate.py`, mean of 10 questions (`TOP_K=4`) | Time to first token 13.0 s, total 20.9 s (baseline group A) | 10 different questions after a warm-up, main set; see metrics §4a and article 6 |
@@ -375,7 +375,7 @@ How to read the prompt eval and eval rates: on CPU, one RAG query takes roughly
 total ≈ retrieval + prompt tokens ÷ prompt eval rate + answer tokens ÷ eval rate
 ```
 
-A RAG prompt carries `TOP_K` code chunks and is usually much longer than the answer, so **time to first token is dominated by prompt eval**. That is why `TOP_K` went down from 8 to 4. The streamed query produced 129 tokens: at about 10 tokens/s that is roughly 13 s of generation, which matches the total of 43.8 s minus the first token at 30.4 s = 13.4 s; the other 30.4 s is model load plus prompt processing. Prompt token count: {待填}.
+A RAG prompt carries `TOP_K` code chunks and is usually much longer than the answer, so **time to first token is dominated by prompt eval**. That is why `TOP_K` went down from 8 to 4. The streamed query produced 129 tokens: at about 10 tokens/s that is roughly 13 s of generation, which matches the total of 43.8 s minus the first token at 30.4 s = 13.4 s (Ollama's own counter later gave 12.4 tokens/s for generation, so the real rate is a little higher). The other 30.4 s is model load plus prompt processing; the load took only about 3.5 s in the `ollama run --verbose` run, so most of it is prompt processing at 25.3 tokens/s. Prompt token count: {待填}.
 
 ### CI (GitHub Actions runner, CPU, first run, no caches)
 
@@ -426,7 +426,7 @@ Most of the code in this project was written by Claude Code cloud sessions.
 
 ### Cost
 
-Claude Code cost: the first session, which built the initial version, was about **USD 7** (metrics §1); the cost of later sessions and the total: {待填} (not recorded in `metrics.md` yet). Codespaces core-hours: {待填}. GitHub Actions runs on GitHub-hosted runners for a public repo.
+Claude Code cost: the first session, which built the initial version, was about **USD 7** (metrics §1); the session for PR #3 cost about **USD 10**, and all sessions together about **USD 100**, at which point the credit ran out (metrics §1; the split of the remaining USD 83 is not itemised). Codespaces core-hours: {待填}. GitHub Actions runs on GitHub-hosted runners for a public repo.
 
 In one sentence: **an AI agent drives the cost of writing code way down, but the cost of verifying it in a real environment stays the same.** What actually saves time is writing verification results down concretely (symptom, command, error message, numbers) and handing that to the agent.
 
