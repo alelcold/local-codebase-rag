@@ -142,7 +142,7 @@ Download sizes are approximate values from the Ollama library tags (Q4). Replace
 
 ## How to measure
 
-On the Mac M2, one command measures §2, §3, §4, §4a and §5 and writes a summary whose tables have the same columns as this file (ADR 0017; README「在 Mac 實機測試（一鍵量測）」):
+On the Mac M2, one command measures §2, §3, §4, §4a and §5 and writes a summary whose tables have the same columns as this file (ADR 0017; docs/guide.md「在 Mac 實機測試（一鍵量測）」):
 
 ```bash
 ./scripts/benchmark-mac.sh
@@ -320,7 +320,7 @@ J 組在全部 23 題取回的片段都與 D 組完全相同，所以所有差�
 
 ## 量測方式
 
-在 Mac M2 上，一個指令就能量完 §2、§3、§4、§4a、§5，並輸出欄位與本檔案相同的摘要（ADR 0017；README「在 Mac 實機測試（一鍵量測）」）：
+在 Mac M2 上，一個指令就能量完 §2、§3、§4、§4a、§5，並輸出欄位與本檔案相同的摘要（ADR 0017；docs/guide.md「在 Mac 實機測試（一鍵量測）」）：
 
 ```bash
 ./scripts/benchmark-mac.sh

@@ -60,8 +60,9 @@ def test_build_prompt_formats_markdown_and_symbols(services):
 
 
 def test_stream_strips_leading_whitespace_and_handles_missing_delta(settings):
-    from llama_index.core.llms import CompletionResponse
     from unittest.mock import MagicMock
+
+    from llama_index.core.llms import CompletionResponse
 
     services = make_services(settings)
     services.indexer.run()
@@ -248,7 +249,7 @@ def test_prompt_v3_keeps_v1_layout_and_repeats_the_rule_after_the_question():
 def test_prompt_v3_rules_stay_short_for_small_models():
     """qwen2.5-coder:3b drops rules from long instructions (ADR 0016): keep v3 within
     a few lines more than v1 and shorter than v2."""
-    from app.rag import SYSTEM_PROMPT, SYSTEM_PROMPT_V2, SYSTEM_PROMPT_V3
+    from app.rag import SYSTEM_PROMPT, SYSTEM_PROMPT_V3
 
     rules = [line for line in SYSTEM_PROMPT_V3.splitlines() if line[:2] in {f"{n}." for n in range(1, 10)}]
     assert len(rules) <= 5

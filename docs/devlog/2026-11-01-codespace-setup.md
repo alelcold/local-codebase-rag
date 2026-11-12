@@ -85,11 +85,11 @@
 
 ## Concepts learned
 
-- **A request is only as patient as its least patient hop.** Each proxy has its own timeout. Raising one value does nothing if a hop in front of it gives up first. See [knowledge checklist §11](../learning/knowledge-checklist.md#11-timeouts-across-a-proxy-chain).
-- **Foreground vs. background processes, and `>` vs. `>>`.** See [§12](../learning/knowledge-checklist.md#12-debugging-long-running-services-from-the-shell).
+- **A request is only as patient as its least patient hop.** Each proxy has its own timeout. Raising one value does nothing if a hop in front of it gives up first.
+- **Foreground vs. background processes, and `>` vs. `>>`.**
 - **`curl -sS`** is the right default for scripts: quiet, but errors still show.
 - **Test from where the caller is.** A throw-away `curlimages/curl` container sees the network the way the backend container does.
-- **Small models for pipeline checks, large models for quality.** This is now the CI design: the smoke test uses `qwen2.5-coder:0.5b` (ADR 0008). See [§13](../learning/knowledge-checklist.md#13-cicd-and-github-actions).
+- **Small models for pipeline checks, large models for quality.** This is now the CI design: the smoke test uses `qwen2.5-coder:0.5b` (ADR 0008).
 - {待補：測試紀錄「學到的概念」中的其他項目}
 
 ## Data
@@ -204,11 +204,11 @@ Copied into `docs/metrics.md`.
 
 ## 學到的概念
 
-- **一個請求能等多久，取決於最沒耐心的那一段連線**。每個代理都有自己的逾時；如果前面的連線段先放棄，調高後面的值也沒用。見[知識檢核清單 §11](../learning/knowledge-checklist.md#11-timeouts-across-a-proxy-chain)。
-- **前景與背景程序、`>` 與 `>>` 的差別**。見 [§12](../learning/knowledge-checklist.md#12-debugging-long-running-services-from-the-shell)。
+- **一個請求能等多久，取決於最沒耐心的那一段連線**。每個代理都有自己的逾時；如果前面的連線段先放棄，調高後面的值也沒用。
+- **前景與背景程序、`>` 與 `>>` 的差別**。
 - **`curl -sS`** 是寫腳本時的正確預設：安靜，但錯誤照樣顯示。
 - **從呼叫端的位置測試**：用完即丟的 `curlimages/curl` 容器看到的網路，和後端容器看到的一樣。
-- **用小模型驗證流程，用大模型評估品質**：這成了 CI 的設計，冒煙測試使用 `qwen2.5-coder:0.5b`（ADR 0008）。見 [§13](../learning/knowledge-checklist.md#13-cicd-and-github-actions)。
+- **用小模型驗證流程，用大模型評估品質**：這成了 CI 的設計，冒煙測試使用 `qwen2.5-coder:0.5b`（ADR 0008）。
 - {待補：測試紀錄「學到的概念」中的其他項目}
 
 ## 數據
