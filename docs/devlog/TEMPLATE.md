@@ -24,7 +24,7 @@
 
 ## Concepts learned
 
-- **{concept}**: {one or two sentences in my own words; link `docs/learning/knowledge-checklist.md` if relevant}
+- **{concept}**: {one or two sentences in my own words}
 
 ## Data
 
@@ -70,7 +70,7 @@ Copy new numbers into `docs/metrics.md`.
 
 ## 學到的概念
 
-- **{概念}**：{用自己的話寫一兩句；相關的話連到 `docs/learning/knowledge-checklist.md`}
+- **{概念}**：{用自己的話寫一兩句}
 
 ## 數據
 
