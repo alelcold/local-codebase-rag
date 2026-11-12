@@ -1,6 +1,6 @@
 # CI for local-codebase-rag. Design and trade-offs: docs/decisions/0008-ci-design.md
 #
-# Fast jobs (every push and PR):     backend-tests, compose-config, docker-build
+# Fast jobs (every push and PR):     lint, backend-tests, compose-config, docker-build
 # Slow job (PRs into main only):      e2e-smoke — real Ollama on the runner, tiny models
 name: CI
 
@@ -16,6 +16,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # Rules and the py39 target (scripts/ run on the Mac's system Python) are in ruff.toml.
+      - run: pip install ruff==0.16.9
+      - run: ruff check --output-format=github .
+
   backend-tests:
     name: Backend unit tests
     runs-on: ubuntu-latest
