@@ -138,7 +138,7 @@ if echo "$HEALTH" | grep -q '"status":"ok"'; then
 else
   warn "後端已啟動，但健康檢查回報異常："
   echo "$HEALTH"
-  warn "常見原因：模型尚未下載（ollama pull）、容器無法連到 Ollama。詳見 README 的「常見問題」。"
+  warn "常見原因：模型尚未下載（ollama pull）、容器無法連到 Ollama。詳見 docs/guide.md 的「常見問題」。"
 fi
 
 if [ "$DO_INDEX" -eq 1 ]; then
