@@ -427,6 +427,7 @@ curl -s localhost:8000/query -H 'Content-Type: application/json' \
 | `GET /index/status` | 最近一次索引的狀態、進度與結果（新增／更新／刪除的檔案、錯誤） |
 | `POST /query` | body：`{"question": "...", "top_k": 8}`；回傳回答與引用來源 |
 | `POST /query/stream` | body 同上；以 Server-Sent Events 串流回傳（見下方） |
+| `POST /search` | body 同 `/query`；只做檢索、不呼叫 LLM，回傳 `{indexed, no_relevant, sources}`。供自己撰寫回答的呼叫端使用，例如 MCP Server [codebase-rag-mcp](https://github.com/alelcold/codebase-rag-mcp)（[ADR 0021](docs/decisions/0021-retrieval-only-search-endpoint.md)） |
 
 #### 串流查詢（`/query/stream`）
 
@@ -884,7 +885,7 @@ cd frontend && npm install && npm run dev
 ├── backend/                    # FastAPI + LlamaIndex
 │   ├── Dockerfile
 │   ├── app/
-│   │   ├── main.py             # API：/health /index /index/status /query /query/stream
+│   │   ├── main.py             # API：/health /index /index/status /search /query /query/stream
 │   │   ├── config.py           # 環境變數設定
 │   │   ├── chunker.py          # 依語法結構 / Markdown 標題切塊
 │   │   ├── indexer.py          # 增量索引（也可用 python -m app.indexer 執行）
