@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from .config import get_settings
 from .rag import OllamaTimeoutError, RagService
-from .services import Services, build_services, check_ollama, check_qdrant, check_glossary, check_reranker
+from .services import Services, build_services, check_glossary, check_ollama, check_qdrant, check_reranker
 
 log = logging.getLogger(__name__)
 
