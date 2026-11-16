@@ -380,3 +380,42 @@ def test_stream_with_every_switch_on_reports_matched_by(settings):
     assert sources[0]["file_path"] == "src/player.ts"
     assert "identifier" in sources[0]["matched_by"]
     assert sum(s["file_path"].endswith(".md") for s in sources) <= 1
+
+
+# --- POST /search: retrieval only, no LLM (ADR 0021) ---
+
+
+def test_search_before_index(client, llm):
+    body = client.post("/search", json={"question": "anything"}).json()
+    assert body == {"indexed": False, "no_relevant": False, "sources": []}
+    assert llm.prompts == []
+
+
+def test_search_returns_sources_without_calling_the_llm(client, llm):
+    client.post("/index", json={"wait": True})
+    resp = client.post("/search", json={"question": "How does the player jump?", "top_k": 2})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["indexed"] is True
+    assert body["no_relevant"] is False
+    assert len(body["sources"]) == 2
+    assert set(body["sources"][0]) >= {"ref", "file_path", "start_line", "end_line", "symbol", "score", "text", "matched_by"}
+    assert "answer" not in body
+    assert llm.prompts == []
+
+
+@pytest.mark.parametrize("payload", [{}, {"question": ""}, {"question": "   "}, {"question": "q", "top_k": 0}])
+def test_search_validation(client, payload):
+    assert client.post("/search", json=payload).status_code == 422
+
+
+def test_search_embedding_timeout_returns_504(settings):
+    settings = settings.model_copy(update={"embed_request_timeout": 45.0})
+    services = make_services(settings)
+    services.indexer.run()
+    slow = MagicMock(get_query_embedding=MagicMock(side_effect=httpx.ReadTimeout("timed out")))
+    object.__setattr__(services.rag, "embed_model", slow)
+    with TestClient(create_app(services)) as c:
+        resp = c.post("/search", json={"question": "jump"})
+    assert resp.status_code == 504
+    assert "EMBED_REQUEST_TIMEOUT" in resp.json()["detail"]

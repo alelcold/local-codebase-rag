@@ -1,4 +1,4 @@
-"""FastAPI app: /health, /index, /index/status, /query, /query/stream."""
+"""FastAPI app: /health, /index, /index/status, /search, /query, /query/stream."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
@@ -228,6 +229,33 @@ def create_app(services: Services | None = None) -> FastAPI:
         except Exception as exc:
             log.exception("Query failed")
             raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+
+    @app.post("/search")
+    def search(req: QueryRequest) -> dict:
+        """Retrieval only, no LLM: the same excerpts /query would send to the model (ADR 0021).
+
+        For callers that write the answer themselves, such as the MCP server
+        codebase-rag-mcp. ``indexed`` is false before the first index run.
+        """
+        question = req.question.strip()
+        if not question:
+            raise HTTPException(status_code=422, detail="question must not be blank")
+        rag = svc().rag
+        if not rag.store.exists():
+            return {"indexed": False, "no_relevant": False, "sources": []}
+        try:
+            found = rag.retrieve_detailed(question, req.top_k)
+        except OllamaTimeoutError as exc:
+            log.warning("Search timed out: %s", exc)
+            raise HTTPException(status_code=504, detail=timeout_detail(exc)) from exc
+        except Exception as exc:
+            log.exception("Search failed")
+            raise HTTPException(status_code=502, detail=f"{type(exc).__name__}: {exc}") from exc
+        return {
+            "indexed": True,
+            "no_relevant": found.no_relevant,
+            "sources": [asdict(s) for s in found.sources],
+        }
 
     @app.post("/query/stream")
     async def query_stream(req: QueryRequest) -> StreamingResponse:
