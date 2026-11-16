@@ -1,0 +1,14 @@
+# Lint settings for backend/ and scripts/ (run in CI: `ruff check .`).
+# scripts/ must stay compatible with the Mac's system Python 3.9, so the target is py39.
+target-version = "py39"
+line-length = 120
+extend-exclude = ["examples", "frontend", "backend/tests/fixtures"]
+
+[lint]
+# pycodestyle errors/warnings, pyflakes, import order, bugbear.
+select = ["E", "W", "F", "I", "B"]
+# Long lines are mostly bilingual messages and prompts; wrapping them hurts readability.
+ignore = ["E501"]
+
+[lint.isort]
+known-first-party = ["app"]

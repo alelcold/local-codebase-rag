@@ -1,5 +1,5 @@
 // Dev container for GitHub Codespaces (Linux, CPU only). Open the repo in a
-// codespace and the stack starts by itself: see README「在 GitHub Codespaces 測試」
+// codespace and the stack starts by itself: see docs/guide.md「在 GitHub Codespaces 測試」
 // and docs/decisions/0006-multi-environment-deployment.md.
 //
 // Mac and EC2 do not use this file; their flow (scripts/setup.sh) is unchanged.

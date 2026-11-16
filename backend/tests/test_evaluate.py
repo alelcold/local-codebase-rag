@@ -143,7 +143,8 @@ def test_simplified_list_has_no_false_positives_on_traditional_docs():
     Simplified answers on purpose (questions.yaml, ADR 0012, devlogs) are not included."""
     paths = [p for p in (ROOT / "examples").rglob("*") if p.suffix in (".md", ".ts", ".tsx", ".js")]
     paths += [ROOT / f for f in ("README.md", "CLAUDE.md", ".env.example", ".env.codespaces", "frontend/src/App.tsx",
-                                 "docs/evaluation/questions.md", "docs/learning/knowledge-checklist.md", "docs/metrics.md")]
+                                 "docs/evaluation/questions.md", "docs/guide.md", "docs/metrics.md",
+                                 "docs/decisions/README.md", "docs/evaluation/results/README.md")]
     paths += list((ROOT / "docs" / "decisions").glob("000*.md"))  # ADRs 0001-0009
     assert len(paths) > 20
     hits = {str(p.relative_to(ROOT)): ev.simplified_chars(p.read_text(encoding="utf-8")) for p in paths}
